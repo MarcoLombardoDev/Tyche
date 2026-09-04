@@ -154,7 +154,7 @@ jobs:
       - name: Forecast with a baseline first
         # If this fails the problem is not TimesFM, and knowing that before
         # a 1.3 GB download is worth one second.
-        run: python main.py --forecast frequency
+        run: python main.py --forecast frequenza
 
       - name: Forecast with TimesFM 3.0
         run: python main.py --forecast timesfm
@@ -248,7 +248,7 @@ jobs:
           scored = 12
           started = time.monotonic()
           report = walk_forward(
-              draws, methods=["timesfm", "frequency", "random"],
+              draws, methods=["timesfm", "frequenza", "casuale"],
               n_draws=scored, forecaster=model,
           )
           elapsed = time.monotonic() - started

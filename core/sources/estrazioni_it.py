@@ -49,6 +49,7 @@ There is no second parser to disagree with the first.
 from __future__ import annotations
 
 from core.archive import Draw
+from core.localise import it_number
 from core.sources.base import DrawSource, ProgressCallback, SourceError, http_get
 
 # Tried in order. All three are confirmed working: the first two are the same
@@ -83,9 +84,10 @@ class EstrazioniItSource(DrawSource):
 
     def describe(self) -> str:
         return (
-            "Full CSV export from estrazioni.it — one request, 1997 to the last "
-            "draw. The download URL is undocumented and was inferred, so CI "
-            "re-checks it and the import is confirmed before anything is written."
+            "Esportazione CSV completa da estrazioni.it — una richiesta, dal 1997 "
+            "all'ultima estrazione. L'indirizzo di download non è documentato ed è "
+            "stato dedotto, perciò la CI lo ricontrolla e l'import va confermato "
+            "prima di scrivere."
         )
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:
@@ -93,14 +95,16 @@ class EstrazioniItSource(DrawSource):
 
         failures: list[str] = []
         for i, url in enumerate(self.urls):
-            self._report(progress, f"Trying {url}…", i / len(self.urls))
+            self._report(progress, f"Provo {url}…", i / len(self.urls))
             try:
                 payload = http_get(url)
             except SourceError as exc:
                 failures.append(str(exc))
                 continue
             if len(payload) < MIN_PLAUSIBLE_BYTES:
-                failures.append(f"{url}: {len(payload)} bytes, too small to be the archive")
+                failures.append(
+                    f"{url}: {len(payload)} byte, troppo pochi per essere l'archivio"
+                )
                 continue
             try:
                 draws = parse_any(
@@ -109,7 +113,10 @@ class EstrazioniItSource(DrawSource):
             except SourceError as exc:
                 failures.append(f"{url}: {exc}")
                 continue
-            self._report(progress, f"{len(draws):,} draws from {url}.", 1.0)
+            self._report(progress, f"{it_number(len(draws))} estrazioni da {url}.", 1.0)
             return draws
 
-        raise SourceError("no download URL returned the archive — " + "; ".join(failures))
+        raise SourceError(
+            "nessun indirizzo di download ha restituito l'archivio — "
+            + "; ".join(failures)
+        )

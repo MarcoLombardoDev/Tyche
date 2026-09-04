@@ -34,6 +34,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
+from core.localise import it_date as _it_date
+
 # The SuperEnalotto wheel: 90 numbers, six drawn.
 NUMBER_MIN = 1
 NUMBER_MAX = 90
@@ -289,8 +291,8 @@ def integrity_report(draws: list[Draw]) -> list[IntegrityIssue]:
         if clash is not None and clash.numbers != draw.numbers:
             issues.append(IntegrityIssue(
                 "duplicate-date", "error",
-                f"{draw.date}: two different draws on the same date "
-                f"({clash.numbers} and {draw.numbers})",
+                f"{_it_date(draw.date)}: due estrazioni diverse nella stessa data "
+                f"({clash.numbers} e {draw.numbers})",
             ))
         seen_dates.setdefault(draw.date, draw)
 
@@ -300,8 +302,9 @@ def integrity_report(draws: list[Draw]) -> list[IntegrityIssue]:
         if clash is not None:
             issues.append(IntegrityIssue(
                 "duplicate-contest", "error",
-                f"contest {draw.draw_id} appears twice ({clash.date} and {draw.date}) — "
-                "one of the two is labelled with the wrong year",
+                f"il concorso {draw.draw_id} compare due volte "
+                f"({_it_date(clash.date)} e {_it_date(draw.date)}) — uno dei due "
+                "ha l'anno sbagliato",
             ))
         seen_ids.setdefault(draw.draw_id, draw)
 
@@ -320,13 +323,13 @@ def integrity_report(draws: list[Draw]) -> list[IntegrityIssue]:
         if missing and year not in partial_years:
             issues.append(IntegrityIssue(
                 "contest-gap", "warning",
-                f"{year}: contests {_ranges(missing)} missing out of 1–{contests[-1]}",
+                f"{year}: mancano i concorsi {_ranges(missing)} su 1–{contests[-1]}",
             ))
         by_date_order = [d.contest for d in sorted(year_draws, key=lambda d: d.date)]
         if by_date_order != sorted(by_date_order):
             issues.append(IntegrityIssue(
                 "contest-order", "warning",
-                f"{year}: contest numbers do not increase with date",
+                f"{year}: i numeri di concorso non crescono con la data",
             ))
     return issues
 
@@ -540,16 +543,17 @@ class Freshness:
 
     def describe(self) -> str:
         if self.last_date is None:
-            return "The archive is empty."
+            return "L'archivio è vuoto."
         if not self.stale:
-            when = "today" if self.days_behind == 0 else (
-                "1 day ago" if self.days_behind == 1 else f"{self.days_behind} days ago"
+            when = "oggi" if self.days_behind == 0 else (
+                "1 giorno fa" if self.days_behind == 1 else f"{self.days_behind} giorni fa"
             )
-            return f"Current as of {self.last_date} ({when})."
+            return f"Aggiornato al {_it_date(self.last_date)} ({when})."
         return (
-            f"Last draw on record is {self.last_date}, {self.days_behind} days ago — "
-            f"roughly {self.estimated_missing} draws missing at the archive's own "
-            f"cadence of one every {self.average_interval_days:.1f} days."
+            f"L'ultima estrazione registrata è del {_it_date(self.last_date)}, "
+            f"{self.days_behind} giorni fa — mancano circa {self.estimated_missing} "
+            f"estrazioni, alla cadenza dell'archivio di una ogni "
+            f"{self.average_interval_days:.1f} giorni."
         )
 
 
@@ -612,23 +616,31 @@ class MergePreview:
 
     def describe(self) -> str:
         if not self.added and not self.updated:
-            parts = [f"Nothing new: all {self.unchanged} fetched draws are already on record."]
+            parts = [
+                f"Niente di nuovo: tutte le {self.unchanged} estrazioni scaricate "
+                "sono già in archivio."
+            ]
         else:
             parts = [
-                f"{self.added} draws to add, {self.updated} to change, "
-                f"{self.unchanged} already identical."
+                f"{self.added} estrazioni da aggiungere, {self.updated} da modificare, "
+                f"{self.unchanged} già identiche."
             ]
             if self.first_new:
-                parts.append(f"New draws span {self.first_new} to {self.last_new}.")
+                parts.append(
+                    f"Le nuove vanno dal {_it_date(self.first_new)} "
+                    f"al {_it_date(self.last_new)}."
+                )
         if self.conflicts:
             parts.append(
-                f"{len(self.conflicts)} of them contradict a draw already stored: "
-                + "; ".join(self.conflicts[:3])
+                f"{len(self.conflicts)} di queste contraddicono un'estrazione già "
+                "registrata: " + "; ".join(self.conflicts[:3])
                 + ("; …" if len(self.conflicts) > 3 else "")
             )
         errors = [i for i in self.new_issues if i.severity == "error"]
         if errors:
-            parts.append(f"The merge would introduce {len(errors)} new integrity errors.")
+            parts.append(
+                f"L'unione introdurrebbe {len(errors)} nuovi errori di integrità."
+            )
         return " ".join(parts)
 
 
@@ -651,7 +663,10 @@ def preview_merge(existing: list[Draw], incoming: list[Draw]) -> MergePreview:
             new_dates.append(draw.date)
             continue
         if old.numbers != draw.numbers:
-            conflicts.append(f"{draw.date}: stored {old.numbers}, fetched {draw.numbers}")
+            conflicts.append(
+                f"{_it_date(draw.date)}: in archivio {old.numbers}, "
+                f"scaricata {draw.numbers}"
+            )
             updated += 1
         elif draw.to_row()[:-1] != old.to_row()[:-1]:
             updated += 1

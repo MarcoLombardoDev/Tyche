@@ -92,9 +92,10 @@ class MethodResult:
 
     def summary(self) -> str:
         return (
-            f"{self.method:<10} {self.mean_hits:.4f} hits/draw "
-            f"(chance {self.expected_mean:.4f}), {self.total_hits} total, "
-            f"{self.excess:+.1f} vs chance, z = {self.z:+.2f}, p = {self.p_value:.3f}"
+            f"{self.method:<10} {self.mean_hits:.4f} centri/estrazione "
+            f"(caso {self.expected_mean:.4f}), {self.total_hits} in totale, "
+            f"{self.excess:+.1f} rispetto al caso, z = {self.z:+.2f}, "
+            f"p = {self.p_value:.3f}"
         )
 
 
@@ -115,29 +116,31 @@ class ValidationReport:
     def verdict(self) -> str:
         """The paragraph the validation panel prints. Says what the run showed."""
         if not self.results:
-            return "No methods were scored."
+            return "Nessun metodo valutato."
         beat = [r for r in self.results if r.p_value < 0.05 and r.z > 0]
         best = self.best()
         head = (
-            f"{len(self.results)} methods scored over {self.draws_scored} draws, "
-            f"six picks each. Chance is {self.results[0].expected_mean:.3f} hits per draw."
+            f"{len(self.results)} metodi valutati su {self.draws_scored} estrazioni, "
+            f"sei numeri ciascuno. Il caso vale "
+            f"{self.results[0].expected_mean:.3f} centri per estrazione."
         )
         if not beat:
             return (
-                f"{head} None of them beat it: the best was {best.method} at "
-                f"{best.mean_hits:.4f} hits per draw ({best.excess:+.1f} hits over the whole "
-                f"run, p = {best.p_value:.2f}). This is the expected result. Six numbers "
-                "chosen by a 330M-parameter foundation model, by the hottest recent "
-                "frequencies, by the longest absences, or by a random number generator, "
-                "all score the same, because the draw they are predicting is independent "
-                "of everything they are looking at."
+                f"{head} Nessuno lo batte: il migliore è {best.method} con "
+                f"{best.mean_hits:.4f} centri per estrazione ({best.excess:+.1f} centri "
+                f"sull'intera prova, p = {best.p_value:.2f}). È il risultato atteso. Sei "
+                "numeri scelti da un modello fondazionale da 330 milioni di parametri, "
+                "dalle frequenze recenti più alte, dai ritardi più lunghi o da un "
+                "generatore casuale ottengono lo stesso punteggio, perché l'estrazione "
+                "che stanno prevedendo è indipendente da tutto ciò che guardano."
             )
         names = ", ".join(f"{r.method} (p = {r.p_value:.3f})" for r in beat)
         return (
-            f"{head} {len(beat)} of them exceeded it at the 5% level: {names}. With "
-            f"{len(self.results)} methods tested, the chance of at least one crossing 5% "
-            f"by luck alone is about {1 - 0.95 ** len(self.results):.0%}. Re-run over a "
-            "different slice of the archive before treating this as a finding."
+            f"{head} {len(beat)} lo superano al livello del 5%: {names}. Con "
+            f"{len(self.results)} metodi in prova, la probabilità che almeno uno "
+            f"scenda sotto il 5% per pura fortuna è circa "
+            f"{1 - 0.95 ** len(self.results):.0%}. Ripeti la prova su una porzione "
+            "diversa dell'archivio prima di considerarlo un risultato."
         )
 
 
@@ -162,20 +165,20 @@ def walk_forward(
     every time — a fixed set would be a single bet repeated, whose variance is
     not the variance this comparison needs.
     """
-    methods = list(methods or ["random", "frequency", "gap"])
+    methods = list(methods or ["casuale", "frequenza", "ritardo"])
     unknown = [m for m in methods if m not in METHODS]
     if unknown:
-        raise ValueError(f"unknown methods: {', '.join(unknown)}")
+        raise ValueError(f"metodi sconosciuti: {', '.join(unknown)}")
     if "timesfm" in methods and forecaster is None:
-        raise ValueError("the timesfm method needs a loaded TimesFMForecaster")
+        raise ValueError("il metodo timesfm richiede un TimesFMForecaster già caricato")
 
     total = len(draws)
     start = max(min_history, total - n_draws)
     targets = list(range(start, total))
     if not targets:
         raise ValueError(
-            f"{total} draws is not enough to score anything with a minimum history "
-            f"of {min_history}"
+            f"{total} estrazioni non bastano per valutare alcunché con uno storico "
+            f"minimo di {min_history}"
         )
 
     hits: dict[str, list[int]] = {m: [] for m in methods}
@@ -186,7 +189,10 @@ def walk_forward(
             picked = _pick(method, history, picks, window, seed + i, forecaster)
             hits[method].append(len(actual & set(picked)))
         if progress and step % 10 == 0:
-            progress(f"Scoring draw {step + 1} of {len(targets)}…", step / len(targets))
+            progress(
+                f"Valutazione estrazione {step + 1} di {len(targets)}…",
+                step / len(targets),
+            )
 
     mean, variance = hypergeom_moments(NUMBER_MAX, NUMBERS_PER_DRAW, picks)
     sd = variance ** 0.5
@@ -224,7 +230,7 @@ def walk_forward(
         ))
 
     if progress:
-        progress("Validation complete.", 1.0)
+        progress("Validazione completata.", 1.0)
     return ValidationReport(
         results=results,
         draws_scored=n,
@@ -240,9 +246,9 @@ def _pick(
     """The ``picks`` numbers a method would play given only ``history``."""
     if method == "timesfm":
         scores = forecaster.score_numbers(history)
-    elif method == "frequency":
+    elif method == "frequenza":
         scores = frequency_scores(history, window)
-    elif method == "gap":
+    elif method == "ritardo":
         scores = gap_scores(history)
     else:
         scores = random_scores(seed)

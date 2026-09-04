@@ -40,6 +40,7 @@ import customtkinter as ctk
 
 from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
+from core.localise import it_date, it_number
 from core.version import APP_NAME, APP_TITLE, __version__
 from gui.archive_panel import ArchivePanel
 from gui.prediction_panel import PredictionPanel
@@ -54,12 +55,12 @@ ctk.set_default_color_theme("blue")
 apply_theme()
 
 VIEWS = [
-    ("reality", "Reality check", RealityPanel),
-    ("archive", "Archive", ArchivePanel),
-    ("statistics", "Statistics", StatisticsPanel),
-    ("prediction", "Predict", PredictionPanel),
-    ("validation", "Validate", ValidationPanel),
-    ("settings", "Settings", SettingsPanel),
+    ("reality", "Prova del nove", RealityPanel),
+    ("archive", "Archivio", ArchivePanel),
+    ("statistics", "Statistiche", StatisticsPanel),
+    ("prediction", "Previsione", PredictionPanel),
+    ("validation", "Validazione", ValidationPanel),
+    ("settings", "Impostazioni", SettingsPanel),
 ]
 
 
@@ -96,7 +97,7 @@ class TycheApp(ctk.CTk):
             font=ctk.CTkFont(size=20, weight="bold"),
         ).pack(side="left", padx=(18, 6))
         ctk.CTkLabel(
-            bar, text="SuperEnalotto archive analysis", text_color=MUTED,
+            bar, text="Analisi dell'archivio SuperEnalotto", text_color=MUTED,
             font=ctk.CTkFont(size=12),
         ).pack(side="left", padx=(0, 20))
 
@@ -126,7 +127,9 @@ class TycheApp(ctk.CTk):
         self.show(self._active)
         self._refresh_footer()
         if not self.draws:
-            self.set_status("No archive on disk — open Archive and run the bulk bootstrap.")
+            self.set_status(
+                "Nessun archivio su disco — apri Archivio e scarica l'esportazione."
+            )
 
     def show(self, key: str) -> None:
         for other in self._panels.values():
@@ -162,12 +165,18 @@ class TycheApp(ctk.CTk):
         """
         info = describe_archive(self.draws)
         if not info["count"]:
-            self._archive_label.configure(text="archive empty", text_color=MUTED)
+            self._archive_label.configure(text="archivio vuoto", text_color=MUTED)
             return
         state = freshness(self.draws)
-        suffix = f"  ·  {state.estimated_missing} draws behind" if state.stale else ""
+        suffix = (
+            f"  ·  {it_number(state.estimated_missing)} estrazioni indietro"
+            if state.stale else ""
+        )
         self._archive_label.configure(
-            text=f"{info['count']:,} draws · {info['first']} → {info['last']}{suffix}",
+            text=(
+                f"{it_number(info['count'])} estrazioni · "
+                f"{it_date(info['first'])} → {it_date(info['last'])}{suffix}"
+            ),
             text_color=WARN if state.stale else MUTED,
         )
 
@@ -181,7 +190,7 @@ class TycheApp(ctk.CTk):
         silently dropped by whichever saved last.
         """
         if self._busy:
-            self.set_status("Something is already running — wait for it to finish.")
+            self.set_status("C'è già un'operazione in corso — aspetta che finisca.")
             return
         self._busy = True
         self.set_status(f"{label}…")
@@ -198,7 +207,7 @@ class TycheApp(ctk.CTk):
                 # a lambda that closes over `exc` raises NameError by the time
                 # the main thread runs it — and the failure it was reporting
                 # is replaced by a confusing one about a free variable.
-                message = f"{label} failed: {exc}"
+                message = f"{label}: non riuscito — {exc}"
                 print(f"[{label}] {traceback.format_exc(limit=3)}")
                 self._queue.put(lambda m=message: self.set_status(m))
             else:

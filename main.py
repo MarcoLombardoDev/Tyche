@@ -38,6 +38,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from core.localise import it_date, it_number
 from core.predictor import METHODS
 from core.version import APP_NAME, APP_TITLE, __version__
 
@@ -46,48 +47,51 @@ def _parse_args():
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
         description=APP_TITLE,
-        epilog="Run without arguments to open the interface.",
+        epilog="Senza argomenti apre l'interfaccia.",
     )
-    parser.add_argument("--version", "-V", action="store_true", help="print the version and exit")
+    parser.add_argument("--version", "-V", action="store_true", help="stampa la versione ed esce")
     parser.add_argument(
         "--check", action="store_true",
-        help="run the independence tests on the stored archive and exit",
+        help="esegue i test di indipendenza sull'archivio e esce",
     )
     parser.add_argument(
         "--validate", type=int, metavar="N", default=None,
-        help="walk-forward backtest over the last N draws (baselines only) and exit",
+        help="backtest walk-forward sulle ultime N estrazioni (solo baseline) e esce",
     )
     parser.add_argument(
         "--update", action="store_true",
-        help="refresh the archive from the configured sources and exit",
+        help="aggiorna l'archivio dalle sorgenti configurate e esce",
     )
     parser.add_argument(
         "--import", dest="import_path", metavar="FILE", default=None,
-        help="import draws from a file you downloaded, and exit",
+        help="importa estrazioni da un file scaricato a mano, e esce",
     )
     parser.add_argument(
-        "--forecast", nargs="?", const="frequency", metavar="METHOD", default=None,
-        help=f"print one set of numbers and exit ({', '.join(METHODS)}; default frequency)",
+        "--forecast", nargs="?", const="frequenza", metavar="METODO", default=None,
+        help=(
+            "stampa una serie di numeri ed esce "
+            f"({', '.join(METHODS)}; predefinito frequenza)"
+        ),
     )
     parser.add_argument(
         "--self-check", action="store_true",
-        help="check that a built bundle can start Tk and run the analysis, then exit",
+        help="verifica che il pacchetto compilato avvii Tk ed esegua l'analisi, poi esce",
     )
     parser.add_argument(
         "--self-check-report", metavar="FILE", default=None,
-        help="also write the self-check report here; a windowed build has no stdout",
+        help="scrive qui anche il rapporto di autodiagnosi; una build windowed non ha stdout",
     )
     parser.add_argument(
         "--export-sqlite", metavar="FILE", default=None,
-        help="write the archive to a SQLite file for querying, and exit",
+        help="scrive l'archivio in un file SQLite interrogabile, e esce",
     )
     parser.add_argument(
         "--yes", "-y", action="store_true",
-        help="write the result of --update or --import instead of only reporting it",
+        help="scrive il risultato di --update o --import invece di limitarsi a mostrarlo",
     )
     args, unknown = parser.parse_known_args()
     if unknown:
-        parser.error(f"unrecognised arguments: {' '.join(unknown)}")
+        parser.error(f"argomenti non riconosciuti: {' '.join(unknown)}")
     return args
 
 
@@ -98,8 +102,8 @@ def _load_archive_or_explain():
     draws = load_archive(ARCHIVE_PATH)
     if not draws:
         print(
-            f"No archive at {ARCHIVE_PATH}. Open the interface and run the bulk "
-            "bootstrap from the Archive tab first."
+            f"Nessun archivio in {ARCHIVE_PATH}. Apri l'interfaccia e scarica "
+            "l'archivio dalla scheda Archivio, oppure usa --update --yes."
         )
     return draws
 
@@ -114,7 +118,7 @@ def _run_check() -> int:
     for r in results:
         print(f"\n{r.name}")
         statistic = (
-            f"χ² = {r.statistic:.3f}, dof {r.dof}" if r.dof else f"z = {r.statistic:+.3f}"
+            f"χ² = {r.statistic:.3f}, {r.dof} gdl" if r.dof else f"z = {r.statistic:+.3f}"
         )
         print(f"  {statistic}")
         print(f"  {r.verdict}")
@@ -130,10 +134,13 @@ def _run_validation(n_draws: int) -> int:
     draws = _load_archive_or_explain()
     if not draws:
         return 1
-    report = walk_forward(draws, methods=["random", "frequency", "gap"], n_draws=n_draws)
+    report = walk_forward(
+        draws, methods=["casuale", "frequenza", "ritardo"], n_draws=n_draws
+    )
     print(
-        f"{report.draws_scored} draws scored, "
-        f"{report.first_target.date} to {report.last_target.date}\n"
+        f"{report.draws_scored} estrazioni valutate, "
+        f"dal {it_date(report.first_target.date)} "
+        f"al {it_date(report.last_target.date)}\n"
     )
     for r in report.results:
         print("  " + r.summary())
@@ -156,24 +163,27 @@ def _apply(incoming, write: bool) -> int:
     for issue in preview.new_issues:
         print(f"  [{issue.severity}] {issue.message}")
     for line in preview.conflicts[:10]:
-        print(f"  conflict: {line}")
+        print(f"  conflitto: {line}")
 
     if not preview.added and not preview.updated:
         return 0
     if not write:
-        print("\nDry run — nothing written. Pass --yes to apply.")
+        print("\nProva a vuoto — non è stato scritto nulla. Usa --yes per applicare.")
         return 0
     if not preview.safe:
         print(
-            "\nRefusing to write: this import contradicts stored draws or would "
-            "introduce integrity errors. Review it in the Archive tab, which can "
-            "show it row by row."
+            "\nScrittura rifiutata: questo import contraddice estrazioni già "
+            "registrate o introdurrebbe errori di integrità. Esaminalo dalla scheda "
+            "Archivio, che lo mostra riga per riga."
         )
         return 1
 
     merged, added, updated = merge_draws(existing, incoming)
     save_archive(ARCHIVE_PATH, merged)
-    print(f"\nWritten: {added} added, {updated} updated, {len(merged):,} on record.")
+    print(
+        f"\nScritto: {added} aggiunte, {updated} aggiornate, "
+        f"{it_number(len(merged))} in archivio."
+    )
     return 0
 
 
@@ -205,22 +215,22 @@ def _run_update(write: bool) -> int:
     def report(message, fraction=0.0):
         print(f"  {message}")
 
-    print("Fetching the full export from estrazioni.it.")
+    print("Scarico l'esportazione completa da estrazioni.it.")
     try:
         incoming += EstrazioniItSource().fetch(report)
     except SourceError as exc:
-        print(f"  estrazioni.it failed: {exc}")
+        print(f"  estrazioni.it non ha risposto: {exc}")
     else:
         # That export runs from 1997 to the last draw, so nothing else has
         # anything to add and there is no reason to bother four other hosts.
         return _apply(incoming, write)
 
     if not existing:
-        print("No archive yet — bootstrapping from the bulk mirror.")
+        print("Nessun archivio — parto dal mirror storico.")
         try:
             incoming += BulkArchiveSource(settings["bulk_archive_url"]).fetch(report)
         except SourceError as exc:
-            print(f"  bulk archive failed: {exc}")
+            print(f"  mirror storico non disponibile: {exc}")
 
     # The year to scrape from is the last one *anything* covers, including the
     # bootstrap that just ran and has not been written yet. Reading it from
@@ -229,14 +239,17 @@ def _run_update(write: bool) -> int:
     known = existing + incoming
     last_year = max(d.year for d in known) if known else 1997
     years = list(range(last_year, date.today().year + 1))
-    print(f"Scraping {years[0]}–{years[-1]}.")
+    print(f"Scansione delle pagine {years[0]}–{years[-1]}.")
     try:
         incoming += HtmlTableSource(settings["html_archive_url"], years).fetch(report)
     except SourceError as exc:
-        print(f"  scrape failed: {exc}")
+        print(f"  scansione fallita: {exc}")
 
     if not incoming:
-        print("\nNo source produced anything. Download a file by hand and use --import.")
+        print(
+            "\nNessuna sorgente ha prodotto dati. Scarica il file a mano e usa "
+            "--import."
+        )
         return 1
     return _apply(incoming, write)
 
@@ -247,7 +260,7 @@ def _run_import(path: str, write: bool) -> int:
     try:
         incoming = LocalFileSource(path).fetch(lambda m, f=0.0: print(f"  {m}"))
     except SourceError as exc:
-        print(f"Import failed: {exc}")
+        print(f"Import fallito: {exc}")
         return 1
     return _apply(incoming, write)
 
@@ -282,7 +295,10 @@ def _run_forecast(method: str) -> int:
         )
         print(forecaster.describe())
         if not forecaster.load_model():
-            print("\nTimesFM could not be loaded. Install it with `pip install timesfm[torch]`.")
+            print(
+                "\nTimesFM non si è caricato. Installalo con "
+                "`pip install timesfm[torch]`."
+            )
             return 1
 
     prediction = predict(
@@ -290,11 +306,15 @@ def _run_forecast(method: str) -> int:
         forecaster=forecaster, window=int(settings["frequency_window"]),
     )
     print(f"\n{prediction.method} — {prediction.note}")
-    print(f"archive: {prediction.archive_size:,} draws up to {prediction.archive_last_date}\n")
+    last = prediction.archive_last_date
+    print(
+        f"archivio: {it_number(prediction.archive_size)} estrazioni fino al "
+        f"{it_date(last)}\n"
+    )
     for i, combination in enumerate(prediction.combinations, 1):
         print(f"  {i}. " + "  ".join(f"{n:2d}" for n in combination))
     spread = prediction.scores[prediction.ranked[0]] - prediction.scores[prediction.ranked[-1]]
-    print(f"\nscore spread across the ninety numbers: {spread:.6f}")
+    print(f"\nescursione dei punteggi sui novanta numeri: {spread:.6f}")
     print(f"\n{value_note()}")
     return 0
 
@@ -326,12 +346,18 @@ def main() -> int:
         if not draws:
             return 1
         path = export_sqlite(draws, args.export_sqlite)
-        print(f"{len(draws):,} draws written to {path}")
-        print("Tables: draws, picks (one row per number per draw), number_stats.")
+        print(f"{it_number(len(draws))} estrazioni scritte in {path}")
+        print(
+            "Tabelle: draws, picks (una riga per numero per estrazione), "
+            "number_stats."
+        )
         return 0
     if args.forecast:
         if args.forecast not in METHODS:
-            print(f"unknown method {args.forecast!r}; expected one of {', '.join(METHODS)}")
+            print(
+                f"metodo sconosciuto {args.forecast!r}; sono validi "
+                f"{', '.join(METHODS)}"
+            )
             return 2
         return _run_forecast(args.forecast)
 

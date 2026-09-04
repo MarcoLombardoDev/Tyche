@@ -69,7 +69,7 @@ class TimesFMForecaster:
         checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
         device: str = "cpu",
         context_length: int = 1024,
-        representation: str = "frequency",
+        representation: str = "frequenza",
         window: int = DEFAULT_WINDOW,
         hf_token: str = "",
     ):
@@ -95,14 +95,18 @@ class TimesFMForecaster:
         """
         if self._model is not None:
             return True
-        _report(progress, "Importing timesfm…", 0.05)
+        _report(progress, "Importo timesfm…", 0.05)
         try:
             from timesfm3 import ModelConfig, TimesFM3Evaluator
         except ImportError as exc:
-            _report(progress, f"timesfm is not installed: {exc}", 0.0)
+            _report(progress, f"timesfm non è installato: {exc}", 0.0)
             return False
 
-        _report(progress, f"Loading {self.checkpoint} (first run downloads ~1.3 GB)…", 0.2)
+        _report(
+            progress,
+            f"Carico {self.checkpoint} (la prima volta scarica circa 1,3 GB)…",
+            0.2,
+        )
         try:
             config = ModelConfig(
                 checkpoint_path=self.checkpoint,
@@ -115,9 +119,9 @@ class TimesFMForecaster:
             )
             self._model = TimesFM3Evaluator(config)
         except Exception as exc:
-            _report(progress, f"Could not load the checkpoint: {exc}", 0.0)
+            _report(progress, f"Checkpoint non caricato: {exc}", 0.0)
             return False
-        _report(progress, "TimesFM 3.0 ready.", 1.0)
+        _report(progress, "TimesFM 3.0 pronto.", 1.0)
         return True
 
     def score_numbers(self, draws: list[Draw], progress=None) -> dict[int, float]:
@@ -131,13 +135,13 @@ class TimesFMForecaster:
         """
         if self._model is None:
             raise ForecasterUnavailable(
-                "TimesFM is not loaded — call load_model() first, or pick a "
-                "baseline method that does not need it"
+                "TimesFM non è caricato — chiama prima load_model(), oppure scegli "
+                "un metodo di riferimento che non ne ha bisogno"
             )
         if len(draws) < MIN_CONTEXT_DRAWS:
             raise ForecasterUnavailable(
-                f"{len(draws)} draws is too short a history; at least {MIN_CONTEXT_DRAWS} "
-                "are needed before the rolling window means anything"
+                f"{len(draws)} estrazioni sono troppo poche: ne servono almeno "
+                f"{MIN_CONTEXT_DRAWS} perché la finestra mobile abbia senso"
             )
 
         context = build_context(
@@ -148,7 +152,7 @@ class TimesFMForecaster:
         )
         _report(
             progress,
-            f"Forecasting {context.shape[0]} series over {context.shape[1]} draws…",
+            f"Prevedo {context.shape[0]} serie su {context.shape[1]} estrazioni…",
             0.4,
         )
         outputs = list(
@@ -162,15 +166,16 @@ class TimesFMForecaster:
         # (variates, horizon) with horizon 1, though some paths drop a unit
         # axis — reshape rather than index blind.
         values = forecast.reshape(NUMBER_MAX, -1)[:, 0]
-        _report(progress, "Forecast complete.", 1.0)
+        _report(progress, "Previsione completata.", 1.0)
         return {n: float(values[n - 1]) for n in ALL_NUMBERS}
 
     def describe(self) -> str:
         chunks = -(-NUMBER_MAX // MAX_VARIATES_PER_FORWARD)
         return (
-            f"{self.checkpoint} on {self.device}, {self.representation} series, "
-            f"context {self.context_length} draws, {NUMBER_MAX} variates in {chunks} "
-            f"attention chunks of at most {MAX_VARIATES_PER_FORWARD}"
+            f"{self.checkpoint} su {self.device}, serie «{self.representation}», "
+            f"contesto di {self.context_length} estrazioni, {NUMBER_MAX} variate in "
+            f"{chunks} blocchi di attenzione da al massimo "
+            f"{MAX_VARIATES_PER_FORWARD}"
         )
 
 

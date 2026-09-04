@@ -31,6 +31,7 @@ from core.archive import (
     save_archive,
 )
 from core.data_manager import ARCHIVE_PATH, DATA_DIR
+from core.localise import it_date, it_number
 from core.sources import (
     BulkArchiveSource,
     EstrazioniItSource,
@@ -49,26 +50,27 @@ class ArchivePanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         sources = section(
-            self, "Sources",
-            "Import a file you downloaded — the reliable route, and where this "
-            "archive came from. The bulk mirror needs no configuration but stops in "
-            "January 2020, and the scraper has never parsed a live page: both are "
-            "confirmed before anything is written.",
+            self, "Sorgenti",
+            "L'esportazione di estrazioni.it è la sorgente principale: una richiesta, "
+            "dal 1997 all'ultima estrazione. Il mirror storico non richiede "
+            "configurazione ma si ferma a gennaio 2020, e la scansione delle pagine "
+            "non è mai stata provata su un sito reale. Prima di scrivere qualsiasi "
+            "cosa viene sempre chiesta conferma.",
         )
         sources.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(sources.body, fg_color="transparent")
         row.pack(fill="x")
-        ctk.CTkButton(row, text="Update from estrazioni.it", width=200,
+        ctk.CTkButton(row, text="Aggiorna da estrazioni.it", width=210,
                       command=self._fetch_export).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(row, text="Bulk archive (to 2020)", width=180,
+        ctk.CTkButton(row, text="Mirror storico (al 2020)", width=195,
                       command=self._fetch_bulk).pack(side="left", padx=8)
-        ctk.CTkButton(row, text="Scrape recent years", width=170,
+        ctk.CTkButton(row, text="Scansiona le pagine", width=180,
                       command=self._fetch_html).pack(side="left", padx=8)
-        ctk.CTkButton(row, text="Import a file…", width=140,
+        ctk.CTkButton(row, text="Importa un file…", width=155,
                       command=self._import_file).pack(side="left", padx=8)
 
         self.debug_html = ctk.CTkCheckBox(
-            row, text="save fetched pages", width=170,
+            row, text="salva le pagine scaricate", width=200,
         )
         self.debug_html.pack(side="left", padx=(16, 0))
 
@@ -79,12 +81,14 @@ class ArchivePanel(ctk.CTkFrame):
         )
         self.freshness.pack(fill="x", pady=(4, 0))
 
-        health = section(self, "Integrity", "What is wrong with the archive on disk.")
+        health = section(
+            self, "Integrità", "Che cosa non va nell'archivio su disco."
+        )
         health.pack(fill="both", expand=True, padx=16, pady=8)
         self.health_box = ReportBox(health.body, height=150)
         self.health_box.pack(fill="both", expand=True)
 
-        recent = section(self, "Most recent draws")
+        recent = section(self, "Estrazioni più recenti")
         recent.pack(fill="both", expand=True, padx=16, pady=(8, 16))
         self.recent_box = ReportBox(recent.body, height=180)
         self.recent_box.pack(fill="both", expand=True)
@@ -138,8 +142,8 @@ class ArchivePanel(ctk.CTkFrame):
         from tkinter import filedialog
 
         path = filedialog.askopenfilename(
-            title="Import a SuperEnalotto archive",
-            filetypes=[("Archive files", "*.csv *.txt *.tsv"), ("All files", "*.*")],
+            title="Importa un archivio SuperEnalotto",
+            filetypes=[("File di archivio", "*.csv *.txt *.tsv"), ("Tutti i file", "*.*")],
         )
         if not path:
             return
@@ -162,28 +166,29 @@ class ArchivePanel(ctk.CTkFrame):
         if (always_confirm and (preview.added or preview.updated)) or not preview.safe:
             from tkinter import messagebox
 
-            if not messagebox.askyesno("Confirm import", self._confirm_text(preview)):
-                self.app.set_status("Import cancelled — nothing was written.")
+            if not messagebox.askyesno("Conferma l'import", self._confirm_text(preview)):
+                self.app.set_status("Import annullato — non è stato scritto nulla.")
                 return
 
         merged, added, updated = merge_draws(self.app.draws, incoming)
         save_archive(ARCHIVE_PATH, merged)
         self.app.set_draws(merged)
         self.app.set_status(
-            f"{added} draws added, {updated} updated — {len(merged):,} on record."
+            f"{added} estrazioni aggiunte, {updated} aggiornate — "
+            f"{it_number(len(merged))} in archivio."
         )
 
     @staticmethod
     def _confirm_text(preview) -> str:
         lines = [preview.describe(), ""]
         if preview.samples:
-            lines.append("Newest rows this would add:")
+            lines.append("Le righe più recenti che verrebbero aggiunte:")
             lines += [
                 f"  {d.date}  {' '.join(f'{n:2d}' for n in d.numbers)}   [{d.source}]"
                 for d in preview.samples
             ]
             lines.append("")
-        lines.append("Write these to the archive?")
+        lines.append("Le scrivo nell'archivio?")
         return "\n".join(lines)
 
     # ── display ──────────────────────────────────────────────
@@ -191,15 +196,18 @@ class ArchivePanel(ctk.CTkFrame):
         draws = self.app.draws
         info = describe_archive(draws)
         if not draws:
-            self.status.configure(text="No archive yet. Start with the bulk bootstrap.")
+            self.status.configure(
+                text="Ancora nessun archivio. Comincia da «Aggiorna da estrazioni.it»."
+            )
             self.freshness.configure(text="", text_color=MUTED)
             self.health_box.set_text("")
             self.recent_box.set_text("")
             return
         self.status.configure(
             text=(
-                f"{info['count']:,} draws, {info['first']} to {info['last']}, "
-                f"{info['with_superstar']:,} with a SuperStar. Stored in {ARCHIVE_PATH}."
+                f"{it_number(info['count'])} estrazioni, dal {it_date(info['first'])} "
+                f"al {it_date(info['last'])}, {it_number(info['with_superstar'])} con "
+                f"SuperStar. Archivio in {ARCHIVE_PATH}."
             )
         )
         state = freshness(draws)
@@ -210,29 +218,32 @@ class ArchivePanel(ctk.CTkFrame):
         issues = integrity_report(draws)
         if not issues:
             self.health_box.set_text(
-                "No internal inconsistencies.\n\n"
-                "That means the archive agrees with itself — no duplicated dates, no\n"
-                "duplicated contest numbers, no missing contests inside a complete year.\n"
-                "It does not mean the numbers are right; only a second source can say that."
+                "Nessuna incoerenza interna.\n\n"
+                "Vuol dire che l'archivio è coerente con sé stesso: nessuna data\n"
+                "duplicata, nessun numero di concorso duplicato, nessun concorso\n"
+                "mancante dentro un anno completo.\n"
+                "Non vuol dire che i numeri siano giusti: quello lo può dire solo\n"
+                "una seconda fonte."
             )
         else:
             errors = sum(1 for i in issues if i.severity == "error")
             lines = [
-                f"{len(issues)} issues — {errors} errors, {len(issues) - errors} warnings.",
+                f"{len(issues)} problemi — {errors} errori, "
+                f"{len(issues) - errors} avvisi.",
                 "",
             ]
             lines += [f"[{i.severity:<7}] {i.message}" for i in issues]
             self.health_box.set_text("\n".join(lines))
 
         header = (
-            f"{'date':<12} {'contest':>8}  numbers                      "
-            f"{'J':>3} {'SS':>3}  source"
+            f"{'data':<12} {'concorso':>9}  numeri                       "
+            f"{'J':>3} {'SS':>3}  sorgente"
         )
         lines = [header, "─" * len(header)]
         for d in draws[-25:][::-1]:
             nums = " ".join(f"{n:2d}" for n in d.numbers)
             lines.append(
-                f"{d.date.isoformat():<12} {d.draw_id:>8}  {nums}   "
+                f"{it_date(d.date):<12} {d.draw_id:>9}  {nums}   "
                 f"{d.jolly or 0:>3} {d.superstar or 0:>3}  {d.source}"
             )
         self.recent_box.set_text("\n".join(lines))

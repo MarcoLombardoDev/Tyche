@@ -53,6 +53,7 @@ import csv
 import io
 
 from core.archive import Draw, repair_year_offset, superenalotto_only
+from core.localise import it_number
 from core.sources.base import DrawSource, ProgressCallback, SourceError, http_get
 
 # The SourceForge project's own download host. ``sourceforge.net/projects/...``
@@ -73,14 +74,15 @@ class BulkArchiveSource(DrawSource):
 
     def describe(self) -> str:
         return (
-            "Bulk historical CSV (1961→2020-01). Bootstrap only — this mirror "
-            "is no longer updated; refresh recent draws from another source."
+            "CSV storico in blocco (1961→gennaio 2020). Solo per partire: questo "
+            "mirror non viene più aggiornato; le estrazioni recenti vanno prese "
+            "altrove."
         )
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:
-        self._report(progress, f"Downloading {self.url}…", 0.1)
+        self._report(progress, f"Scarico {self.url}…", 0.1)
         payload = http_get(self.url)
-        self._report(progress, f"Parsing {len(payload):,} bytes…", 0.6)
+        self._report(progress, f"Analizzo {it_number(len(payload))} byte…", 0.6)
         draws = parse_bulk_csv(payload.decode("utf-8", errors="replace"), source=self.name)
         kept = superenalotto_only(draws)
         # Order matters twice over: the pre-1997 filter preserves file order,
@@ -91,8 +93,9 @@ class BulkArchiveSource(DrawSource):
             print(f"[BulkArchive] {note}")
         self._report(
             progress,
-            f"{len(kept):,} SuperEnalotto draws ({len(draws) - len(kept):,} pre-1997 rows dropped, "
-            f"{len(notes)} label repairs).",
+            f"{it_number(len(kept))} estrazioni SuperEnalotto "
+            f"({it_number(len(draws) - len(kept))} righe pre-1997 scartate, "
+            f"{len(notes)} etichette corrette).",
             1.0,
         )
         return kept
@@ -131,8 +134,9 @@ def parse_bulk_csv(text: str, source: str = "bulk-archive") -> list[Draw]:
             skipped += 1
     if not draws:
         raise SourceError(
-            f"no draws parsed from {len(text):,} characters — the URL is probably "
-            f"serving an error page rather than the CSV ({skipped} unusable rows)"
+            f"nessuna estrazione riconosciuta in {it_number(len(text))} caratteri — "
+            f"l'indirizzo sta probabilmente restituendo una pagina di errore invece "
+            f"del CSV ({skipped} righe inutilizzabili)"
         )
     if skipped:
         print(f"[BulkArchive] skipped {skipped} unusable rows")

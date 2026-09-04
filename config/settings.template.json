@@ -2,7 +2,7 @@
   "timesfm_checkpoint": "google/timesfm-3.0-pytorch",
   "timesfm_device": "cpu",
   "hf_token": "",
-  "representation": "frequency",
+  "representation": "frequenza",
   "frequency_window": 150,
   "context_length": 1024,
   "bulk_archive_url": "https://downloads.sourceforge.net/project/superenalotto/EnalStorico.CSV",
@@ -13,9 +13,9 @@
   "numbers_per_combination": 6,
   "validation_draws": 300,
   "validation_baselines": [
-    "random",
-    "frequency",
-    "gap"
+    "casuale",
+    "frequenza",
+    "ritardo"
   ],
   "last_archive_update": ""
 }

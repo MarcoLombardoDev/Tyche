@@ -42,6 +42,7 @@ from dataclasses import dataclass
 
 from core.archive import NUMBER_MAX, NUMBERS_PER_DRAW, Draw
 from core.features import counts, presence_matrix
+from core.localise import it_number
 from core.stats_tests import (
     chi2_sf,
     chi_square_goodness_of_fit,
@@ -88,25 +89,25 @@ def uniformity_test(draws: list[Draw]) -> TestResult:
     total = len(draws)
     expected = total * NUMBERS_PER_DRAW / NUMBER_MAX
     if total == 0 or expected <= 0:
-        return TestResult("Uniformity of the 90 numbers", 0.0, 0, 1.0, "Not enough draws.")
+        return TestResult("Uniformità dei 90 numeri", 0.0, 0, 1.0, "Estrazioni insufficienti.")
     statistic = sum((tally[n] - expected) ** 2 / expected for n in tally)
     dof = NUMBER_MAX - 1
     p = chi2_sf(statistic, dof)
     hottest = max(tally, key=lambda n: tally[n])
     coldest = min(tally, key=lambda n: tally[n])
     return TestResult(
-        name="Uniformity of the 90 numbers",
+        name="Uniformità dei 90 numeri",
         statistic=statistic,
         dof=dof,
         p_value=p,
         verdict=_verdict(
             p,
-            "some numbers really are drawn more often",
-            "every number is drawn equally often",
+            "che alcuni numeri escano davvero più spesso",
+            "che ogni numero esca con la stessa frequenza",
         ),
         detail=(
-            f"expected {expected:.1f} appearances each; most drawn {hottest} "
-            f"({tally[hottest]}), least drawn {coldest} ({tally[coldest]})"
+            f"attese {expected:.1f} uscite per numero; il più estratto è {hottest} "
+            f"({tally[hottest]}), il meno estratto {coldest} ({tally[coldest]})"
         ),
     )
 
@@ -132,7 +133,7 @@ def gap_distribution_test(draws: list[Draw]) -> TestResult:
         hits = [t for t, v in enumerate(row) if v > 0]
         observed_gaps.extend(b - a - 1 for a, b in zip(hits, hits[1:], strict=False))
     if len(observed_gaps) < 100:
-        return TestResult("Gap ('ritardo') distribution", 0.0, 0, 1.0, "Not enough draws.")
+        return TestResult("Distribuzione dei ritardi", 0.0, 0, 1.0, "Estrazioni insufficienti.")
 
     # Bucket to 0..49 with a 50+ tail; beyond that the expected counts are
     # tiny and the pooling in the chi-square would merge them anyway.
@@ -147,18 +148,18 @@ def gap_distribution_test(draws: list[Draw]) -> TestResult:
     statistic, dof, p = chi_square_goodness_of_fit(observed, expected)
     mean_gap = sum(observed_gaps) / total
     return TestResult(
-        name="Gap ('ritardo') distribution",
+        name="Distribuzione dei ritardi",
         statistic=statistic,
         dof=dof,
         p_value=p,
         verdict=_verdict(
             p,
-            "gaps do not follow the independent-draw law",
-            "gaps are exactly those of independent draws",
+            "che i ritardi non seguano la legge delle estrazioni indipendenti",
+            "che i ritardi siano esattamente quelli di estrazioni indipendenti",
         ),
         detail=(
-            f"{total:,} gaps observed, mean {mean_gap:.2f}, "
-            f"geometric expectation {(1 - p_hit) / p_hit:.2f}"
+            f"{it_number(total)} ritardi osservati, media {mean_gap:.2f}, "
+            f"attesa geometrica {(1 - p_hit) / p_hit:.2f}"
         ),
     )
 
@@ -177,7 +178,10 @@ def serial_independence_test(draws: list[Draw]) -> TestResult:
     """
     presence = presence_matrix(draws)
     if presence.shape[1] < 3:
-        return TestResult("Serial independence (draw t → t+1)", 0.0, 0, 1.0, "Not enough draws.")
+        return TestResult(
+            "Indipendenza seriale (estrazione t → t+1)", 0.0, 0, 1.0,
+            "Estrazioni insufficienti.",
+        )
     now, nxt = presence[:, :-1], presence[:, 1:]
     a = float(((now > 0) & (nxt > 0)).sum())   # drawn, then drawn
     b = float(((now > 0) & (nxt == 0)).sum())  # drawn, then not
@@ -186,25 +190,28 @@ def serial_independence_test(draws: list[Draw]) -> TestResult:
     n = a + b + c + d
     row1, row2, col1, col2 = a + b, c + d, a + c, b + d
     if min(row1, row2, col1, col2) == 0:
-        return TestResult("Serial independence (draw t → t+1)", 0.0, 0, 1.0, "Degenerate table.")
+        return TestResult(
+            "Indipendenza seriale (estrazione t → t+1)", 0.0, 0, 1.0,
+            "Tabella degenere.",
+        )
     statistic = n * (a * d - b * c) ** 2 / (row1 * row2 * col1 * col2)
     p = chi2_sf(statistic, 1)
     rate_after_hit = a / row1
     rate_after_miss = c / row2
     return TestResult(
-        name="Serial independence (draw t → t+1)",
+        name="Indipendenza seriale (estrazione t → t+1)",
         statistic=statistic,
         dof=1,
         p_value=p,
         verdict=_verdict(
             p,
-            "the previous draw carries information about the next",
-            "the previous draw carries no information about the next",
+            "che l'estrazione precedente dica qualcosa sulla successiva",
+            "che l'estrazione precedente non dica nulla sulla successiva",
         ),
         detail=(
-            f"P(drawn | drawn last time) = {rate_after_hit:.4f}, "
-            f"P(drawn | not drawn last time) = {rate_after_miss:.4f}, "
-            f"unconditional {NUMBERS_PER_DRAW / NUMBER_MAX:.4f}"
+            f"P(esce | uscito la volta scorsa) = {rate_after_hit:.4f}, "
+            f"P(esce | non uscito la volta scorsa) = {rate_after_miss:.4f}, "
+            f"non condizionata {NUMBERS_PER_DRAW / NUMBER_MAX:.4f}"
         ),
     )
 
@@ -219,7 +226,10 @@ def repeat_count_test(draws: list[Draw]) -> TestResult:
     about one draw in twenty.
     """
     if len(draws) < 2:
-        return TestResult("Repeats between consecutive draws", 0.0, 0, 1.0, "Not enough draws.")
+        return TestResult(
+            "Ripetizioni fra estrazioni consecutive", 0.0, 0, 1.0,
+            "Estrazioni insufficienti.",
+        )
     overlaps = [
         len(set(a.numbers) & set(b.numbers))
         for a, b in zip(draws, draws[1:], strict=False)
@@ -231,16 +241,16 @@ def repeat_count_test(draws: list[Draw]) -> TestResult:
     statistic, dof, p = chi_square_goodness_of_fit(observed, expected)
     mean_overlap = sum(overlaps) / pairs
     return TestResult(
-        name="Repeats between consecutive draws",
+        name="Ripetizioni fra estrazioni consecutive",
         statistic=statistic,
         dof=dof,
         p_value=p,
         verdict=_verdict(
             p,
-            "repeats are not distributed as chance predicts",
-            "repeats occur exactly as often as chance predicts",
+            "che le ripetizioni non seguano la distribuzione del caso",
+            "che le ripetizioni siano esattamente quelle previste dal caso",
         ),
-        detail=f"mean overlap {mean_overlap:.3f} of 6, chance expectation 0.400",
+        detail=f"sovrapposizione media {mean_overlap:.3f} su 6, attesa dal caso 0.400",
     )
 
 
@@ -255,7 +265,7 @@ def sum_distribution_test(draws: list[Draw]) -> TestResult:
     drum) that leaves each individual number's count looking innocent.
     """
     if len(draws) < 30:
-        return TestResult("Sum of the six numbers", 0.0, 0, 1.0, "Not enough draws.")
+        return TestResult("Somma dei sei numeri", 0.0, 0, 1.0, "Estrazioni insufficienti.")
     sums = [sum(d.numbers) for d in draws]
     n = len(sums)
     mean_obs = sum(sums) / n
@@ -266,17 +276,17 @@ def sum_distribution_test(draws: list[Draw]) -> TestResult:
     z = (mean_obs - mean_null) / ((var_null / n) ** 0.5)
     p = two_sided_normal_p(z)
     return TestResult(
-        name="Sum of the six numbers",
+        name="Somma dei sei numeri",
         statistic=z,
         dof=0,
         p_value=p,
         verdict=_verdict(
             p,
-            "the draw is biased towards high or low numbers",
-            "the draw shows no high/low bias",
+            "che l'estrazione sia sbilanciata verso numeri alti o bassi",
+            "che l'estrazione non mostri sbilanciamenti verso alto o basso",
         ),
         detail=(
-            f"observed mean {mean_obs:.2f}, expected {mean_null:.2f} "
+            f"media osservata {mean_obs:.2f}, attesa {mean_null:.2f} "
             f"± {(var_null / n) ** 0.5:.2f}"
         ),
     )
@@ -298,20 +308,26 @@ def summarise(results: list[TestResult]) -> str:
     flagged = [r for r in results if r.significant]
     if not flagged:
         return (
-            f"All {len(results)} tests are consistent with independent uniform draws. "
-            "On this evidence the archive contains no exploitable structure, and no "
-            "forecast built from it — TimesFM's included — can do better than chance."
+            f"Tutti e {len(results)} i test sono compatibili con estrazioni indipendenti "
+            "e uniformi. Su questa evidenza l'archivio non contiene struttura "
+            "sfruttabile, e nessuna previsione costruita su di esso — compresa quella "
+            "di TimesFM — può fare meglio del caso."
         )
     names = ", ".join(r.name for r in flagged)
+    verb = "si discosta" if len(flagged) == 1 else "si discostano"
     return (
-        f"{len(flagged)} of {len(results)} tests departed from the independence model "
-        f"({names}). At the 5% level roughly one test in twenty does this by chance, so "
-        "check whether the result repeats on a different slice of the archive before "
-        "reading anything into it."
+        f"{len(flagged)} test su {len(results)} {verb} dal modello di indipendenza "
+        f"({names}). Al livello del 5% circa un test su venti lo fa per caso, quindi "
+        "verifica se il risultato si ripete su una porzione diversa dell'archivio "
+        "prima di trarne qualcosa."
     )
 
 
 def _verdict(p: float, if_small: str, if_large: str) -> str:
+    # Both frames take the same clause, so the clause carries its own "che"
+    # and stays in the subjunctive: "evidenza che … escano" and "l'ipotesi
+    # che … escano" are both correct, while an indicative would be wrong after
+    # the second.
     if p < ALPHA:
-        return f"p = {p:.4f} — evidence that {if_small}."
-    return f"p = {p:.4f} — no evidence against the hypothesis that {if_large}."
+        return f"p = {p:.4f} — evidenza {if_small}."
+    return f"p = {p:.4f} — nessuna evidenza contro l'ipotesi {if_large}."

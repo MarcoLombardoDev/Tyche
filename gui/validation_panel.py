@@ -20,6 +20,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from core.forecaster import TimesFMForecaster
+from core.localise import it_date
 from core.predictor import METHODS
 from core.validation import walk_forward
 from gui.theme import BG_ROOT, GOOD, MUTED, WARN
@@ -35,10 +36,10 @@ class ValidationPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         controls = section(
-            self, "Walk-forward backtest",
-            "Step through the most recent draws. At each step a method sees only the "
-            "draws before it, picks six numbers, and is scored against what came out. "
-            "Chance is 0.4 hits per draw, exactly.",
+            self, "Backtest walk-forward",
+            "Scorre le estrazioni più recenti. A ogni passo un metodo vede solo le "
+            "estrazioni precedenti, sceglie sei numeri e viene confrontato con quello "
+            "che è uscito. Il caso vale esattamente 0,4 centri per estrazione.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
 
@@ -53,14 +54,16 @@ class ValidationPanel(ctk.CTkFrame):
 
         row2 = ctk.CTkFrame(controls.body, fg_color="transparent")
         row2.pack(fill="x", pady=(10, 0))
-        ctk.CTkLabel(row2, text="Draws to score", text_color=MUTED).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(
+            row2, text="Estrazioni da valutare", text_color=MUTED
+        ).pack(side="left", padx=(0, 6))
         self.n_draws = ctk.CTkEntry(row2, width=90)
         self.n_draws.insert(0, str(self.app.settings.get("validation_draws", 300)))
         self.n_draws.pack(side="left", padx=(0, 16))
-        ctk.CTkButton(row2, text="Run", width=120, command=self._run).pack(side="left")
+        ctk.CTkButton(row2, text="Esegui", width=120, command=self._run).pack(side="left")
         ctk.CTkLabel(
             row2,
-            text="TimesFM costs one model call per draw — start small.",
+            text="TimesFM costa una chiamata al modello per estrazione — parti basso.",
             text_color=MUTED,
         ).pack(side="left", padx=14)
 
@@ -69,7 +72,7 @@ class ValidationPanel(ctk.CTkFrame):
         )
         self.verdict.pack(fill="x", pady=(10, 0))
 
-        results = section(self, "Results")
+        results = section(self, "Risultati")
         results.pack(fill="both", expand=True, padx=16, pady=(8, 16))
         self.box = ReportBox(results.body, height=340)
         self.box.pack(fill="both", expand=True)
@@ -77,16 +80,16 @@ class ValidationPanel(ctk.CTkFrame):
     def _run(self) -> None:
         draws = self.app.draws
         if not draws:
-            self.app.set_status("No archive yet — fetch one from the Archive tab.")
+            self.app.set_status("Ancora nessun archivio — scaricalo dalla scheda Archivio.")
             return
         methods = [m for m, box in self._checks.items() if box.get()]
         if not methods:
-            self.app.set_status("Tick at least one method.")
+            self.app.set_status("Seleziona almeno un metodo.")
             return
         try:
             n_draws = int(self.n_draws.get())
         except ValueError:
-            self.app.set_status("Draws to score must be a whole number.")
+            self.app.set_status("«Estrazioni da valutare» deve essere un numero intero.")
             return
         settings = self.app.settings
         settings["validation_draws"] = n_draws
@@ -99,14 +102,14 @@ class ValidationPanel(ctk.CTkFrame):
                     checkpoint=settings.get("timesfm_checkpoint", ""),
                     device=settings.get("timesfm_device", "cpu"),
                     context_length=int(settings.get("context_length", 1024)),
-                    representation=settings.get("representation", "frequency"),
+                    representation=settings.get("representation", "frequenza"),
                     window=int(settings.get("frequency_window", 150)),
                     hf_token=settings.get("hf_token", ""),
                 )
                 if not forecaster.load_model(report):
                     raise RuntimeError(
-                        "TimesFM could not be loaded — untick it, or install it with "
-                        "`pip install timesfm[torch]`."
+                        "TimesFM non si è caricato — toglilo dalla selezione, oppure "
+                        "installalo con `pip install timesfm[torch]`."
                     )
                 self.app.forecaster = forecaster
             return walk_forward(
@@ -120,35 +123,44 @@ class ValidationPanel(ctk.CTkFrame):
 
     def _show(self, report) -> None:
         header = (
-            f"{'method':<11} {'hits/draw':>10} {'chance':>8} {'total':>7} "
-            f"{'vs chance':>10} {'z':>7} {'p':>7} {'best':>5} {'>=3':>5} {'exp>=3':>7}"
+            f"{'metodo':<11} {'centri/estr':>12} {'caso':>7} {'totale':>7} "
+            f"{'vs caso':>9} {'z':>7} {'p':>7} {'max':>4} {'>=3':>5} {'att.>=3':>8}"
         )
         lines = [
-            f"{report.draws_scored} draws scored, {report.first_target.date} to "
-            f"{report.last_target.date}, {report.picks_per_draw} picks each.",
+            f"{report.draws_scored} estrazioni valutate, dal "
+            f"{it_date(report.first_target.date)} al "
+            f"{it_date(report.last_target.date)}, {report.picks_per_draw} numeri "
+            f"ciascuna.",
             "",
             header,
             "─" * len(header),
         ]
         for r in report.results:
             lines.append(
-                f"{r.method:<11} {r.mean_hits:>10.4f} {r.expected_mean:>8.4f} "
-                f"{r.total_hits:>7} {r.excess:>+10.1f} {r.z:>+7.2f} {r.p_value:>7.3f} "
-                f"{r.best_draw_hits:>5} {r.three_or_more:>5} {r.expected_three_or_more:>7.1f}"
+                f"{r.method:<11} {r.mean_hits:>12.4f} {r.expected_mean:>7.4f} "
+                f"{r.total_hits:>7} {r.excess:>+9.1f} {r.z:>+7.2f} {r.p_value:>7.3f} "
+                f"{r.best_draw_hits:>4} {r.three_or_more:>5} "
+                f"{r.expected_three_or_more:>8.1f}"
             )
-        lines += ["", "Distribution of hits per draw, against the chance distribution", ""]
+        lines += [
+            "",
+            "Distribuzione dei centri per estrazione, contro quella del caso",
+            "",
+        ]
         picks = report.picks_per_draw
         lines.append("  " + " ".join(f"{k:>7}" for k in range(picks + 1)))
         for r in report.results:
             lines.append(f"{r.method:<11}" + " ".join(f"{h:>7}" for h in r.histogram))
             lines.append(
-                f"{'  chance χ²':<11}"
-                + f"  {r.chi2:.2f} on {r.chi2_dof} dof, p = {r.chi2_p:.3f}"
+                f"{'  χ² caso':<11}"
+                + f"  {r.chi2:.2f} su {r.chi2_dof} gdl, p = {r.chi2_p:.3f}"
             )
         self.box.set_text("\n".join(lines))
         beat = any(r.p_value < 0.05 and r.z > 0 for r in report.results)
         self.verdict.configure(text=report.verdict(), text_color=WARN if beat else GOOD)
-        self.app.set_status(f"Validation over {report.draws_scored} draws complete.")
+        self.app.set_status(
+            f"Validazione su {report.draws_scored} estrazioni completata."
+        )
 
     def refresh(self) -> None:
         pass

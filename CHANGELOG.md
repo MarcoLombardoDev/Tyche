@@ -1,64 +1,95 @@
-# Changelog
+# Registro delle modifiche
 
-Notable changes per release. The section for a version is what the release
-page shows: `tools/release_notes.py` reads it out of this file and composes it
-with the standing preamble in `.github/release-body.md`, so the notes and this
-file cannot drift apart.
+Le modifiche degne di nota, versione per versione. La sezione di una versione è
+ciò che compare sulla pagina della release: `tools/release_notes.py` la legge da
+questo file e la compone con la premessa fissa di `.github/release-body.md`, così
+le note e questo file non possono divergere.
 
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
-versions follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
+Il formato segue [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) e la
+numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Non rilasciato]
 
-Nothing yet.
+Niente, per ora.
+
+## [0.2.0] — 2026-09-04
+
+Tyche parla italiano.
+
+### Tutto in italiano
+
+- **Interfaccia, riga di comando, messaggi di errore, report e documentazione
+  sono ora in italiano.** Il SuperEnalotto è un gioco italiano e non c'era
+  motivo perché il programma che lo analizza parlasse un'altra lingua. Le sei
+  schede sono *Prova del nove*, *Archivio*, *Statistiche*, *Previsione*,
+  *Validazione* e *Impostazioni*; le schermate del README sono state rifatte.
+- I metodi di previsione hanno nomi italiani — `timesfm`, `frequenza`,
+  `ritardo`, `casuale` — e così le tre rappresentazioni passate al modello:
+  `presenza`, `frequenza`, `ritardo`. Sono i nomi che si scrivono sulla riga di
+  comando, quindi il cambiamento è **incompatibile** con gli script che usavano
+  quelli inglesi.
+- I numeri sono formattati all'italiana: `4.260 estrazioni`, date `03/09/2026`.
+  I decimali mantengono il punto di proposito, perché le stesse schermate
+  mostrano χ², z e valori p accanto ai conteggi e mescolare due convenzioni
+  nella stessa riga si legge peggio di una sola. `core/localise.py` è l'unico
+  posto dove questa scelta è scritta, e non dipende da una locale `it_IT.UTF-8`
+  che i runner di CI non hanno.
+- L'archivio su disco non cambia: il CSV continua a usare date ISO e interi
+  nudi, perché è un formato di scambio e non una schermata.
+- L'autodiagnosi del pacchetto Windows stampa ora `autodiagnosi: SUPERATA`. Il
+  workflow di release cerca quella riga, ed è cambiata insieme al resto.
 
 ## [0.1.0] — 2026-09-04
 
-First release.
+Prima release.
 
-### The archive
+### L'archivio
 
-- Draw history from **3 December 1997 to the present**, 4,260 draws, fetched
-  from estrazioni.it in one request. `--update` refreshes it; `--import`
-  reads a file downloaded by hand; a mirrored bulk CSV bootstraps an empty
-  archive without configuration; a per-year HTML scrape is the last resort.
-- Every write is previewed first. Rows that would contradict a stored draw,
-  and integrity errors a merge would introduce, are reported before anything
-  is written, and the sources whose URLs are inferred rather than documented
-  always ask.
-- `integrity_report` checks the sequence, not just the rows: duplicated
-  dates, duplicated contest numbers, gaps inside a complete year. It found
-  nine draws of 1999 labelled 1998 in the bulk mirror, and
-  `repair_year_offset` puts them back — verified against an independent
-  source, including the two that share a date with their duplicate.
-- How far behind the archive is, in draws, is on screen rather than in the
-  documentation, measured against the archive's own cadence.
+- Lo storico delle estrazioni dal **3 dicembre 1997 a oggi**, 4.260 estrazioni,
+  scaricato da estrazioni.it in una sola richiesta. `--update` lo aggiorna,
+  `--import` legge un file scaricato a mano, un CSV di riepilogo su mirror
+  costruisce un archivio vuoto senza configurare niente, e lo scraping HTML
+  anno per anno è l'ultima risorsa.
+- Ogni scrittura viene prima simulata. Le righe che contraddirebbero
+  un'estrazione già archiviata, e gli errori di integrità che l'unione
+  introdurrebbe, sono segnalati prima che venga scritto qualcosa; le fonti il
+  cui indirizzo è stato dedotto anziché documentato chiedono sempre conferma.
+- `integrity_report` controlla la sequenza, non solo le singole righe: date
+  duplicate, numeri di concorso duplicati, buchi dentro un anno completo. Ha
+  trovato nove estrazioni del 1999 etichettate 1998 nel mirror, e
+  `repair_year_offset` le rimette a posto — verificato contro una fonte
+  indipendente, comprese le due che condividono la data con il proprio
+  duplicato.
+- Di quanto l'archivio è indietro, in estrazioni, si legge sullo schermo e non
+  nella documentazione, misurato sulla cadenza dell'archivio stesso.
 
-### The measurement
+### La misura
 
-- Five tests of the hypothesis that the draws are independent and uniform:
-  per-number uniformity, the gap (*ritardo*) distribution, serial
-  independence, repeats between consecutive draws, and the sum of the six.
-- Walk-forward backtesting with no look-ahead, scored against the closed-form
-  hypergeometric null — chance is 0.4 hits per draw, exactly. TimesFM, hot
-  numbers, *ritardo* and a random number generator are all scored over the
-  same draws and all reported.
-- Exact prize-category odds, and a SQLite export for querying the archive
-  with SQL.
+- Cinque test dell'ipotesi che le estrazioni siano indipendenti e uniformi:
+  uniformità dei singoli numeri, distribuzione dei ritardi, indipendenza
+  seriale, ripetizioni fra estrazioni consecutive e somma dei sei numeri.
+- Backtest walk-forward senza look-ahead, valutato contro l'ipotesi nulla
+  ipergeometrica in forma chiusa — il caso vale 0,4 numeri indovinati per
+  estrazione, esattamente. TimesFM, i numeri caldi, il ritardo e un generatore
+  di numeri casuali sono valutati sulle stesse estrazioni e riportati tutti.
+- Probabilità esatte delle categorie di premio, ed esportazione SQLite per
+  interrogare l'archivio in SQL.
 
-### Getting it
+### Come si ottiene
 
-- A **Windows x64 build**, attached to this release. Unpack the folder and run
-  `start.cmd`, which checks the executable against the digest recorded at
-  build time before starting it. Unsigned, so SmartScreen will say the
-  publisher is unknown — the archive's SHA-256 is in these notes so the
-  download can be checked by a route it did not travel on.
-- macOS and Linux run from source. So does Windows, if you would rather.
+- Un **pacchetto Windows x64**, allegato a questa release. Si scompatta la
+  cartella e si esegue `start.cmd`, che confronta l'eseguibile con l'impronta
+  registrata al momento della compilazione prima di avviarlo. Non è firmato,
+  quindi SmartScreen dirà che l'editore è sconosciuto — lo SHA-256 dell'archivio
+  è in queste note, così il download si può verificare per una strada diversa da
+  quella su cui è arrivato.
+- macOS e Linux si eseguono dai sorgenti. E anche Windows, volendo.
 
-### The forecast
+### La previsione
 
-- TimesFM 3.0 (`google/timesfm-3.0-pytorch`, 330M parameters) over ninety
-  per-number series. Verified end to end in CI, on the real checkpoint.
-- Nothing beats chance. That is the finding, not a caveat: over the last
-  1,000 draws the foundation model, the two folk heuristics and the random
-  baseline all score 0.4.
+- TimesFM 3.0 (`google/timesfm-3.0-pytorch`, 330 milioni di parametri) su
+  novanta serie, una per numero. Verificato da capo a fondo in CI, sul
+  checkpoint vero.
+- Niente batte il caso. Questo è il risultato, non un'avvertenza: sulle ultime
+  1.000 estrazioni il modello fondazionale, le due euristiche popolari e la
+  linea di base casuale segnano tutti 0,4.

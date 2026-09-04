@@ -26,27 +26,31 @@ from gui.widgets import section
 
 # (key, label, kind, help). kind is "text", "secret", or a tuple of choices.
 FIELDS = [
-    ("timesfm_checkpoint", "TimesFM checkpoint", "text",
-     f"Hugging Face repo id. Default {DEFAULT_TIMESFM_CHECKPOINT}; the 3.0 weights are "
-     "non-commercial, non-production use only."),
-    ("timesfm_device", "Device", ("cpu", "cuda"),
-     "cuda needs a matching PyTorch build; cpu takes a few seconds per forecast."),
-    ("hf_token", "Hugging Face token", "secret",
-     "Only needed for a gated checkpoint. Stored in config/settings.json, which is git-ignored."),
-    ("representation", "Series fed to the model", ("frequency", "presence", "gap"),
-     "frequency is smoothed and has a gradient to follow; presence is the raw 0/1 fact and "
-     "forecasts to a flat line, which is itself worth seeing once."),
-    ("frequency_window", "Rolling window (draws)", "text",
-     "Trailing window for the frequency series. 150 is about a year."),
-    ("context_length", "Context length (draws)", "text",
-     "How much history TimesFM sees. 3.0 accepts up to 16k; 1024 keeps a CPU run short."),
-    ("bulk_archive_url", "Bulk archive URL", "text",
-     "One request, the whole history to January 2020."),
-    ("html_archive_url", "Per-year archive URL", "text",
-     "{year} is substituted. Editable because the scraper has never been run against the "
-     "live site and the path may well be wrong."),
-    ("validation_draws", "Validation draws", "text",
-     "How many recent draws the walk-forward backtest scores."),
+    ("timesfm_checkpoint", "Checkpoint TimesFM", "text",
+     f"Identificativo del repository Hugging Face. Predefinito {DEFAULT_TIMESFM_CHECKPOINT}; "
+     "i pesi della 3.0 sono per uso non commerciale e non di produzione."),
+    ("timesfm_device", "Dispositivo", ("cpu", "cuda"),
+     "cuda richiede una build di PyTorch corrispondente; cpu impiega qualche secondo "
+     "per previsione."),
+    ("hf_token", "Token Hugging Face", "secret",
+     "Serve solo per un checkpoint ad accesso ristretto. Salvato in "
+     "config/settings.json, che git ignora."),
+    ("representation", "Serie data al modello", ("frequenza", "presenza", "ritardo"),
+     "«frequenza» è lisciata e offre una pendenza da seguire; «presenza» è il dato "
+     "grezzo 0/1 e produce una previsione piatta, cosa che vale la pena vedere una "
+     "volta."),
+    ("frequency_window", "Finestra mobile (estrazioni)", "text",
+     "Finestra all'indietro per la serie di frequenza. 150 è circa un anno."),
+    ("context_length", "Lunghezza del contesto (estrazioni)", "text",
+     "Quanto storico vede TimesFM. La 3.0 accetta fino a 16k; 1024 tiene corta "
+     "un'esecuzione su CPU."),
+    ("bulk_archive_url", "Indirizzo del mirror storico", "text",
+     "Una richiesta, tutto lo storico fino a gennaio 2020."),
+    ("html_archive_url", "Indirizzo dell'archivio per anno", "text",
+     "{year} viene sostituito. Modificabile perché la scansione non è mai stata "
+     "provata sul sito reale e il percorso potrebbe essere sbagliato."),
+    ("validation_draws", "Estrazioni per la validazione", "text",
+     "Quante estrazioni recenti valuta il backtest walk-forward."),
 ]
 
 
@@ -58,7 +62,9 @@ class SettingsPanel(ctk.CTkFrame):
         self._build()
 
     def _build(self) -> None:
-        block = section(self, "Settings", "Written to config/settings.json.")
+        block = section(
+            self, "Impostazioni", "Salvate in config/settings.json."
+        )
         block.pack(fill="both", expand=True, padx=16, pady=16)
 
         scroll = ctk.CTkScrollableFrame(block.body, fg_color="transparent")
@@ -82,7 +88,7 @@ class SettingsPanel(ctk.CTkFrame):
                 text_color=MUTED, wraplength=900, font=ctk.CTkFont(size=11),
             ).pack(fill="x", padx=(200, 0), pady=(0, 10))
 
-        ctk.CTkButton(block.body, text="Save", width=120, command=self._save).pack(
+        ctk.CTkButton(block.body, text="Salva", width=120, command=self._save).pack(
             anchor="w", pady=(12, 0)
         )
 
@@ -104,7 +110,9 @@ class SettingsPanel(ctk.CTkFrame):
                 try:
                     value = int(raw)
                 except (TypeError, ValueError):
-                    self.app.set_status(f"{key}: '{raw}' is not a whole number — not saved.")
+                    self.app.set_status(
+                        f"{key}: «{raw}» non è un numero intero — non salvato."
+                    )
                     return
             else:
                 value = raw
@@ -114,7 +122,9 @@ class SettingsPanel(ctk.CTkFrame):
         # built with, so a saved change has to drop it or the next forecast
         # silently uses the old configuration.
         self.app.forecaster = None
-        self.app.set_status("Settings saved. TimesFM will reload on the next forecast.")
+        self.app.set_status(
+            "Impostazioni salvate. TimesFM si ricaricherà alla prossima previsione."
+        )
 
     def refresh(self) -> None:
         pass

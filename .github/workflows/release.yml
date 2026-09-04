@@ -207,10 +207,14 @@ jobs:
 
           "$exe" --self-check --self-check-report self-check.txt || true
           cat self-check.txt
-          grep -q "^self-check: PASSED" self-check.txt || {
+          # The report is Italian, like everything else the program prints.
+          # These two greps are the contract between it and this job: change
+          # the wording in core/selfcheck.py and this has to change with it,
+          # which is what tests/test_release_workflow.py asserts.
+          grep -q "^autodiagnosi: SUPERATA" self-check.txt || {
             echo "::error::the bundle failed its own self-check"; exit 1; }
 
-          backend=$(sed -n 's/^windowing system: //p' self-check.txt | tr -d '\r')
+          backend=$(sed -n 's/^sistema grafico: //p' self-check.txt | tr -d '\r')
           if [ "$backend" != "win32" ]; then
             echo "::error::the Windows bundle came up on windowing system '$backend'"
             exit 1
@@ -218,7 +222,7 @@ jobs:
 
           # The whole point of building on Windows with torch installed. A
           # bundle that silently lost TimesFM would pass everything above.
-          grep -q "^timesfm: bundled" self-check.txt || {
+          grep -q "^timesfm: nel pacchetto" self-check.txt || {
             echo "::error::TimesFM is not in the bundle"; exit 1; }
 
       # The digest travels inside the archive, so it catches a truncated
@@ -259,7 +263,7 @@ jobs:
             echo "::error::the launcher did not start Tyche"
             exit 1
           fi
-          grep -q "^self-check: PASSED" "$check/launcher.txt"
+          grep -q "^autodiagnosi: SUPERATA" "$check/launcher.txt"
 
           # A digest of the right shape and the wrong value: the launcher has
           # to reject it on the comparison, not on failing to parse it.
@@ -358,31 +362,33 @@ jobs:
           block = rf"""<!-- download -->
           ## Download
 
-          | Platform | File |
+          | Piattaforma | File |
           |---|---|
           | Windows (x64) | `{asset}` |
 
-          Built on a Windows runner — no cross-compilation. Unpack and run: no
-          installation and no Python needed. It unpacks to a single `Tyche/`
-          folder; start it with `start.cmd` beside the program, which checks
-          the executable against the digest recorded when the archive was built
-          and stops rather than launching if they disagree. The program starts
-          on its own too.
+          Compilato su un runner Windows — niente cross-compilazione. Si
+          scompatta e si esegue: nessuna installazione e nessun Python
+          necessario. Si estrae in un'unica cartella `Tyche/`; si avvia con
+          `start.cmd`, accanto al programma, che confronta l'eseguibile con
+          l'impronta registrata quando l'archivio è stato costruito e si ferma
+          invece di avviarlo se le due non coincidono. Il programma parte anche
+          da solo.
 
-          There is no macOS or Linux build. Running from source works fine on
-          both and is described above.
+          Non esiste un pacchetto per macOS o Linux. Su entrambi l'esecuzione
+          dai sorgenti funziona benissimo, ed è descritta sopra.
 
-          ### Windows will say the publisher is unknown
+          ### Windows dirà che l'editore è sconosciuto
 
-          It is meant to. This build carries **no code-signing certificate**, so
-          SmartScreen shows *"Windows protected your PC"* and offers only **Don't
-          run**. Click **More info**, then **Run anyway**. Nothing is wrong with
-          the download; SmartScreen is reporting that it has never seen this
-          publisher, which is true.
+          Ed è giusto così. Questo pacchetto non ha **alcun certificato di firma
+          del codice**, quindi SmartScreen mostra *"Windows ha protetto il PC"* e
+          offre solo **Non eseguire**. Cliccare su **Ulteriori informazioni** e
+          poi su **Esegui comunque**. Non c'è niente che non va nel download:
+          SmartScreen sta segnalando di non aver mai visto questo editore, il che
+          è vero.
 
-          Because that warning asks you to trust a file you cannot check by
-          looking at it, here is the SHA-256 of the archive as the build machine
-          produced it. In PowerShell:
+          Siccome quell'avviso chiede di fidarsi di un file che non si può
+          controllare guardandolo, ecco lo SHA-256 dell'archivio così come lo ha
+          prodotto la macchina che lo ha costruito. In PowerShell:
 
           ```powershell
           Get-FileHash .\{asset} -Algorithm SHA256
@@ -392,9 +398,8 @@ jobs:
           {line}
           ```
 
-          That digest is here rather than in the archive on purpose: one that
-          travels with the file it describes can only tell you the file is
-          undamaged.
+          L'impronta sta qui e non dentro l'archivio di proposito: una che viaggia
+          insieme al file che descrive può solo dire che il file è integro.
           <!-- /download -->"""
           block = "\n".join(l[10:] if l.startswith(" " * 10) else l for l in block.splitlines())
 

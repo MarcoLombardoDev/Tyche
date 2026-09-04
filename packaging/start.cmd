@@ -15,6 +15,13 @@ rem archive did not.
 rem
 rem This does not remove the SmartScreen warning and cannot. Only a
 rem code-signing certificate does that.
+rem
+rem The messages are Italian, like the rest of the product, but this file
+rem stays pure ASCII: a console window inherits the machine's OEM code page
+rem (850 or 437 on an Italian install), so a UTF-8 accented letter arrives as
+rem mojibake in the one place the user cannot ignore it. The phrasing avoids
+rem accents rather than the file declaring chcp, which would change the code
+rem page for whatever the caller runs next.
 
 setlocal
 
@@ -26,8 +33,8 @@ set "EXE=%HERE%%APP%.exe"
 set "SUMS=%EXE%.sha256"
 
 if not exist "%EXE%" (
-    echo %APP%: no executable at "%EXE%" 1>&2
-    echo The archive did not unpack completely. Unpack it again. 1>&2
+    echo %APP%: nessun eseguibile in "%EXE%" 1>&2
+    echo L'archivio non risulta scompattato del tutto. Scompattarlo di nuovo. 1>&2
     if not defined CI pause
     exit /b 1
 )
@@ -36,12 +43,12 @@ rem An escape hatch that is deliberately explicit. Somebody who has patched the
 rem executable on purpose should be able to run it; somebody who has not should
 rem never see this path taken silently.
 if "%TYCHE_SKIP_VERIFY%"=="1" (
-    echo %APP%: checksum verification skipped ^(TYCHE_SKIP_VERIFY=1^) 1>&2
+    echo %APP%: verifica dell'impronta saltata ^(TYCHE_SKIP_VERIFY=1^) 1>&2
     goto :launch
 )
 
 if not exist "%SUMS%" (
-    echo %APP%: %APP%.exe.sha256 is missing, starting without checking 1>&2
+    echo %APP%: manca %APP%.exe.sha256, avvio senza verifica 1>&2
     goto :launch
 )
 
@@ -63,23 +70,23 @@ for /f "skip=1 delims=" %%H in ('certutil -hashfile "%EXE%" SHA256 2^>nul') do (
 if defined ACTUAL set "ACTUAL=%ACTUAL: =%"
 
 if not defined ACTUAL (
-    echo %APP%: certutil could not hash the executable, starting without checking 1>&2
+    echo %APP%: certutil non ha calcolato l'impronta, avvio senza verifica 1>&2
     goto :launch
 )
 if not defined EXPECTED (
-    echo %APP%: %APP%.exe.sha256 is empty, starting without checking 1>&2
+    echo %APP%: %APP%.exe.sha256 non contiene nulla, avvio senza verifica 1>&2
     goto :launch
 )
 
 rem /i because certutil's case has changed between Windows versions.
 if /i not "%ACTUAL%"=="%EXPECTED%" (
-    echo %APP%: the executable does not match %APP%.exe.sha256. 1>&2
-    echo   expected %EXPECTED% 1>&2
-    echo   found    %ACTUAL% 1>&2
+    echo %APP%: l'eseguibile non corrisponde a %APP%.exe.sha256. 1>&2
+    echo   atteso  %EXPECTED% 1>&2
+    echo   trovato %ACTUAL% 1>&2
     echo. 1>&2
-    echo Unpack the archive again from a fresh download. If it still does not 1>&2
-    echo match, check the zip against the SHA-256 in the release notes before 1>&2
-    echo running anything out of it. 1>&2
+    echo Scaricare di nuovo l'archivio e scompattarlo un'altra volta. Se ancora 1>&2
+    echo non corrisponde, confrontare lo zip con lo SHA-256 riportato nelle note 1>&2
+    echo della release prima di eseguire qualunque cosa ne esca. 1>&2
     if not defined CI pause
     exit /b 1
 )
@@ -100,11 +107,11 @@ rem is no way to know, so hand off and let this window close at once.
 where powershell > nul 2>&1
 if errorlevel 1 goto :handoff
 
-echo Starting %APP%...
+echo Avvio di %APP% in corso...
 echo.
-echo The first launch is the slow one: Windows checks every file in the folder
-echo before it will run any of them. This window closes by itself as soon as
-echo %APP% is on screen.
+echo Il primo avvio richiede tempo: Windows controlla ogni file della cartella
+echo prima di poterne eseguire uno. Questa finestra si chiude da sola non
+echo appena %APP% compare sullo schermo.
 
 rem The path travels in a variable rather than inside the quoted -Command
 rem string, so a folder name containing a space or a quote cannot break the
@@ -131,13 +138,13 @@ if "%STATUS%"=="0" exit /b 0
 
 if "%STATUS%"=="4" (
     echo. 1>&2
-    echo %APP% stopped before it opened a window. 1>&2
+    echo %APP% ha smesso di funzionare prima di aprire una finestra. 1>&2
     if not defined CI pause
     exit /b 1
 )
 
 echo. 1>&2
-echo %APP% has not opened a window yet. It may still be starting. 1>&2
+echo %APP% non ha ancora aperto una finestra. Potrebbe essere ancora in avvio. 1>&2
 if not defined CI pause
 exit /b 0
 

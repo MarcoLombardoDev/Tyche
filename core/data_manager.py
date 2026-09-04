@@ -49,11 +49,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "timesfm_checkpoint": DEFAULT_TIMESFM_CHECKPOINT,
     "timesfm_device": "cpu",
     "hf_token": "",
-    # Which of the three views in core.features the model is fed. "frequency"
+    # Which of the three views in core.features the model is fed. "frequenza"
     # is the only one with enough amplitude for a forecast to have a gradient
-    # to follow; "presence" is the honest raw series and forecasts as a flat
+    # to follow; "presenza" is the honest raw series and forecasts as a flat
     # line at 0.067, which is itself worth seeing once.
-    "representation": "frequency",
+    "representation": "frequenza",
     "frequency_window": 150,
     # TimesFM 3.0 accepts up to 16k context. 1024 draws is about six and a
     # half years, long enough to cover any seasonality the game could have and
@@ -68,7 +68,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_repair_labels": True,
 
     # --- Prediction ---
-    "prediction_method": "timesfm",   # "timesfm" | "frequency" | "gap" | "random"
+    "prediction_method": "timesfm",   # "timesfm" | "frequenza" | "ritardo" | "casuale"
     "combinations": 5,
     "numbers_per_combination": 6,
 
@@ -78,7 +78,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # the statistics module needs a few hundred before its error bars mean
     # anything.
     "validation_draws": 300,
-    "validation_baselines": ["random", "frequency", "gap"],
+    "validation_baselines": ["casuale", "frequenza", "ritardo"],
 
     "last_archive_update": "",
 }
@@ -101,6 +101,34 @@ def load_settings() -> dict:
         return settings
     if isinstance(stored, dict):
         settings.update(stored)
+    return _translate_names(settings)
+
+
+# 0.1.0 wrote the method and representation names in English. 0.2.0 renamed
+# them, and a settings file from the older version would otherwise reach
+# ``build_context`` as an unknown representation and raise where the user
+# expects a forecast. Reading is where the two vocabularies meet, so this is
+# the only place that has to know both.
+_RENAMED = {
+    "presence": "presenza",
+    "frequency": "frequenza",
+    "gap": "ritardo",
+    "random": "casuale",
+}
+
+
+def _translate_names(settings: dict) -> dict:
+    """Map any 0.1.0 English method or representation name to its 0.2.0 name."""
+    representation = settings.get("representation")
+    if isinstance(representation, str):
+        settings["representation"] = _RENAMED.get(representation, representation)
+
+    baselines = settings.get("validation_baselines")
+    if isinstance(baselines, list):
+        settings["validation_baselines"] = [
+            _RENAMED.get(name, name) if isinstance(name, str) else name
+            for name in baselines
+        ]
     return settings
 
 

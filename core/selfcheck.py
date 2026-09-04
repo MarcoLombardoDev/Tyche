@@ -35,6 +35,8 @@ import traceback
 from datetime import date, timedelta
 from pathlib import Path
 
+from core.localise import it_number
+
 # Nothing here needs the network, the archive on disk, or the 1.3 GB
 # checkpoint. A smoke test that needs any of those is a smoke test that fails
 # for reasons having nothing to do with the bundle.
@@ -44,7 +46,9 @@ def _check_tk() -> tuple[bool, str]:
     """Start Tk and report the windowing system it came up on.
 
     The windowing system is the useful part: 'x11', 'aqua' or 'win32' means Tk
-    found the real toolkit for the platform. A bundle whose Tcl/Tk data files
+    found the real toolkit for the platform. The label is Italian like the
+    rest of the report; the *value* is Tk's own and stays as Tk spells it,
+    because it is what the release workflow greps for. A bundle whose Tcl/Tk data files
     were not collected fails to start at all, which is the failure this
     catches; one that came up on the wrong backend would be stranger still and
     is worth seeing rather than passing over.
@@ -57,9 +61,9 @@ def _check_tk() -> tuple[bool, str]:
         backend = root.tk.call("tk", "windowingsystem")
         version = root.tk.call("info", "patchlevel")
         root.destroy()
-        return True, f"windowing system: {backend}\ntk version: {version}"
+        return True, f"sistema grafico: {backend}\nversione tk: {version}"
     except Exception as exc:
-        return False, f"tk: FAILED — {exc}"
+        return False, f"tk: FALLITO — {exc}"
 
 
 def _check_customtkinter() -> tuple[bool, str]:
@@ -80,9 +84,9 @@ def _check_customtkinter() -> tuple[bool, str]:
         button = ctk.CTkButton(root, text="self-check")
         colour = button.cget("fg_color")
         root.destroy()
-        return True, f"customtkinter: {ctk.__version__}, accent {colour}"
+        return True, f"customtkinter: {ctk.__version__}, accento {colour}"
     except Exception as exc:
-        return False, f"customtkinter: FAILED — {exc}"
+        return False, f"customtkinter: FALLITO — {exc}"
 
 
 def _check_analysis() -> tuple[bool, str]:
@@ -109,11 +113,11 @@ def _check_analysis() -> tuple[bool, str]:
         context = build_context(draws, context_length=256)
         results = run_all(draws)
         return True, (
-            f"analysis: context {context.shape[0]}x{context.shape[1]}, "
-            f"{len(results)} independence tests ran"
+            f"analisi: contesto {context.shape[0]}x{context.shape[1]}, "
+            f"{len(results)} test di indipendenza eseguiti"
         )
     except Exception as exc:
-        return False, f"analysis: FAILED — {exc}"
+        return False, f"analisi: FALLITA — {exc}"
 
 
 def _check_persistence() -> tuple[bool, str]:
@@ -137,10 +141,13 @@ def _check_persistence() -> tuple[bool, str]:
             save_archive(path, [draw])
             back = load_archive(path)
         if len(back) != 1 or back[0].numbers != draw.numbers:
-            return False, "persistence: FAILED — the archive did not round-trip"
-        return True, f"persistence: ok, data directory would be {writable_base_dir()}"
+            return False, (
+                "persistenza: FALLITA — l'archivio non ha superato il ciclo "
+                "scrittura/lettura"
+            )
+        return True, f"persistenza: ok, i dati andrebbero in {writable_base_dir()}"
     except Exception as exc:
-        return False, f"persistence: FAILED — {exc}"
+        return False, f"persistenza: FALLITA — {exc}"
 
 
 def _check_export() -> tuple[bool, str]:
@@ -167,9 +174,9 @@ def _check_export() -> tuple[bool, str]:
         with tempfile.TemporaryDirectory() as folder:
             path = export_sqlite(draws, Path(folder) / "selfcheck.db")
             size = path.stat().st_size
-        return True, f"sqlite export: ok, {size:,} bytes"
+        return True, f"esportazione sqlite: ok, {it_number(size)} byte"
     except Exception as exc:
-        return False, f"sqlite export: FAILED — {exc}"
+        return False, f"esportazione sqlite: FALLITA — {exc}"
 
 
 def _check_timesfm() -> tuple[bool, str]:
@@ -184,9 +191,9 @@ def _check_timesfm() -> tuple[bool, str]:
         import timesfm3  # noqa: F401
         import torch
 
-        return True, f"timesfm: bundled, torch {torch.__version__}"
+        return True, f"timesfm: nel pacchetto, torch {torch.__version__}"
     except ImportError as exc:
-        return True, f"timesfm: not bundled ({exc.name}) — every other method still works"
+        return True, f"timesfm: assente ({exc.name}) — ogni altro metodo funziona lo stesso"
 
 
 CHECKS = (
@@ -207,20 +214,23 @@ def run(report_path: str | None = None) -> int:
     """
     from core.version import APP_NAME, __version__
 
-    lines = [f"{APP_NAME} {__version__} self-check", f"frozen: {getattr(sys, 'frozen', False)}"]
+    lines = [
+        f"{APP_NAME} {__version__} autodiagnosi",
+        f"compilato: {getattr(sys, 'frozen', False)}",
+    ]
     failed = []
     for name, check in CHECKS:
         try:
             ok, message = check()
         except Exception:
-            ok, message = False, f"{name}: FAILED — {traceback.format_exc(limit=3)}"
+            ok, message = False, f"{name}: FALLITO — {traceback.format_exc(limit=3)}"
         lines.append(message)
         if not ok:
             failed.append(name)
 
     lines.append("")
-    verdict = "PASSED" if not failed else f"FAILED ({', '.join(failed)})"
-    lines.append(f"self-check: {verdict}")
+    verdict = "SUPERATA" if not failed else f"FALLITA ({', '.join(failed)})"
+    lines.append(f"autodiagnosi: {verdict}")
     report = "\n".join(lines)
 
     print(report)
@@ -228,5 +238,5 @@ def run(report_path: str | None = None) -> int:
         try:
             Path(report_path).write_text(report + "\n", encoding="utf-8")
         except Exception as exc:
-            print(f"could not write {report_path}: {exc}")
+            print(f"non ho potuto scrivere {report_path}: {exc}")
     return 0 if not failed else 1

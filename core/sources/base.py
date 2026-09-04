@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 
 from core.archive import Draw
+from core.version import __version__
 
 # A source that hangs is worse than a source that fails: the GUI runs fetches
 # on a worker thread and the user cannot tell the two apart.
@@ -31,7 +32,10 @@ DEFAULT_TIMEOUT = 30
 # because a browser user agent arriving without any of the headers a browser
 # also sends is a better bot signature than admitting to being a bot. Saying
 # what this is costs nothing and names the traffic for whoever reads the logs.
-USER_AGENT = "Tyche/0.1.0 (SuperEnalotto archive importer)"
+# Built from __version__ rather than typed out: the literal that used to be
+# here still said 0.1.0 after the first version bump, which is the failure
+# mode of every hardcoded version string.
+USER_AGENT = f"Tyche/{__version__} (SuperEnalotto archive importer)"
 
 # Sent alongside it. ``requests`` omits Accept entirely by default, and some
 # CDNs treat that as a signature too.

@@ -85,7 +85,7 @@ app.update()
 # Fill the panels that are empty until something is run.
 app._panels["reality"].run_tests()
 prediction = app._panels["prediction"]
-prediction.method.set(_METHOD_LABELS["gap"])
+prediction.method.set(_METHOD_LABELS["ritardo"])
 prediction._generate()
 validation = app._panels["validation"]
 validation.n_draws.delete(0, "end")
@@ -99,12 +99,12 @@ for _ in range(200):                      # let the validation worker finish
 app.update()
 
 SHOTS = [
-    ("reality", "01_reality_check"),
-    ("archive", "02_archive"),
-    ("statistics", "03_statistics"),
-    ("prediction", "04_predict"),
-    ("validation", "05_validate"),
-    ("settings", "06_settings"),
+    ("reality", "01_prova_del_nove"),
+    ("archive", "02_archivio"),
+    ("statistics", "03_statistiche"),
+    ("prediction", "04_previsione"),
+    ("validation", "05_validazione"),
+    ("settings", "06_impostazioni"),
 ]
 state = {"i": 0}
 

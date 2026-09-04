@@ -83,7 +83,7 @@ def compose(version: str, tag: str | None = None) -> str:
     if not section.strip():
         raise SystemExit(f"the CHANGELOG.md section for {version} is empty.")
 
-    return f"{preamble}\n\n---\n\n## What is in {tag}\n\n{section}\n"
+    return f"{preamble}\n\n---\n\n## Cosa c'è in {tag}\n\n{section}\n"
 
 
 def main(argv: list[str]) -> int:

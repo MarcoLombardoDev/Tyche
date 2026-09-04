@@ -31,21 +31,22 @@ class RealityPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         head = section(
-            self, "Is there anything to predict?",
-            "Five tests of the hypothesis that the archive is independent uniform draws. "
-            "A small p-value would mean the draw machinery is biased and something here "
-            "is exploitable. A large one means the game is fair, and that no forecast can "
-            "beat chance — including the one this program makes.",
+            self, "C'è qualcosa da prevedere?",
+            "Cinque test dell'ipotesi che l'archivio sia fatto di estrazioni indipendenti "
+            "e uniformi. Un p-value piccolo direbbe che il meccanismo di estrazione è "
+            "sbilanciato e che qui c'è qualcosa di sfruttabile. Uno grande dice che il "
+            "gioco è equo, e che nessuna previsione può battere il caso — compresa "
+            "quella che fa questo programma.",
         )
         head.pack(fill="x", padx=16, pady=(16, 8))
-        ctk.CTkButton(head.body, text="Run the tests", width=160,
+        ctk.CTkButton(head.body, text="Esegui i test", width=180,
                       command=self.run_tests).pack(anchor="w")
         self.verdict = ctk.CTkLabel(
             head.body, text="", anchor="w", justify="left", text_color=MUTED, wraplength=1000
         )
         self.verdict.pack(fill="x", pady=(10, 0))
 
-        body = section(self, "Results")
+        body = section(self, "Risultati")
         body.pack(fill="both", expand=True, padx=16, pady=(8, 16))
         self.box = ReportBox(body.body, height=380)
         self.box.pack(fill="both", expand=True)
@@ -53,13 +54,15 @@ class RealityPanel(ctk.CTkFrame):
     def run_tests(self) -> None:
         draws = self.app.draws
         if not draws:
-            self.box.set_text("The archive is empty. Fetch it from the Archive tab first.")
+            self.box.set_text(
+                "L'archivio è vuoto. Scaricalo prima dalla scheda Archivio."
+            )
             return
         results = run_all(draws)
         lines = []
         for r in results:
             lines.append(r.name)
-            stat = f"χ² = {r.statistic:.3f}, dof {r.dof}" if r.dof else f"z = {r.statistic:+.3f}"
+            stat = f"χ² = {r.statistic:.3f}, {r.dof} gdl" if r.dof else f"z = {r.statistic:+.3f}"
             lines.append(f"    {stat}")
             lines.append(f"    {r.verdict}")
             if r.detail:

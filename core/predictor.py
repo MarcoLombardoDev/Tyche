@@ -12,15 +12,15 @@ Turns a score per number into numbers to play, and says what that is worth.
 Four methods, and the point of having four is that they can be compared:
 
 - ``timesfm``    — the 330M foundation model of :mod:`core.forecaster`.
-- ``frequency``  — play the numbers drawn most often lately ("hot").
-- ``gap``        — play the numbers absent longest ("ritardo", the Italian
-  player's method, and the one every archive site's front page sells).
-- ``random``     — six numbers from a seeded generator.
+- ``frequenza``  — play the numbers drawn most often lately ("hot").
+- ``ritardo``    — play the numbers absent longest, the method every Italian
+  archive site's front page sells.
+- ``casuale``    — six numbers from a seeded generator.
 
 :mod:`core.validation` scores all four against the same draws. They come out
 the same, because the thing they are ranking has no order. Keeping the naive
 baselines in the product rather than in a footnote is what makes that
-visible: a user who sees TimesFM tie with ``random`` has learned something a
+visible: a user who sees TimesFM tie with ``casuale`` has learned something a
 paragraph of warning text cannot teach.
 
 The odds functions are exact combinatorics, not estimates, and they are the
@@ -36,8 +36,14 @@ from datetime import date, datetime, timezone
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, NUMBERS_PER_DRAW, Draw
 from core.features import DEFAULT_WINDOW, counts, current_gaps
+from core.localise import it_number
 
-METHODS = ("timesfm", "frequency", "gap", "random")
+# The identifiers the CLI and the settings file use. The three baselines are
+# Italian because the concepts are: "ritardo" is the word the game's players
+# actually use, and translating the prose while leaving `gap` on the command
+# line would be a product that speaks two languages. "timesfm" stays as it is
+# — it is the name of a model, not a word.
+METHODS = ("timesfm", "frequenza", "ritardo", "casuale")
 
 
 @dataclass(frozen=True)
@@ -137,7 +143,7 @@ def build_combinations(
     dressing up a wider net as five independent opinions.
     """
     if size > NUMBER_MAX:
-        raise ValueError(f"cannot pick {size} numbers out of {NUMBER_MAX}")
+        raise ValueError(f"non si possono scegliere {size} numeri su {NUMBER_MAX}")
     pool = ranked[: size + count - 1]
     if len(pool) < size:
         pool = ranked[:size]
@@ -146,7 +152,7 @@ def build_combinations(
 
 def predict(
     draws: list[Draw],
-    method: str = "frequency",
+    method: str = "frequenza",
     combinations: int = 5,
     size: int = NUMBERS_PER_DRAW,
     forecaster=None,
@@ -161,22 +167,26 @@ def predict(
     whole validation harness.
     """
     if method not in METHODS:
-        raise ValueError(f"unknown method {method!r}; expected one of {', '.join(METHODS)}")
+        raise ValueError(
+            f"metodo sconosciuto {method!r}; sono validi {', '.join(METHODS)}"
+        )
 
     if method == "timesfm":
         if forecaster is None:
-            raise ValueError("the timesfm method needs a loaded TimesFMForecaster")
+            raise ValueError(
+            "il metodo timesfm richiede un TimesFMForecaster già caricato"
+        )
         scores = forecaster.score_numbers(draws, progress=progress)
-        note = "TimesFM 3.0 one-step forecast of each number's series."
-    elif method == "frequency":
+        note = "Previsione TimesFM 3.0 a un passo sulla serie di ogni numero."
+    elif method == "frequenza":
         scores = frequency_scores(draws, window)
-        note = f"Appearances in the last {min(window, len(draws))} draws."
-    elif method == "gap":
+        note = f"Uscite nelle ultime {min(window, len(draws))} estrazioni."
+    elif method == "ritardo":
         scores = gap_scores(draws)
-        note = "Draws since each number last appeared."
+        note = "Estrazioni trascorse dall'ultima uscita di ogni numero."
     else:
         scores = random_scores(seed)
-        note = "Seeded pseudo-random scores — the control condition."
+        note = "Punteggi pseudo-casuali con seme fisso — la condizione di controllo."
 
     ranked = rank_numbers(scores)
     return Prediction(
@@ -240,10 +250,12 @@ def value_note() -> str:
     """The sentence the prediction panel prints under every set of numbers."""
     odds = category_odds()
     return (
-        f"One line matches all six with probability 1 in {odds['6']:,}, and matches "
-        f"three with probability 1 in {odds['3']:,}. Those odds are fixed by the wheel "
-        "and no method of choosing numbers changes them. Prizes are pari-mutuel — a "
-        "share of the stakes, not a fixed payout — so the operator keeps a fixed cut of "
-        "every euro staked and the expected return on a line is below its price whatever "
-        "is played. Tyche predicts nothing; it measures."
+        f"Una colonna fa 6 con probabilità 1 su {it_number(odds['6'])} e fa 3 con "
+        f"probabilità 1 su {it_number(odds['3'])}. Queste probabilità sono fissate "
+        "dalla ruota e nessun criterio di scelta dei numeri le cambia. I premi "
+        "sono a totalizzatore — una quota della raccolta, non un importo fisso "
+        "— quindi il concessionario "
+        "trattiene una parte fissa di ogni euro giocato e il rendimento atteso di una "
+        "colonna è inferiore al suo prezzo, qualunque cosa si giochi. Tyche non "
+        "prevede nulla: misura."
     )

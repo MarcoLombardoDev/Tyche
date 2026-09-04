@@ -197,7 +197,7 @@ def test_the_notes_compose_for_the_current_version():
     from tools.release_notes import compose
 
     notes = compose(__version__)
-    assert f"What is in v{__version__}" in notes
+    assert f"Cosa c'è in v{__version__}" in notes
     assert len(notes) > 500
 
 
@@ -250,7 +250,8 @@ def test_the_notes_do_not_promise_platforms_nobody_builds():
     runners = {job["runs-on"] for job in workflow["jobs"].values()}
     assert "macos-latest" not in runners
     body = BODY.read_text(encoding="utf-8")
-    assert "macOS or Linux" not in body or "There is no macOS" in body
+    assert "Non esiste un pacchetto per macOS o Linux" in WORKFLOW.read_text(encoding="utf-8")
+    assert "allegato un pacchetto per Windows" in body
 
 
 # ─────────────────────────────────────────────────────────────
@@ -261,6 +262,19 @@ def test_the_build_files_exist():
     for path in (REPO / "Tyche.spec", REPO / "build.py",
                  REPO / "requirements-build.txt", REPO / "packaging" / "start.cmd"):
         assert path.exists(), f"{path.relative_to(REPO)} is missing"
+
+
+def test_the_launcher_stays_pure_ascii():
+    """A console inherits the machine's OEM code page, not UTF-8.
+
+    The launcher's messages are Italian like everything else, but an accented
+    letter written as UTF-8 reaches an Italian Windows console decoded as
+    cp850 and arrives as mojibake — in the one place a user cannot skip past.
+    The phrasing avoids accents instead; this fails if somebody types one in.
+    """
+    text = (REPO / "packaging" / "start.cmd").read_bytes()
+    offending = [b for b in text if b > 0x7F]
+    assert not offending, f"start.cmd has {len(offending)} non-ASCII byte(s)"
 
 
 def test_the_windows_job_builds_on_windows():
@@ -285,10 +299,10 @@ def test_the_bundle_is_smoke_tested_before_it_is_uploaded():
 def test_the_smoke_test_is_more_than_version():
     """--version exits before the toolkit is imported and proves almost nothing."""
     text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
-    assert "self-check: PASSED" in text
-    assert "windowing system" in text
+    assert "autodiagnosi: SUPERATA" in text
+    assert "sistema grafico" in text
     # A bundle that silently lost TimesFM would pass everything else.
-    assert "timesfm: bundled" in text
+    assert "timesfm: nel pacchetto" in text
 
 
 def test_the_bundle_version_must_match_the_tag_too():
@@ -378,8 +392,9 @@ def test_pyinstaller_is_a_build_dependency_and_not_a_runtime_one():
 def test_the_release_body_keeps_the_disclaimer():
     """It is a lottery program. The page that offers it has to say so."""
     body = BODY.read_text(encoding="utf-8")
-    assert "cannot help you win" in body
-    assert "622,614,630" in body
+    assert "non può aiutarti a vincere" in body
+    # Italian thousands separator: the page is Italian, so is the number.
+    assert "622.614.630" in body
 
 
 # ─────────────────────────────────────────────────────────────

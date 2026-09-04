@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 127 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 145, GUI included
+python -m pytest tests/ -q                                   # 132 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 150, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `127 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `132 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -179,7 +179,7 @@ Three things about that build worth knowing before touching it:
   starts Tk, reports the windowing system, builds the feature matrices, runs
   the independence tests, round-trips an archive and writes a SQLite export.
   The workflow greps its report for `self-check: PASSED`, for `win32`, and for
-  `timesfm: bundled` — that last one because a bundle that silently lost
+  `timesfm: nel pacchetto` — that last one because a bundle that silently lost
   TimesFM passes everything else.
 - **`timesfm3` is collected explicitly.** `core/forecaster.py` imports it
   lazily, so PyInstaller's static analysis never sees it and the frozen build
@@ -203,6 +203,53 @@ fills every panel with real output before capturing it, and it prefers the
 real archive on disk over a synthetic one: screenshots of a game that is fair
 by construction would be evidence of nothing. Pillow is a documentation
 dependency and is deliberately not in `requirements.txt`.
+
+## The language boundary
+
+**Everything a user sees is Italian. Everything a developer sees is English.**
+SuperEnalotto is an Italian game, so 0.2.0 translated the interface, the CLI,
+the error messages, the reports, the README, the changelog and the release
+notes. The line is drawn at what ships to a user versus what ships to whoever
+edits the code:
+
+| Italian | English |
+|---|---|
+| GUI labels, CLI help and output, error text, `--self-check` report | code comments, docstrings, this file |
+| `README.md`, `CHANGELOG.md`, `.github/release-body.md`, the release page | commit messages, CI log and `::error::` text |
+| the launcher's `echo` lines | the launcher's `rem` lines |
+
+That split matches Argus, which is the convention the owner asked Tyche to
+follow. It is a decision, not an oversight — say so rather than "finishing" the
+translation into the comments.
+
+Four consequences that are easy to trip over:
+
+- **The method and representation names are Italian identifiers**, not display
+  strings: `METHODS = ("timesfm", "frequenza", "ritardo", "casuale")` and
+  `presenza` / `frequenza` / `ritardo`. They are what `--forecast` and
+  `settings.json` take, so 0.1.0's English names are a breaking change.
+  `load_settings` maps the old spellings to the new ones — that map is the only
+  place both vocabularies exist, and it stays until nobody can be running 0.1.0.
+- **`core/localise.py` is the only place the Italian number and date formats are
+  written.** It swaps the separators by hand rather than setting a locale,
+  because `it_IT.UTF-8` is not generated on a CI runner and `setlocale` is
+  process-global. Decimals keep the full stop deliberately: the same screens put
+  χ², z and p-values next to counts, and one convention per line reads better
+  than two.
+- **The archive on disk did not move.** The CSV keeps ISO dates and bare
+  integers: it is an interchange format, not a screen.
+- **Three strings are a contract with the release workflow** —
+  `autodiagnosi: SUPERATA`, `sistema grafico:` and `timesfm: nel pacchetto` are
+  grepped by `release.yml`. `tests/test_release_workflow.py` fails if the
+  workflow stops looking for what `core/selfcheck.py` prints, but nothing can
+  catch renaming both to something the program never says. Change them in one
+  edit.
+
+`packaging/start.cmd` is Italian **and pure ASCII**, with a test enforcing it. A
+console window inherits the machine's OEM code page, so a UTF-8 `è` arrives on
+an Italian Windows as mojibake in the one message a user cannot skip. The
+phrasing avoids accents; declaring `chcp 65001` instead would change the code
+page for whatever the caller runs next.
 
 ## Things worth knowing before changing code
 

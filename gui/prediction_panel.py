@@ -22,15 +22,16 @@ import customtkinter as ctk
 from core.data_manager import log_prediction
 from core.features import DEFAULT_WINDOW
 from core.forecaster import TimesFMForecaster
+from core.localise import it_date, it_number
 from core.predictor import METHODS, predict, value_note
 from gui.theme import BG_ROOT, MUTED
 from gui.widgets import ReportBox, ball_row, section
 
 _METHOD_LABELS = {
-    "timesfm": "TimesFM 3.0 (330M foundation model)",
-    "frequency": "Hot numbers (most drawn recently)",
-    "gap": "Ritardo (absent longest)",
-    "random": "Random (the control condition)",
+    "timesfm": "TimesFM 3.0 (modello fondazionale da 330M)",
+    "frequenza": "Frequenza (i più estratti di recente)",
+    "ritardo": "Ritardo (assenti da più tempo)",
+    "casuale": "Casuale (la condizione di controllo)",
 }
 
 
@@ -43,39 +44,41 @@ class PredictionPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         controls = section(
-            self, "Generate combinations",
-            "Every method below has the same expected score: 0.4 of the six numbers. "
-            "The Validation tab measures it.",
+            self, "Genera combinazioni",
+            "Ogni metodo qui sotto ha lo stesso punteggio atteso: 0,4 dei sei numeri. "
+            "La scheda Validazione lo misura.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
         row.pack(fill="x")
 
-        ctk.CTkLabel(row, text="Method", text_color=MUTED).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(row, text="Metodo", text_color=MUTED).pack(side="left", padx=(0, 6))
         self.method = ctk.CTkOptionMenu(
-            row, width=300, values=[_METHOD_LABELS[m] for m in METHODS]
+            row, width=330, values=[_METHOD_LABELS[m] for m in METHODS]
         )
-        self.method.set(_METHOD_LABELS[self.app.settings.get("prediction_method", "frequency")])
+        self.method.set(
+            _METHOD_LABELS[self.app.settings.get("prediction_method", "frequenza")]
+        )
         self.method.pack(side="left", padx=(0, 16))
 
-        ctk.CTkLabel(row, text="Combinations", text_color=MUTED).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(row, text="Combinazioni", text_color=MUTED).pack(side="left", padx=(0, 6))
         self.count = ctk.CTkOptionMenu(row, width=70, values=[str(i) for i in range(1, 11)])
         self.count.set(str(self.app.settings.get("combinations", 5)))
         self.count.pack(side="left", padx=(0, 16))
 
-        ctk.CTkButton(row, text="Generate", width=120, command=self._generate).pack(side="left")
+        ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")
 
         self.note = ctk.CTkLabel(
             controls.body, text="", anchor="w", justify="left", text_color=MUTED, wraplength=1000
         )
         self.note.pack(fill="x", pady=(10, 0))
 
-        self.output = section(self, "Combinations")
+        self.output = section(self, "Combinazioni")
         self.output.pack(fill="x", padx=16, pady=8)
         self.balls = ctk.CTkFrame(self.output.body, fg_color="transparent")
         self.balls.pack(fill="x")
 
-        detail = section(self, "Scores and odds")
+        detail = section(self, "Punteggi e probabilità")
         detail.pack(fill="both", expand=True, padx=16, pady=(8, 16))
         self.box = ReportBox(detail.body, height=240)
         self.box.pack(fill="both", expand=True)
@@ -86,12 +89,12 @@ class PredictionPanel(ctk.CTkFrame):
         for key, text in _METHOD_LABELS.items():
             if text == label:
                 return key
-        return "frequency"
+        return "frequenza"
 
     def _generate(self) -> None:
         draws = self.app.draws
         if not draws:
-            self.app.set_status("No archive yet — fetch one from the Archive tab.")
+            self.app.set_status("Ancora nessun archivio — scaricalo dalla scheda Archivio.")
             return
         method = self._selected_method()
         count = int(self.count.get())
@@ -110,15 +113,15 @@ class PredictionPanel(ctk.CTkFrame):
                 checkpoint=settings.get("timesfm_checkpoint", ""),
                 device=settings.get("timesfm_device", "cpu"),
                 context_length=int(settings.get("context_length", 1024)),
-                representation=settings.get("representation", "frequency"),
+                representation=settings.get("representation", "frequenza"),
                 window=int(settings.get("frequency_window", DEFAULT_WINDOW)),
                 hf_token=settings.get("hf_token", ""),
             )
             if not forecaster.load_model(report):
                 raise RuntimeError(
-                    "TimesFM could not be loaded. Install it with "
-                    "`pip install timesfm[torch]`, or pick another method — they all "
-                    "score the same."
+                    "TimesFM non si è caricato. Installalo con "
+                    "`pip install timesfm[torch]`, oppure scegli un altro metodo: "
+                    "ottengono tutti lo stesso punteggio."
                 )
             self.app.forecaster = forecaster
             return predict(draws, method="timesfm", combinations=count,
@@ -140,33 +143,35 @@ class PredictionPanel(ctk.CTkFrame):
 
         ranked = prediction.ranked
         lines = [
-            f"Method: {prediction.method}   Archive: {prediction.archive_size:,} draws "
-            f"up to {prediction.archive_last_date}",
+            f"Metodo: {prediction.method}   Archivio: "
+            f"{it_number(prediction.archive_size)} estrazioni fino al "
+            f"{it_date(prediction.archive_last_date)}",
             "",
-            "Top 15 by score",
-            f"{'rank':>4} {'n':>3} {'score':>14}",
-            "─" * 24,
+            "I 15 col punteggio più alto",
+            f"{'pos.':>5} {'n':>3} {'punteggio':>14}",
+            "─" * 25,
         ]
         for rank, n in enumerate(ranked[:15], 1):
-            lines.append(f"{rank:>4} {n:>3} {prediction.scores[n]:>14.6f}")
+            lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
         lines += [
             "",
-            "Bottom 5 by score, for scale",
-            f"{'rank':>4} {'n':>3} {'score':>14}",
-            "─" * 24,
+            "Gli ultimi 5, per avere la scala",
+            f"{'pos.':>5} {'n':>3} {'punteggio':>14}",
+            "─" * 25,
         ]
         for rank, n in enumerate(ranked[-5:], len(ranked) - 4):
-            lines.append(f"{rank:>4} {n:>3} {prediction.scores[n]:>14.6f}")
+            lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
         spread = prediction.scores[ranked[0]] - prediction.scores[ranked[-1]]
         lines += [
             "",
-            f"Score spread across all ninety numbers: {spread:.6f}.",
+            f"Escursione dei punteggi sui novanta numeri: {spread:.6f}.",
             "",
             value_note(),
         ]
         self.box.set_text("\n".join(lines))
         self.app.set_status(
-            f"{len(prediction.combinations)} combinations from {prediction.method}."
+            f"{len(prediction.combinations)} combinazioni dal metodo "
+            f"{prediction.method}."
         )
 
     def refresh(self) -> None:

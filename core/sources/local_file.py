@@ -72,15 +72,17 @@ class LocalFileSource(DrawSource):
         self.path = Path(path)
 
     def describe(self) -> str:
-        return f"Manual import from {self.path}"
+        return f"Import manuale da {self.path}"
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:
         if not self.path.exists():
-            raise SourceError(f"{self.path}: no such file")
-        self._report(progress, f"Reading {self.path.name}…", 0.2)
+            raise SourceError(f"{self.path}: file inesistente")
+        self._report(progress, f"Leggo {self.path.name}…", 0.2)
         text = self.path.read_text(encoding="utf-8", errors="replace")
         draws = parse_any(text, source=f"{self.name}:{self.path.name}")
-        self._report(progress, f"{len(draws):,} draws read from {self.path.name}.", 1.0)
+        self._report(
+            progress, f"{len(draws)} estrazioni lette da {self.path.name}.", 1.0
+        )
         return draws
 
 
@@ -94,10 +96,10 @@ def parse_any(text: str, source: str = "local-file") -> list[Draw]:
         if draws:
             return draws
     raise SourceError(
-        "no draws recognised — expected Tyche's own CSV header, a labelled "
-        "header naming a date column and six number columns, the twelve-column "
-        "bulk format, or lines carrying a date followed by six distinct "
-        "numbers in 1–90"
+        "nessuna estrazione riconosciuta — servono l'intestazione CSV di Tyche, "
+        "un'intestazione con una colonna data e sei colonne di numeri, il formato "
+        "in blocco a dodici colonne, oppure righe con una data seguita da sei "
+        "numeri distinti fra 1 e 90"
     )
 
 

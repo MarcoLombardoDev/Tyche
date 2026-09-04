@@ -19,15 +19,15 @@ cross-number structure the model can see, it gets the chance to see.
 Three representations of the same history, because they are not
 interchangeable:
 
-- **presence** is the raw fact: 1 if the number was drawn, 0 if not. Faithful,
+- **presenza** is the raw fact: 1 if the number was drawn, 0 if not. Faithful,
   and almost pure noise at the single-draw level — the mean of any row is
   6/90 = 0.0667 and its autocorrelation is indistinguishable from zero.
-- **rolling frequency** is presence smoothed over a trailing window. This is
+- **frequenza** is presence smoothed over a trailing window. This is
   the series a forecaster can actually work with, because it has enough
   amplitude to carry a gradient, and it is also the one that invents structure
   most convincingly: a moving average of white noise looks like it has
   momentum. Every trend visible in it is an artefact of the window.
-- **gap** is the Italian player's *ritardo* — draws since the number last
+- **ritardo** is the Italian player's own term — draws since the number last
   came up. It rises by one per draw and resets to zero, so it is
   deterministic given presence and adds no information; it is here because it
   is what a player expects to see, and because its distribution is a clean
@@ -72,7 +72,7 @@ def rolling_frequency(presence: np.ndarray, window: int = DEFAULT_WINDOW) -> np.
     exactly like having learned something.
     """
     if window < 1:
-        raise ValueError("window must be at least 1")
+        raise ValueError("la finestra deve essere almeno 1")
     n_numbers, n_draws = presence.shape
     if n_draws == 0:
         return presence.copy()
@@ -164,7 +164,7 @@ def decade_profile(draw: Draw) -> list[int]:
 
 def build_context(
     draws: list[Draw],
-    representation: str = "frequency",
+    representation: str = "frequenza",
     window: int = DEFAULT_WINDOW,
     context_length: int | None = None,
 ) -> np.ndarray:
@@ -174,14 +174,14 @@ def build_context(
     ``context_length`` trims to the most recent columns; None keeps everything.
     """
     presence = presence_matrix(draws)
-    if representation == "presence":
+    if representation == "presenza":
         series = presence
-    elif representation == "frequency":
+    elif representation == "frequenza":
         series = rolling_frequency(presence, window)
-    elif representation == "gap":
+    elif representation == "ritardo":
         series = gap_matrix(presence)
     else:
-        raise ValueError(f"unknown representation: {representation!r}")
+        raise ValueError(f"rappresentazione sconosciuta: {representation!r}")
     if context_length is not None and series.shape[1] > context_length:
         series = series[:, -context_length:]
     return np.ascontiguousarray(series, dtype=np.float32)

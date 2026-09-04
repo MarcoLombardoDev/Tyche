@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, NUMBERS_PER_DRAW, Draw
 from core.features import counts, current_gaps, decade_profile, pair_counts
+from core.localise import it_date, it_number
 
 
 @dataclass(frozen=True)
@@ -74,7 +75,7 @@ def number_table(draws: list[Draw]) -> list[NumberStat]:
             sigma=(tally[n] - expected) / sigma_count if sigma_count else 0.0,
             gap=gaps[n],
             expected_gap=expected_gap,
-            last_seen=draws[i].date.isoformat() if i is not None else "never",
+            last_seen=it_date(draws[i].date) if i is not None else "mai",
         ))
     return rows
 
@@ -123,7 +124,7 @@ def top_pairs(draws: list[Draw], limit: int = 20) -> list[tuple[int, int, int, f
 def summary_lines(draws: list[Draw]) -> list[str]:
     """A few sentences for the top of the statistics panel."""
     if not draws:
-        return ["The archive is empty. Update it from the Archive tab."]
+        return ["L'archivio è vuoto. Aggiornalo dalla scheda Archivio."]
     total = len(draws)
     tally = counts(draws)
     expected = total * NUMBERS_PER_DRAW / NUMBER_MAX
@@ -135,11 +136,13 @@ def summary_lines(draws: list[Draw]) -> list[str]:
     gaps = current_gaps(draws)
     longest = max(gaps, key=lambda n: gaps[n])
     return [
-        f"{total:,} draws from {draws[0].date} to {draws[-1].date}.",
-        f"Each number is expected {expected:.0f} times, give or take {sigma:.0f}.",
-        f"Most drawn: {hottest} ({tally[hottest]}). Least drawn: {coldest} ({tally[coldest]}). "
-        f"Spread {spread}, which for ninety numbers with a {sigma:.0f} standard deviation "
-        f"is about what randomness produces.",
-        f"Longest current absence: {longest}, {gaps[longest]} draws. Its chance of coming "
-        f"up next is {p:.4f} — the same as every other number's.",
+        f"{it_number(total)} estrazioni dal {it_date(draws[0].date)} "
+        f"al {it_date(draws[-1].date)}.",
+        f"Ogni numero è atteso {expected:.0f} volte, più o meno {sigma:.0f}.",
+        f"Più estratto: {hottest} ({tally[hottest]}). Meno estratto: {coldest} "
+        f"({tally[coldest]}). Differenza {spread}, che per novanta numeri con uno "
+        f"scarto tipo di {sigma:.0f} è quanto produce il caso.",
+        f"Ritardo più lungo in corso: il {longest}, {gaps[longest]} estrazioni. La sua "
+        f"probabilità di uscire alla prossima è {p:.4f} — la stessa di ogni altro "
+        f"numero.",
     ]

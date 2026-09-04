@@ -1,285 +1,302 @@
 # Tyche
 
-**SuperEnalotto archive analysis and TimesFM 3.0 forecasting.**
+**Analisi dell'archivio SuperEnalotto e previsioni con TimesFM 3.0.**
 
-A desktop application that downloads the full SuperEnalotto draw history from
-December 1997, tests it for exploitable structure, hands it to Google's
-TimesFM 3.0 time-series foundation model, and measures — honestly — what the
-resulting predictions are worth.
+Un'applicazione desktop che scarica lo storico completo delle estrazioni del
+SuperEnalotto dal dicembre 1997, lo sottopone a test per cercarvi struttura
+sfruttabile, lo consegna al modello fondazionale per serie temporali TimesFM
+3.0 di Google, e misura — onestamente — quanto valgano le previsioni che ne
+escono.
 
-The short version of that measurement: **nothing**. The draws are independent,
-the tests say so, and every method in the program scores 0.4 hits out of six,
-which is exactly chance. Tyche is built to demonstrate that carefully rather
-than to assert it.
-
-![Reality check](docs/screenshots/01_reality_check.png)
+La versione breve di quella misura: **niente**. Le estrazioni sono
+indipendenti, i test lo dicono, e ogni metodo del programma ottiene 0,4 centri
+su sei, che è esattamente il caso. Tyche è costruito per dimostrarlo con cura,
+non per affermarlo.
 
 ---
 
-## What it does
+![Prova del nove](docs/screenshots/01_prova_del_nove.png)
 
-| Tab | What it is for |
+---
+
+## Che cosa fa
+
+| Scheda | A che serve |
 |---|---|
-| **Reality check** | Five hypothesis tests of the claim that the archive is independent uniform draws. This is the first tab because it is the finding. |
-| **Archive** | Download, scrape or import the draw history, and see what is wrong with it. |
-| **Statistics** | Frequency, gap (*ritardo*), band and pair tables — each with the value chance would produce, in the same row. |
-| **Predict** | Six numbers, from TimesFM 3.0 or from three baselines including a random one. |
-| **Validate** | Walk-forward backtest of every method against the last *N* draws. |
-| **Settings** | Checkpoint, device, context length, source URLs. |
+| **Prova del nove** | Cinque test dell'ipotesi che l'archivio sia fatto di estrazioni indipendenti e uniformi. È la prima scheda perché è il risultato. |
+| **Archivio** | Scarica, importa e ispeziona lo storico — e mostra che cosa non va. |
+| **Statistiche** | Frequenze, ritardi, decine e coppie: ogni tabella con accanto il valore che produrrebbe il caso. |
+| **Previsione** | Sei numeri, da TimesFM 3.0 o da tre metodi di riferimento, incluso quello casuale. |
+| **Validazione** | Backtest walk-forward di ogni metodo sulle ultime *N* estrazioni. |
+| **Impostazioni** | Checkpoint, dispositivo, lunghezza del contesto, indirizzi delle sorgenti. |
 
-![Validate](docs/screenshots/05_validate.png)
+![Validazione](docs/screenshots/05_validazione.png)
 
-*The Validate tab. Three methods, 400 draws, chance is 0.4000 — and the
-purple-on-black balls of the Predict tab look exactly as confident whichever
-of them produced them.*
+*La scheda Validazione. Tre metodi, 400 estrazioni, il caso vale 0,4000 — e le
+palline viola della scheda Previsione hanno lo stesso aspetto sicuro
+qualunque metodo le abbia prodotte.*
 
-There is also a command line, for the parts worth scripting:
+C'è anche una riga di comando, per le parti che vale la pena automatizzare:
 
 ```
-python main.py --check                  # the five independence tests
-python main.py --validate 500           # walk-forward backtest, baselines only
-python main.py --update                 # refresh from estrazioni.it — dry run
-python main.py --update --yes           # ...and write it
-python main.py --import FILE --yes      # import a file you downloaded
-python main.py --forecast timesfm       # six numbers, no window
+python main.py --check                  # i cinque test di indipendenza
+python main.py --validate 500           # backtest walk-forward
+python main.py --update                 # aggiorna da estrazioni.it — prova a vuoto
+python main.py --update --yes           # ...e scrive
+python main.py --import FILE --yes      # importa un file scaricato a mano
+python main.py --forecast timesfm       # sei numeri
 python main.py --export-sqlite data/tyche.db
 ```
 
-`--update` and `--import` report what they would change and write nothing
-unless `--yes` is given, and they refuse `--yes` outright when the import
-would contradict a stored draw. The archive has no undo and one of the two
-network sources has never been verified; a cron job that writes whatever it
-parsed is the one shape of this feature that can quietly destroy the history.
+`--update` e `--import` mostrano che cosa cambierebbero e non scrivono nulla
+senza `--yes`, e rifiutano `--yes` quando l'import contraddice un'estrazione
+già registrata. L'archivio non ha un annulla e una delle due sorgenti di rete
+non è mai stata verificata: un lavoro pianificato che scrive tutto quello che
+ha analizzato è l'unica forma di questa funzione capace di distruggere lo
+storico in silenzio.
 
 ---
 
-## Install
+## Installazione
 
 ```
-pip install torch --index-url https://download.pytorch.org/whl/cpu   # optional but smaller
+pip install torch --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 python main.py
 ```
 
-On Debian or Ubuntu, `tkinter` is a separate OS package and must match the
-interpreter you run Tyche with:
+Su Debian o Ubuntu `tkinter` è un pacchetto di sistema separato e deve
+corrispondere all'interprete con cui esegui Tyche:
 
 ```
 sudo apt install python3-tk
 ```
 
-The first TimesFM forecast downloads roughly 1.3 GB of weights from Hugging
-Face. Everything except the Predict tab's TimesFM option works without them.
+La prima previsione con TimesFM scarica circa 1,3 GB di pesi da Hugging Face.
+Tutto il resto funziona senza.
+
+Per Windows c'è un pacchetto pronto allegato a ogni release: si scompatta in
+una sola cartella e si avvia con `start.cmd`, senza installare Python.
 
 ---
 
-## Where the data comes from
+## Da dove vengono i dati
 
-Three sources, none of which is both current and verified:
+Quattro sorgenti, elencate per quanto meritano fiducia:
 
-- **estrazioni.it** — the whole archive in one request: **4,260 draws from
-  3 December 1997 to the last one**, labelled header, zero integrity issues.
-  This is where Tyche's archive comes from and what `--update` tries first.
-  Its download URL is inferred rather than documented, so CI checks it and the
-  import is always confirmed before anything is written.
-- **Manual import** — any CSV, TXT or TSV you downloaded yourself, including
-  that same export. The importer reads Tyche's own format, any file with a
-  labelled header, the twelve-column bulk format, and as a last resort any
-  file with a date and six numbers per line. It cannot break and needs no
-  network.
-- **Bulk archive** — one request, the whole history, no header. Useful as a
-  bootstrap and **it stops in January 2020**: the mirror's own response says
-  `last-modified: 24 Jan 2020`. It is also wrong in places — see below.
-- **Per-year scrape** — the source that would keep the archive current
-  without a manual download. Its URLs were four guesses made from an
-  environment that could not reach any of the hosts, and all four missed. One
-  has since been corrected from evidence; the rest are still guesses. Check
-  what it imports.
+- **estrazioni.it** — tutto l'archivio in una richiesta: **4.260 estrazioni dal
+  3 dicembre 1997 all'ultima**, intestazione etichettata, zero problemi di
+  integrità. È da qui che viene l'archivio di Tyche ed è la prima cosa che
+  `--update` prova. Il suo indirizzo di download è dedotto e non documentato,
+  quindi la CI lo ricontrolla e l'import viene sempre confermato prima di
+  scrivere.
+- **Import manuale** — qualunque CSV, TXT o TSV scaricato a mano, compresa
+  quella stessa esportazione. Il lettore riconosce il formato di Tyche,
+  qualunque file con un'intestazione etichettata, il formato in blocco a dodici
+  colonne e, come ultima risorsa, qualunque file con una data seguita da sei
+  numeri per riga. Non può rompersi e non richiede rete.
+- **Mirror storico** — una richiesta, tutto lo storico, senza intestazione.
+  Utile per partire, e **si ferma a gennaio 2020**: la sua stessa risposta HTTP
+  dice `last-modified: 24 Jan 2020`. È anche sbagliato in alcuni punti — vedi
+  sotto.
+- **Scansione per anno** — la sorgente che terrebbe aggiornato l'archivio senza
+  scaricare a mano. I suoi indirizzi erano quattro tentativi fatti da un
+  ambiente che non riusciva a raggiungere nessuno dei siti, e tutti e quattro
+  hanno mancato. Uno è stato corretto sulla base di prove; gli altri restano
+  tentativi. Controlla che cosa importa.
 
-The Archive tab shows an **integrity report** next to the draw list, because
-the bulk mirror is wrong in a way no per-row check can see: the first nine
-draws of 1999 are labelled 1998, which gives nine duplicated contest numbers
-and two pairs of different draws sharing a date. Tyche detects and repairs
-that on import, from evidence rather than a hardcoded list — see
+La scheda Archivio mostra un **rapporto di integrità** accanto all'elenco delle
+estrazioni, perché il mirror storico è sbagliato in un modo che nessun
+controllo riga per riga può vedere: le prime nove estrazioni del 1999 sono
+etichettate 1998, il che produce nove numeri di concorso duplicati e due coppie
+di estrazioni diverse che condividono una data. Tyche lo rileva e lo ripara
+all'import, sulla base di prove e non di un elenco scritto a mano — vedi
 `core/archive.py::repair_year_offset`.
 
-Two consequences of having one source that is trustworthy but manual and one
-that is automatic but unverified:
+Due conseguenze dell'avere una sorgente affidabile ma manuale e una automatica
+ma non verificata:
 
-- **Imports are supervised.** Before anything is written, Tyche dry-runs the
-  merge and shows what it would change: rows added, rows that *contradict* a
-  stored draw, and any integrity error the merge would introduce. A clean
-  import from a trusted source goes straight through; anything from the
-  scraper is always confirmed, because a confident-looking mis-parse is
-  precisely what an untested parser produces. There is also a "save fetched
-  pages" switch — the parser cannot be fixed from a description of what went
-  wrong, only from the page that went wrong.
-- **Staleness is on screen, not in the documentation.** The footer and the
-  Archive tab report how far behind the archive is, in draws, measured
-  against the archive's own cadence rather than a hardcoded schedule. Boot-
-  strapping from the bulk mirror today reads *"roughly 1033 draws missing"*,
-  which is the honest description of what you have.
+- **Gli import sono supervisionati.** Prima di scrivere qualsiasi cosa, Tyche
+  simula l'unione e mostra che cosa cambierebbe: righe aggiunte, righe che
+  *contraddicono* un'estrazione registrata, e ogni errore di integrità che
+  l'unione introdurrebbe. Un import pulito da una sorgente affidabile passa
+  senza chiedere; tutto ciò che arriva da un indirizzo dedotto viene sempre
+  confermato, perché un errore di analisi dall'aria sicura è esattamente quello
+  che produce un lettore non verificato. C'è anche un interruttore per salvare
+  le pagine scaricate: un parser non si corregge dalla descrizione di che cosa
+  è andato storto, ma solo dalla pagina che è andata storta.
+- **L'obsolescenza è sullo schermo, non nella documentazione.** Il piè di
+  pagina e la scheda Archivio dicono di quante estrazioni l'archivio è
+  indietro, misurate sulla cadenza dell'archivio stesso e non su un calendario
+  scritto nel codice.
 
-![Archive](docs/screenshots/02_archive.png)
+![Archivio](docs/screenshots/02_archivio.png)
 
 ---
 
-## What the tests actually found
+## Che cosa hanno trovato i test
 
-Run against **4,260 draws, 3 December 1997 to 3 September 2026**.
+Su **4.260 estrazioni, dal 3 dicembre 1997 al 3 settembre 2026**.
 
-| Test | Result |
+| Test | Esito |
 |---|---|
-| Uniformity of the 90 numbers | χ² = 94.3 on 89 dof, p = 0.33 — no bias |
-| Gap (*ritardo*) distribution | χ² = 45.7 on 50 dof, p = 0.64 — gaps are geometric, nothing is ever "due" |
-| Serial independence, draw t → t+1 | χ² = 0.95, p = 0.33 — the last draw tells you nothing |
-| Repeats between consecutive draws | χ² = 2.10 on 3 dof, p = 0.55 — mean overlap 0.391 against 0.400 expected |
-| Sum of the six numbers | z = +3.73, **p = 0.0002** — see below |
+| Uniformità dei 90 numeri | χ² = 94,3 su 89 gdl, p = 0,33 — nessuno sbilanciamento |
+| Distribuzione dei ritardi | χ² = 45,7 su 50 gdl, p = 0,64 — i ritardi sono geometrici, nessun numero è mai «dovuto» |
+| Indipendenza seriale, t → t+1 | χ² = 0,95, p = 0,33 — l'ultima estrazione non dice nulla |
+| Ripetizioni fra estrazioni consecutive | χ² = 2,10 su 3 gdl, p = 0,55 — sovrapposizione media 0,391 contro 0,400 attesa |
+| Somma dei sei numeri | z = +3,73, **p = 0,0002** — vedi sotto |
 
-Four of five are exactly what a fair game produces. The fifth is not, and it
-is the one real finding here — but not the finding it first appeared to be.
+Quattro test su cinque danno esattamente quello che produce un gioco equo. Il
+quinto no, ed è l'unico risultato reale qui — ma non quello che sembrava
+all'inizio.
 
-**The mean sum of the six numbers is 276.5 against an expected 273.0.** It was
-first measured on a different archive entirely, and the obvious explanation
-was that the file was wrong. It is not: the effect reproduces on a second,
-independent source. What it does instead is *fade*.
+**La somma media dei sei numeri è 276,5 contro una attesa di 273,0.** Era stata
+misurata la prima volta su un archivio diverso, e la spiegazione ovvia era che
+quel file fosse sbagliato. Non lo è: l'effetto si riproduce su una seconda
+fonte indipendente. Quello che fa, invece, è *svanire*.
 
-| Period | Draws | Mean sum |
+| Periodo | Estrazioni | Somma media |
 |---|---|---|
-| 1997–1999 | 217 | 282.3 |
-| 2000s | 1,287 | 278.5 |
-| 2010s | 1,565 | 276.2 |
-| 2020s | 1,191 | **273.8** |
+| 1997–1999 | 217 | 282,3 |
+| Anni 2000 | 1.287 | 278,5 |
+| Anni 2010 | 1.565 | 276,2 |
+| Anni 2020 | 1.191 | **273,8** |
 
-Expected: 273.0. On the last 1,191 draws the test finds nothing at all —
-z = +0.42, and the correlation between a number and how often it is drawn
-falls from +0.37 over the whole archive to +0.05. Something was pulling the
-draw towards high numbers, it got steadily weaker for twenty-five years, and
-for the last six there has been nothing to see. Which is roughly the shape you
-would expect if it were ever physical.
+Attesa: 273,0. Sulle ultime 1.191 estrazioni il test non trova più nulla —
+z = +0,42, e la correlazione fra un numero e quante volte è stato estratto
+scende da +0,37 sull'intero archivio a +0,05. Qualcosa spingeva l'estrazione
+verso i numeri alti, si è indebolito costantemente per venticinque anni, e da
+sei anni non c'è più niente da vedere. Che è grosso modo la forma che ci si
+aspetterebbe se fosse mai stato un fenomeno fisico.
 
-Two things it is not. It is not a reason to play high numbers: the tilt is
-gone, and even at its strongest it was under 2% per number against a prize
-fund that keeps a fixed minority share of every euro staked. And it is not
-established: it is one statistic on two sources that may share an ancestor.
+Due cose che **non** è. Non è un motivo per giocare i numeri alti: lo
+sbilanciamento è sparito, e persino al suo massimo valeva meno del 2% per
+numero contro un montepremi che trattiene una quota fissa di ogni euro
+giocato. E non è un risultato acquisito: è una statistica su due fonti che
+potrebbero avere un antenato comune.
 
-The walk-forward backtest settles the practical question. The last 1,000
-draws, six picks each:
+Il backtest walk-forward risolve la questione pratica. Ultime 1.000
+estrazioni, sei numeri per volta:
 
-| Method | Hits per draw | Against chance | p |
+| Metodo | Centri per estrazione | Rispetto al caso | p |
 |---|---|---|---|
-| random | 0.3790 | −21.0 | 0.26 |
-| frequency ("hot") | 0.3930 | −7.0 | 0.71 |
-| gap (*ritardo*) | 0.3900 | −10.0 | 0.59 |
+| casuale | 0,3790 | −21,0 | 0,26 |
+| frequenza | 0,3930 | −7,0 | 0,71 |
+| ritardo | 0,3900 | −10,0 | 0,59 |
 
-Chance is 0.4000. Nothing beats it, including the 330-million-parameter model.
+Il caso vale 0,4000. Nessuno lo batte, modello da 330 milioni di parametri
+compreso.
 
 ---
 
-## Odds, which no method changes
+## Le probabilità, che nessun metodo cambia
 
-Exact combinatorics on a 90-number wheel, six drawn:
+Combinatoria esatta su una ruota da 90 numeri, sei estratti:
 
-| Category | One in |
+| Categoria | Una su |
 |---|---|
-| 6 | 622,614,630 |
-| 5+1 | 103,769,105 |
-| 5 | 1,250,230 |
-| 4 | 11,907 |
+| 6 | 622.614.630 |
+| 5+1 | 103.769.105 |
+| 5 | 1.250.230 |
+| 4 | 11.907 |
 | 3 | 327 |
 
-These hold whatever numbers are played. Prizes are pari-mutuel — a share of
-the stakes rather than a fixed payout — so the operator keeps a fixed cut and
-the expected return on a line is below its price, always.
+Valgono qualunque numero si giochi. I premi sono a totalizzatore — una quota
+della raccolta, non un importo fisso — quindi il concessionario trattiene una
+parte fissa e il rendimento atteso di una colonna è sempre inferiore al suo
+prezzo.
 
 ---
 
-## Querying the archive
+## Interrogare l'archivio
 
-The archive is a CSV because at 4,260 rows that is the right answer: 238 KB,
-80 ms to load, and it greps, diffs and opens in a spreadsheet. SQLite reads it
-in 7 ms, which is eleven times faster and saves 73 milliseconds once per
-launch, against a file a third larger — for comparison, building the feature
-matrices costs 63 ms.
+L'archivio è un CSV perché con 4.260 righe è la risposta giusta: 238 KB, 80 ms
+per caricarlo, e si può cercare con grep, confrontare dentro un commit e aprire
+in un foglio di calcolo. SQLite lo legge in 7 ms, undici volte più veloce, il
+che significa 73 millisecondi risparmiati una volta all'avvio per un file un
+terzo più grande — per confronto, costruire le matrici delle caratteristiche
+costa 63 ms.
 
-So SQL gets an export rather than the storage layer:
+Quindi a SQL tocca un'esportazione, non lo strato di memorizzazione:
 
 ```
 python main.py --export-sqlite data/tyche.db
 ```
 
-Three tables: `draws` (one row per draw, with the sum precomputed), `picks`
-(one row per number per draw, indexed — this is what makes "how often did 37
-come up in 2024" a `GROUP BY`), and `number_stats` (the frequency table, with
-each count's expectation beside it). The database is a disposable snapshot;
-nothing in Tyche reads it back.
+Tre tabelle: `draws` (una riga per estrazione, con la somma già calcolata),
+`picks` (una riga per numero per estrazione, indicizzata — è questa a rendere
+«quante volte è uscito il 37 nel 2024» un `GROUP BY`) e `number_stats` (la
+tabella delle frequenze, con accanto a ogni conteggio la sua attesa). Il
+database è un'istantanea usa e getta: nulla in Tyche lo rilegge.
 
 ---
 
-## How TimesFM is used
+## Come viene usato TimesFM
 
-`core/features.py` turns the archive into a `(90, T)` matrix: one series per
-number, one column per draw. `core/forecaster.py` hands all ninety to TimesFM
-3.0 and asks for the next value of each.
+`core/features.py` trasforma l'archivio in una matrice `(90, T)`: una serie per
+numero, una colonna per estrazione. `core/forecaster.py` le consegna tutte e
+novanta a TimesFM 3.0 e ne chiede il valore successivo.
 
-Two details that are easy to get wrong:
+Due dettagli facili da sbagliare:
 
-- **It uses `TimesFM3Evaluator`, not `TimesFM3Forecaster`.** The model attends
-  over at most 32 variates per forward pass. The Evaluator is the subclass
-  that chunks a wider input and reassembles it, so ninety numbers become three
-  groups of thirty-two. It is *not* one joint context over all ninety, and
-  anyone repeating the "TimesFM 3.0 is multivariate so it models them all
-  together" line should know that.
-- **The series it is fed matters.** The raw 0/1 presence series has a mean of
-  6/90 and no gradient; the rolling-frequency series is smooth enough to
-  forecast and invents momentum that is not there, because a moving average of
-  white noise looks like a trend. Tyche defaults to frequency and offers
-  presence, which forecasts to a flat line — worth seeing once.
+- **Usa `TimesFM3Evaluator`, non `TimesFM3Forecaster`.** Il modello attende su
+  al massimo 32 variate per passaggio. L'Evaluator è la sottoclasse che spezza
+  un ingresso più ampio e ne ricompone il risultato, quindi novanta numeri
+  diventano tre gruppi da trentadue. *Non* è un unico contesto congiunto su
+  tutti e novanta, e chi ripete che «TimesFM 3.0 è multivariato, quindi li
+  modella tutti insieme» dovrebbe saperlo.
+- **La serie che gli si dà conta.** La serie grezza 0/1 di presenza ha media
+  6/90 e nessuna pendenza; la serie di frequenza mobile è abbastanza liscia da
+  poter essere prevista e inventa uno slancio che non c'è, perché una media
+  mobile di rumore bianco sembra una tendenza. Tyche usa la frequenza come
+  predefinita e offre la presenza, che produce una previsione piatta — vale la
+  pena vederla una volta.
 
-And what it does with them, from a real run on a machine that could download
-the weights:
+E che cosa ne fa, da un'esecuzione reale su una macchina che poteva scaricare i
+pesi:
 
 ```
-frequency  top six: 15 32 37 52 66 90    score spread 0.100000
-timesfm    top six: 32 37 52 66 79 90    score spread 0.099857
+frequenza  primi sei: 15 32 37 52 66 90    escursione 0,100000
+timesfm    primi sei: 32 37 52 66 79 90    escursione 0,099857
 ```
 
-Five of the six numbers are the same and the spread matches the input series'
-own to four decimals. Given ninety series with no signal in them, the model
-predicts approximately the last value of each — which is exactly right, and
-which makes its ranking a copy of the hot-numbers baseline. That is the whole
-result in two lines.
+Cinque numeri su sei coincidono e l'escursione corrisponde a quella della serie
+in ingresso fino alla quarta cifra. Date novanta serie senza segnale dentro, il
+modello prevede all'incirca l'ultimo valore di ciascuna — che è esattamente la
+cosa giusta, e che rende la sua classifica una copia di quella per frequenza.
+È tutto il risultato, in due righe.
 
 ---
 
-## Licensing
+## Licenza
 
-Tyche is a **private project**, all rights reserved. See `LICENSE`.
+Tyche è un **progetto privato**, tutti i diritti riservati. Vedi `LICENSE`.
 
-The TimesFM split matters if that ever changes: the `timesfm` package code is
-Apache-2.0, but the `google/timesfm-3.0-pytorch` **weights** are under
-`timesfm-non-commercial-license-v1.0` and are restricted to non-commercial,
-non-production use. Weights up to 2.5 remain Apache-2.0 — but 2.5 has no
-native multivariate forecasting and is not a drop-in replacement for what
-`core/forecaster.py` does.
+La distinzione su TimesFM conta se questo dovesse cambiare: il codice del
+pacchetto `timesfm` è Apache-2.0, ma i **pesi** `google/timesfm-3.0-pytorch`
+sono sotto `timesfm-non-commercial-license-v1.0`, riservati a uso non
+commerciale e non di produzione. I pesi fino alla 2.5 restano Apache-2.0 — ma
+la 2.5 non ha previsione multivariata nativa e non è un sostituto immediato di
+quello che fa `core/forecaster.py`.
 
 ---
 
-## Running the tests
+## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 127 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 145, GUI included
+python -m pytest tests/ -q                                    # 132 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 150, GUI compresa
 python -m ruff check .
 ```
 
-The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "127 passed, 1 skipped" means the entire interface went untested.
-`TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
-intend to have verified a GUI change. CI sets it.
+La suite GUI si salta da sola quando non c'è un display o manca tkinter, e
+un'esecuzione che riporta «130 passed, 1 skipped» significa che l'intera
+interfaccia non è stata provata. `TYCHE_REQUIRE_GUI=1` trasforma quel salto in
+un errore: mettilo ogni volta che intendi aver verificato una modifica
+all'interfaccia. La CI lo mette.
 
-The README screenshots are committed files and go stale silently. After any
-change to the interface:
+Gli screenshot del README sono file versionati e invecchiano in silenzio. Dopo
+ogni modifica all'interfaccia:
 
 ```
 SHOTDIR=docs/screenshots xvfb-run -a python docs/generate_screenshots.py
@@ -287,24 +304,26 @@ SHOTDIR=docs/screenshots xvfb-run -a python docs/generate_screenshots.py
 
 ---
 
-## Releases
+## Release
 
-Tagging a version publishes one. `.github/workflows/release.yml` checks out
-the tag, lints, runs the whole suite with the interface included, checks that
-the version the program reports matches the tag, and only then creates the
-release — with notes composed from `CHANGELOG.md` rather than from the commit
-log.
+Un tag pubblica una release. `.github/workflows/release.yml` fa il checkout del
+tag, esegue il linter, l'intera suite con l'interfaccia compresa, controlla che
+la versione riportata dal programma corrisponda al tag, e solo allora crea la
+release — con le note composte a partire da `CHANGELOG.md` e non dal registro
+dei commit.
 
-A **Windows build** is then produced on a Windows runner and attached. Before
-it is uploaded it has to start Tk for real, come up on the `win32` backend,
-run the analysis, round-trip an archive, prove TimesFM is genuinely inside it,
-and be started through its own launcher — which is also checked to refuse a
-binary whose digest does not match. The archive's SHA-256 goes into the notes
-rather than beside the file, so it arrives by a route the download did not.
+Poi produce il **pacchetto Windows** su un runner Windows e lo allega. Prima di
+caricarlo deve avviare Tk davvero, presentarsi sul backend `win32`, eseguire
+l'analisi, superare un ciclo di scrittura e rilettura dell'archivio, dimostrare
+che TimesFM è realmente al suo interno, ed essere avviato dal proprio launcher
+— che viene a sua volta provato nel rifiutare un eseguibile il cui digest non
+corrisponde. Lo SHA-256 dell'archivio finisce nelle note e non accanto al file,
+così arriva per una strada diversa da quella del download.
 
-macOS and Linux have no build. Running from source works on both, and the
-instructions above are the whole of it.
+Per macOS e Linux non c'è pacchetto: l'esecuzione dal sorgente funziona su
+entrambi ed è descritta sopra.
 
 ---
 
-*Tyche is named for the Greek goddess of chance. She is not on anyone's side.*
+*Tyche porta il nome della dea greca della sorte. Non sta dalla parte di
+nessuno.*

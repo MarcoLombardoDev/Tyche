@@ -1,25 +1,28 @@
-**Tyche — SuperEnalotto archive analysis and TimesFM 3.0 forecasting.**
+**Tyche — analisi dell'archivio SuperEnalotto e previsioni con TimesFM 3.0.**
 
-A desktop application that downloads the complete SuperEnalotto draw history
-from December 1997, tests it for exploitable structure, hands it to Google's
-TimesFM 3.0 time-series foundation model, and measures honestly what the
-resulting predictions are worth.
+Un'applicazione desktop che scarica lo storico completo delle estrazioni del
+SuperEnalotto dal dicembre 1997, lo esamina in cerca di struttura sfruttabile,
+lo consegna a TimesFM 3.0 — il modello fondazionale per serie temporali di
+Google — e misura onestamente quanto valgano le previsioni che ne escono.
 
-The short version of that measurement: **nothing**. The draws are independent,
-the tests say so, and every method in the program scores 0.4 hits out of six —
-which is exactly chance. Tyche is built to demonstrate that carefully rather
-than to assert it, which is why the random baseline sits in the same menu as
-the 330M-parameter model, at the same size.
+La versione breve di quella misura: **niente**. Le estrazioni sono
+indipendenti, i test lo dicono, e ogni metodo del programma segna 0,4 numeri
+indovinati su sei, che è esattamente il caso. Tyche è costruito per dimostrarlo
+con cura anziché per affermarlo, ed è per questo che la linea di base casuale
+sta nello stesso menu del modello da 330 milioni di parametri, alla stessa
+dimensione.
 
-⚠️ **This program cannot help you win.** It has no predictive power and makes
-no claim to any. The odds it prints are exact and unchangeable: 1 in
-622,614,630 for six numbers, 1 in 327 for three. Prizes are pari-mutuel, so
-the operator keeps a fixed share of every euro staked and the expected return
-on a line is below its price whatever is played.
+⚠️ **Questo programma non può aiutarti a vincere.** Non ha alcun potere
+predittivo e non pretende di averne. Le probabilità che stampa sono esatte e
+immutabili: 1 su 622.614.630 per sei numeri, 1 su 327 per tre. I premi sono a
+totalizzatore, quindi il concessionario trattiene una quota fissa di ogni euro
+giocato e il rendimento atteso di una schedina è inferiore al suo prezzo
+qualunque cosa si giochi.
 
-## Running it from source
+## Eseguirlo dai sorgenti
 
-A Windows build is attached below; on anything else, run it from source.
+Sotto è allegato un pacchetto per Windows; su tutto il resto si esegue dai
+sorgenti.
 
 ```
 git clone https://github.com/MarcoLombardoDev/Tyche.git
@@ -29,45 +32,48 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On Debian or Ubuntu, `tkinter` is a separate OS package and must match the
-interpreter you run Tyche with: `sudo apt install python3-tk`.
+Su Debian o Ubuntu `tkinter` è un pacchetto di sistema a parte e deve
+corrispondere all'interprete con cui si esegue Tyche: `sudo apt install
+python3-tk`.
 
-The first TimesFM forecast downloads about 1.3 GB of weights from Hugging
-Face. Everything else — the archive, the independence tests, the statistics,
-the baselines and the whole validation harness — works without them.
+La prima previsione con TimesFM scarica circa 1,3 GB di pesi da Hugging Face.
+Tutto il resto — l'archivio, i test di indipendenza, le statistiche, le linee di
+base e l'intera validazione — funziona senza.
 
-There is a command line for the parts worth scripting:
+C'è una riga di comando per le parti che vale la pena automatizzare:
 
 ```
-python main.py --update --yes        # refresh the archive
-python main.py --check               # the five independence tests
-python main.py --validate 500        # walk-forward backtest
-python main.py --forecast timesfm    # six numbers
+python main.py --update --yes         # aggiorna l'archivio
+python main.py --check                # i cinque test di indipendenza
+python main.py --validate 500         # backtest walk-forward
+python main.py --forecast timesfm     # sei numeri
 python main.py --export-sqlite data/tyche.db
 ```
 
-## What was verified before this was published
+## Che cosa è stato verificato prima di pubblicare
 
-On the tagged commit, before the release was created:
+Sul commit taggato, prima che la release fosse creata:
 
-- `ruff check .` across the repository;
-- the whole test suite with `TYCHE_REQUIRE_GUI=1` under Xvfb, so the
-  interface is genuinely exercised rather than skipped;
-- a check that the version the program reports matches the tag on this page.
+- `ruff check .` su tutto il repository;
+- l'intera suite di test con `TYCHE_REQUIRE_GUI=1` sotto Xvfb, così
+  l'interfaccia viene davvero esercitata invece di essere saltata;
+- un controllo che la versione dichiarata dal programma coincida con il tag di
+  questa pagina.
 
-And on the Windows build, before it was attached:
+E sul pacchetto Windows, prima che venisse allegato:
 
-- it starts Tk for real and comes up on the `win32` backend, builds the
-  feature matrices, runs the five independence tests and round-trips an
-  archive through its own persistence code — that is `--self-check`, and
-  `--version` alone would prove none of it;
-- TimesFM is genuinely inside the bundle, not silently dropped;
-- the launcher starts the program, and refuses to when the recorded digest
-  does not match.
+- avvia Tk per davvero e si presenta sul backend `win32`, costruisce le matrici
+  delle caratteristiche, esegue i cinque test di indipendenza e fa un giro
+  completo di scrittura e rilettura di un archivio con il proprio codice di
+  persistenza — questo è `--self-check`, e `--version` da solo non dimostrerebbe
+  niente di tutto ciò;
+- TimesFM è davvero dentro il pacchetto, non silenziosamente perduto;
+- l'avviatore fa partire il programma, e si rifiuta di farlo quando l'impronta
+  registrata non corrisponde.
 
-## Licence
+## Licenza
 
-Private, all rights reserved. The `timesfm` package is Apache-2.0; the
-`google/timesfm-3.0-pytorch` **weights** it downloads are under
-`timesfm-non-commercial-license-v1.0` and are restricted to non-commercial,
-non-production use.
+Privato, tutti i diritti riservati. Il pacchetto `timesfm` è Apache-2.0; i
+**pesi** `google/timesfm-3.0-pytorch` che scarica sono coperti da
+`timesfm-non-commercial-license-v1.0` e sono limitati a un uso non commerciale e
+non di produzione.

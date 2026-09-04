@@ -150,7 +150,7 @@ def test_each_baseline_method_produces_combinations(app):
 
     panel = app._panels["prediction"]
     app.show("prediction")
-    for method in ("frequency", "gap", "random"):
+    for method in ("frequenza", "ritardo", "casuale"):
         panel.method.set(_METHOD_LABELS[method])
         panel._generate()
         app.update()
@@ -194,7 +194,7 @@ def test_validation_runs_the_baselines_to_a_verdict(app):
         if panel.verdict.cget("text"):
             break
         time.sleep(0.05)
-    assert "hits per draw" in panel.verdict.cget("text")
+    assert "centri per estrazione" in panel.verdict.cget("text")
 
 
 def test_validation_rejects_a_non_numeric_draw_count(app):
@@ -204,7 +204,7 @@ def test_validation_rejects_a_non_numeric_draw_count(app):
     panel.n_draws.insert(0, "many")
     panel._run()
     app.update()
-    assert "whole number" in app._status.cget("text")
+    assert "numero intero" in app._status.cget("text")
 
 
 def test_settings_save_round_trips_and_keeps_integer_types(app):
@@ -227,14 +227,14 @@ def test_settings_rejects_a_non_numeric_integer_field(app):
     panel._widgets["context_length"].insert(0, "lots")
     panel._save()
     app.update()
-    assert "not a whole number" in app._status.cget("text")
+    assert "non è un numero intero" in app._status.cget("text")
 
 
 def test_one_worker_at_a_time(app):
     """Two concurrent archive writes would lose one of them silently."""
     app._busy = True
     app.run_worker("second job", lambda report: None, lambda result: None)
-    assert "already running" in app._status.cget("text")
+    assert "già un'operazione in corso" in app._status.cget("text")
     app._busy = False
 
 
@@ -261,11 +261,11 @@ def test_archive_panel_shows_how_far_behind_the_archive_is(app):
     app.show("archive")
     app.update()
     text = app._panels["archive"].freshness.cget("text")
-    assert "missing" in text or "Current as of" in text
+    assert "mancano" in text or "Aggiornato al" in text
 
 
 def test_footer_marks_a_stale_archive(app):
-    assert "behind" in app._archive_label.cget("text")
+    assert "indietro" in app._archive_label.cget("text")
 
 
 def test_a_clean_import_does_not_stop_to_ask(app, monkeypatch):
@@ -300,7 +300,7 @@ def test_a_contradicting_import_asks_first_and_declining_writes_nothing(app, mon
     app._panels["archive"]._merge_result([bad])
     app.update()
     assert [d.to_row() for d in app.draws] == before
-    assert "cancelled" in app._status.cget("text")
+    assert "annullato" in app._status.cget("text")
 
 
 def test_the_scraper_always_asks_even_when_the_preview_is_clean(app, monkeypatch):
@@ -330,7 +330,7 @@ def test_the_self_check_passes_and_writes_its_report(tmp_path):
     report = tmp_path / "self-check.txt"
     assert run(str(report)) == 0
     text = report.read_text(encoding="utf-8")
-    assert "self-check: PASSED" in text
+    assert "autodiagnosi: SUPERATA" in text
     # The workflow greps for this line to confirm the bundle came up on the
     # platform's real toolkit rather than a fallback.
-    assert "windowing system:" in text
+    assert "sistema grafico:" in text

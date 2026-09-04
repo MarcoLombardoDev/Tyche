@@ -135,9 +135,9 @@ class HtmlTableSource(DrawSource):
 
     def describe(self) -> str:
         return (
-            f"HTML archive scrape, {len(self.templates)} candidate hosts starting with "
-            f"{self.url_template} — the only source that can keep the archive current, "
-            "and one that has never been run against a live page. Review what it imports."
+            f"Scansione delle pagine di archivio, {len(self.templates)} siti candidati "
+            f"a partire da {self.url_template} — non è mai stata provata su una pagina "
+            "reale, quindi controlla che cosa importa."
         )
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:
@@ -161,7 +161,9 @@ class HtmlTableSource(DrawSource):
 
         draws: list[Draw] = []
         for i, year in enumerate(years):
-            self._report(progress, f"Fetching {year} from {_host(template)}…", i / len(years))
+            self._report(
+                progress, f"Scarico il {year} da {_host(template)}…", i / len(years)
+            )
             try:
                 year_draws = self._scrape(template, year)
             except SourceError as exc:
@@ -176,13 +178,13 @@ class HtmlTableSource(DrawSource):
         if failures:
             print(f"[HtmlTable] partial fetch: {'; '.join(failures)}")
         self._report(
-            progress, f"{len(draws):,} draws scraped from {_host(template)}.", 1.0
+            progress, f"{len(draws)} estrazioni da {_host(template)}.", 1.0
         )
         return draws
 
     def _choose_template(self, year: int, failures: list[str], progress) -> str | None:
         for template in self.templates:
-            self._report(progress, f"Trying {_host(template)}…", 0.0)
+            self._report(progress, f"Provo {_host(template)}…", 0.0)
             try:
                 if self._scrape(template, year):
                     return template

@@ -330,7 +330,7 @@ def test_freshness_counts_the_draws_missed_while_nobody_updated():
     # would say 35, which is the overcount the mean exists to avoid.
     assert 28 <= state.estimated_missing <= 32
     assert state.stale
-    assert "missing" in state.describe()
+    assert "mancano" in state.describe()
 
 
 def test_freshness_tolerates_one_draw_and_duplicate_dates():
@@ -359,7 +359,7 @@ def test_preview_flags_a_row_that_contradicts_a_stored_draw():
     preview = preview_merge(draws, [bad])
     assert len(preview.conflicts) == 1
     assert not preview.safe
-    assert "contradict" in preview.describe()
+    assert "contraddicono" in preview.describe()
 
 
 def test_preview_reports_integrity_errors_the_merge_would_introduce():
@@ -376,7 +376,7 @@ def test_preview_of_an_identical_fetch_changes_nothing():
     preview = preview_merge(draws, draws)
     assert (preview.added, preview.updated) == (0, 0)
     assert preview.safe
-    assert "Nothing new" in preview.describe()
+    assert "Niente di nuovo" in preview.describe()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -655,7 +655,7 @@ def test_estrazioni_source_rejects_a_short_error_page_that_returned_200():
     original = source_module.http_get
     source_module.http_get = lambda url, timeout=30: b"<html>not found</html>"
     try:
-        with pytest.raises(source_module.SourceError, match="too small"):
+        with pytest.raises(source_module.SourceError, match="troppo pochi"):
             Stub().fetch()
     finally:
         source_module.http_get = original
@@ -806,7 +806,7 @@ def test_independence_tests_detect_a_rigged_archive():
 def test_summarise_says_nothing_is_exploitable_when_nothing_is():
     from core.randomness import run_all, summarise
 
-    assert "no exploitable structure" in summarise(run_all(random_archive(1500, seed=11)))
+    assert "struttura sfruttabile" in summarise(run_all(random_archive(1500, seed=11)))
 
 
 # ─────────────────────────────────────────────────────────────
@@ -912,7 +912,7 @@ def test_walk_forward_would_detect_a_method_that_actually_worked():
     result = report.results[0]
     assert result.mean_hits == 6.0
     assert result.p_value < 1e-12
-    assert "exceeded it" in report.verdict()
+    assert "lo superano" in report.verdict()
 
 
 def test_walk_forward_shows_no_look_ahead_in_the_real_methods():
@@ -961,7 +961,7 @@ def test_the_self_check_reports_whether_timesfm_is_bundled_rather_than_failing()
 
     ok, message = _check_timesfm()
     assert ok
-    assert "bundled" in message
+    assert "timesfm:" in message
 
 
 def test_the_self_check_fixture_builds_valid_draws():
@@ -1118,7 +1118,7 @@ def test_apply_refuses_to_write_a_contradicting_import(tmp_path, monkeypatch, ca
     bad = Draw(date=draws[3].date, contest=draws[3].contest,
                numbers=(11, 22, 33, 44, 55, 66), jolly=1, year=draws[3].year)
     assert cli._apply([bad], write=True) == 1
-    assert "Refusing to write" in capsys.readouterr().out
+    assert "Scrittura rifiutata" in capsys.readouterr().out
     assert [d.to_row() for d in load_archive(archive)] == [d.to_row() for d in draws]
 
 
@@ -1168,6 +1168,35 @@ def test_settings_round_trip(tmp_path, monkeypatch):
     assert dm.load_settings()["context_length"] == 512
 
 
+def test_a_0_1_0_settings_file_is_read_with_the_new_names(tmp_path, monkeypatch):
+    """The English names 0.1.0 wrote must not reach build_context.
+
+    An unmapped ``"frequency"`` raises "rappresentazione sconosciuta" the first
+    time a forecast is asked for, which is a long way from where the stale
+    file is.
+    """
+    import json
+
+    import core.data_manager as dm
+    from core.features import build_context
+    from core.predictor import METHODS
+
+    path = tmp_path / "settings.json"
+    path.write_text(
+        json.dumps({"representation": "frequency",
+                    "validation_baselines": ["random", "frequency", "gap"]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(dm, "SETTINGS_PATH", path)
+
+    settings = dm.load_settings()
+    assert settings["representation"] == "frequenza"
+    assert settings["validation_baselines"] == ["casuale", "frequenza", "ritardo"]
+    # Not just renamed — renamed to something the rest of the program accepts.
+    build_context(random_archive(60), representation=settings["representation"])
+    assert set(settings["validation_baselines"]) <= set(METHODS)
+
+
 def test_prediction_log_round_trip(tmp_path, monkeypatch):
     import core.data_manager as dm
 
@@ -1187,7 +1216,7 @@ def test_forecaster_reports_the_chunking_it_will_do():
     """Ninety variates against TimesFM's 32-per-pass limit is three chunks."""
     from core.forecaster import TimesFMForecaster
 
-    assert "3 attention chunks" in TimesFMForecaster().describe()
+    assert "3 blocchi di attenzione" in TimesFMForecaster().describe()
 
 
 def test_forecaster_fails_soft_when_timesfm_is_absent():
@@ -1212,7 +1241,7 @@ def test_scoring_refuses_a_history_too_short_to_mean_anything():
 
     forecaster = TimesFMForecaster()
     forecaster._model = object()          # pretend it loaded
-    with pytest.raises(ForecasterUnavailable, match="too short"):
+    with pytest.raises(ForecasterUnavailable, match="troppo poche"):
         forecaster.score_numbers(random_archive(10))
 
 
