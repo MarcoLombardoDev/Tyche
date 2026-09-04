@@ -49,6 +49,7 @@ from core.archive import (  # noqa: E402
 def test_all_core_modules_import():
     import core.archive  # noqa: F401
     import core.data_manager  # noqa: F401
+    import core.export  # noqa: F401
     import core.features  # noqa: F401
     import core.forecaster  # noqa: F401
     import core.predictor  # noqa: F401
@@ -453,6 +454,90 @@ def test_html_parser_does_not_concatenate_adjacent_ball_elements():
     assert parse_draw_table(html, expect_year=2020)[0].numbers == (1, 5, 12, 33, 44, 78)
 
 
+# The export from estrazioni.it, which is the archive Tyche actually runs on.
+# Semicolon-separated, UTF-8 with a BOM, dd/mm/yyyy, zero-padded numbers, and a
+# CONCORSO column that the site stopped filling in from 2014 onwards.
+LABELLED_SAMPLE = (
+    "\ufeffDATA;CONCORSO;N1;N2;N3;N4;N5;N6;JOLLY;SUPERSTAR\n"
+    "03/09/2026;;08;11;15;60;68;76;09;90\n"
+    "01/09/2026;;42;47;59;64;67;71;88;75\n"
+    "03/12/1997;87;20;36;39;41;72;76;88;00\n"
+)
+
+
+def test_labelled_parser_reads_the_estrazioni_export():
+    from core.sources.local_file import parse_any
+
+    draws = sorted(parse_any(LABELLED_SAMPLE), key=lambda d: d.date)
+    assert len(draws) == 3
+    assert draws[0].date == date(1997, 12, 3)
+    assert draws[0].numbers == (20, 36, 39, 41, 72, 76)
+    assert draws[-1].numbers == (8, 11, 15, 60, 68, 76)
+    assert draws[-1].jolly == 9 and draws[-1].superstar == 90
+
+
+def test_labelled_parser_does_not_eat_a_contest_number_that_follows_the_date():
+    """The bug this parser exists for.
+
+    ``03/12/1997;87;20;36;39;41;72;76;88;00`` — the contest number comes
+    *after* the date, and 87 is a perfectly good SuperEnalotto number, so the
+    positional line scan read the draw as 20 36 39 41 72 87 with a Jolly of
+    76. Every value plausible, nothing raised, and every row carrying a
+    contest number silently wrong.
+    """
+    from core.sources.local_file import parse_any
+
+    draw = next(d for d in parse_any(LABELLED_SAMPLE) if d.date == date(1997, 12, 3))
+    assert 87 not in draw.numbers
+    assert draw.contest == 87
+    assert draw.jolly == 88
+
+
+def test_labelled_parser_beats_the_positional_scan_on_the_same_text():
+    """Proof the ordering in parse_any is what makes the difference."""
+    from core.sources.local_file import _parse_freeform, parse_any
+
+    positional = next(
+        d for d in _parse_freeform(LABELLED_SAMPLE, "x") if d.date == date(1997, 12, 3)
+    )
+    labelled = next(d for d in parse_any(LABELLED_SAMPLE) if d.date == date(1997, 12, 3))
+    assert 87 in positional.numbers      # the wrong answer, still reachable
+    assert 87 not in labelled.numbers    # and the right one wins, because it is tried first
+
+
+def test_labelled_parser_fills_a_missing_contest_number_by_ordinal():
+    """estrazioni.it leaves CONCORSO empty from 2014; 2,008 of its rows have it."""
+    from core.sources.local_file import parse_any
+
+    text = (
+        "DATA;CONCORSO;N1;N2;N3;N4;N5;N6;JOLLY;SUPERSTAR\n"
+        "07/01/2026;;01;02;03;04;05;06;07;08\n"
+        "02/01/2026;;10;11;12;13;14;15;16;17\n"
+    )
+    draws = sorted(parse_any(text), key=lambda d: d.date)
+    assert [d.contest for d in draws] == [1, 2]
+
+
+def test_labelled_parser_handles_comma_and_tab_delimiters():
+    from core.sources.local_file import parse_any
+
+    for delimiter in (",", "\t"):
+        text = delimiter.join(
+            ["DATA", "CONCORSO", "N1", "N2", "N3", "N4", "N5", "N6", "JOLLY", "SUPERSTAR"]
+        ) + "\n" + delimiter.join(
+            ["03/09/2026", "141", "08", "11", "15", "60", "68", "76", "09", "90"]
+        ) + "\n"
+        assert parse_any(text)[0].numbers == (8, 11, 15, 60, 68, 76)
+
+
+def test_labelled_parser_refuses_a_header_it_cannot_map():
+    from core.sources.base import SourceError
+    from core.sources.local_file import _parse_labelled
+
+    with pytest.raises(SourceError):
+        _parse_labelled("A;B;C;D;E;F;G;H\n1;2;3;4;5;6;7;8\n", "x")
+
+
 def test_local_file_parser_sniffs_all_three_layouts(tmp_path):
     from core.sources.local_file import parse_any
 
@@ -805,6 +890,47 @@ def test_walk_forward_refuses_when_there_is_no_history_to_spare():
 
     with pytest.raises(ValueError):
         walk_forward(random_archive(50), n_draws=10, min_history=200)
+
+
+# ─────────────────────────────────────────────────────────────
+# SQLite export
+# ─────────────────────────────────────────────────────────────
+
+def test_sqlite_export_carries_every_draw_and_every_pick(tmp_path):
+    import sqlite3
+
+    from core.export import export_sqlite
+
+    draws = random_archive(120)
+    path = export_sqlite(draws, tmp_path / "t.db")
+    connection = sqlite3.connect(path)
+    try:
+        assert connection.execute("SELECT count(*) FROM draws").fetchone()[0] == 120
+        # Six numbers per draw, denormalised into picks for GROUP BY queries.
+        assert connection.execute("SELECT count(*) FROM picks").fetchone()[0] == 720
+        assert connection.execute("SELECT count(*) FROM number_stats").fetchone()[0] == 90
+        total = connection.execute(
+            "SELECT total FROM draws ORDER BY date LIMIT 1"
+        ).fetchone()[0]
+        assert total == sum(draws[0].numbers)
+    finally:
+        connection.close()
+
+
+def test_sqlite_export_replaces_an_existing_file(tmp_path):
+    """It is a snapshot, not a store: re-exporting must not append."""
+    import sqlite3
+
+    from core.export import export_sqlite
+
+    path = tmp_path / "t.db"
+    export_sqlite(random_archive(50), path)
+    export_sqlite(random_archive(30, seed=2), path)
+    connection = sqlite3.connect(path)
+    try:
+        assert connection.execute("SELECT count(*) FROM draws").fetchone()[0] == 30
+    finally:
+        connection.close()
 
 
 # ─────────────────────────────────────────────────────────────

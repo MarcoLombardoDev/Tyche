@@ -45,9 +45,10 @@ class ArchivePanel(ctk.CTkFrame):
     def _build(self) -> None:
         sources = section(
             self, "Sources",
-            "Bootstrap the history in one request, then keep it current. "
-            "The bulk mirror covers 1997 to January 2020 and is no longer updated; "
-            "the scraper has never been run against the live site, so check what it imports.",
+            "Import a file you downloaded — the reliable route, and where this "
+            "archive came from. The bulk mirror needs no configuration but stops in "
+            "January 2020, and the scraper has never parsed a live page: both are "
+            "confirmed before anything is written.",
         )
         sources.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(sources.body, fg_color="transparent")

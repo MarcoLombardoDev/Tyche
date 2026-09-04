@@ -17,13 +17,25 @@ sniffs rather than demands. It tries, in order:
 
 1. Tyche's own canonical CSV, recognised by its header — so exporting an
    archive and re-importing it is lossless.
-2. The twelve-column bulk format, recognised by shape.
-3. A generic line scan: on each line, a date and then at least six distinct
-   integers in 1–90. This is the same positional rule the HTML scraper uses,
-   for the same reason, and it swallows most of the semicolon- and
-   tab-separated exports without needing to know which one it was handed.
+2. Any CSV with a **labelled header**: ``DATA;CONCORSO;N1;…;N6;JOLLY;SUPERSTAR``
+   and the variants of it the Italian archive sites export, in whichever of
+   ``;``, ``,`` or tab they chose. Column names beat positions whenever they
+   exist, and this is why.
+3. The twelve-column bulk format, recognised by shape.
+4. A generic line scan: on each line, a date and then at least six distinct
+   integers in 1–90. The last resort, for files with no header at all.
 
-If none of the three yields a single draw, that is an error and not an empty
+**The order matters, and step 2 was added because step 4 got it wrong.** The
+export from estrazioni.it puts the contest number *after* the date —
+``03/12/1997;87;20;36;39;41;72;76;88;00`` — and 87 is a perfectly good
+SuperEnalotto number, so the positional scan read the draw as
+``20 36 39 41 72 87`` and the Jolly as 76. Every value was plausible, nothing
+raised, and the archive would have been quietly wrong in every row that
+carries a contest number. The HTML scraper avoids the mirror image of this by
+ignoring integers *before* the date; no positional rule can cover both
+layouts, which is the argument for reading the header when there is one.
+
+If none of the four yields a single draw, that is an error and not an empty
 result. "Imported 0 draws" reads like "the file was already up to date", which
 is the one thing it never means here.
 """
@@ -35,7 +47,15 @@ import io
 import re
 from pathlib import Path
 
-from core.archive import CSV_HEADER, NUMBER_MAX, NUMBER_MIN, NUMBERS_PER_DRAW, ArchiveError, Draw
+from core.archive import (
+    CSV_HEADER,
+    NUMBER_MAX,
+    NUMBER_MIN,
+    NUMBERS_PER_DRAW,
+    ArchiveError,
+    Draw,
+    _parse_date,
+)
 from core.sources.base import DrawSource, ProgressCallback, SourceError, assign_contest_numbers
 from core.sources.bulk_archive import EXPECTED_COLUMNS, parse_bulk_csv
 from core.sources.html_table import _find_date
@@ -66,7 +86,7 @@ class LocalFileSource(DrawSource):
 
 def parse_any(text: str, source: str = "local-file") -> list[Draw]:
     """Try each known layout in turn. Raises SourceError if all of them fail."""
-    for parser in (_parse_canonical, _parse_bulk, _parse_freeform):
+    for parser in (_parse_canonical, _parse_labelled, _parse_bulk, _parse_freeform):
         try:
             draws = parser(text, source)
         except SourceError:
@@ -74,9 +94,10 @@ def parse_any(text: str, source: str = "local-file") -> list[Draw]:
         if draws:
             return draws
     raise SourceError(
-        "no draws recognised — expected either Tyche's own CSV header, the "
-        "twelve-column bulk format, or lines carrying a date followed by six "
-        "distinct numbers in 1–90"
+        "no draws recognised — expected Tyche's own CSV header, a labelled "
+        "header naming a date column and six number columns, the twelve-column "
+        "bulk format, or lines carrying a date followed by six distinct "
+        "numbers in 1–90"
     )
 
 
@@ -90,6 +111,93 @@ def _parse_canonical(text: str, source: str) -> list[Draw]:
             draws.append(Draw.from_row(row))
         except (ArchiveError, KeyError, ValueError):
             continue
+    return draws
+
+
+# Header aliases, upper-cased and stripped. Deliberately short lists: a name
+# nobody has actually seen in an export is a guess that makes a
+# misidentification more likely, not less.
+_DATE_NAMES = ("DATA", "DATE", "DATA ESTRAZIONE", "ESTRAZIONE", "GIORNO")
+_CONTEST_NAMES = ("CONCORSO", "N. CONCORSO", "NUMERO CONCORSO", "CONTEST", "ID")
+_JOLLY_NAMES = ("JOLLY", "NUMERO JOLLY", "J")
+_SUPERSTAR_NAMES = ("SUPERSTAR", "SUPER STAR", "SS", "STELLA")
+
+
+def _parse_labelled(text: str, source: str) -> list[Draw]:
+    """Read a CSV that names its columns, in ``;``, ``,`` or tab.
+
+    Six number columns are found by name — ``N1``…``N6``, ``NUMERO1``…, or a
+    bare ``1``…``6`` — and everything else is optional. A missing contest
+    number is filled in as the ordinal within its year, which is safe here
+    because these exports are whole-archive dumps; estrazioni.it stops
+    printing it from 2014 onwards and 2,008 of its 4,260 rows have the field
+    empty.
+    """
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        raise SourceError("empty file")
+    header_line = lines[0].lstrip("\ufeff")
+    delimiter = max((";", ",", "\t"), key=header_line.count)
+    if header_line.count(delimiter) < 6:
+        raise SourceError("no delimiter separating at least seven columns")
+
+    header = [c.strip().strip('"').upper() for c in header_line.split(delimiter)]
+    index = {name: i for i, name in enumerate(header)}
+
+    def find(names: tuple[str, ...]) -> int | None:
+        for name in names:
+            if name in index:
+                return index[name]
+        return None
+
+    date_at = find(_DATE_NAMES)
+    number_at = []
+    for n in range(1, 7):
+        column = find((f"N{n}", f"NUMERO{n}", f"NUMERO {n}", f"NUM{n}", str(n)))
+        if column is None:
+            break
+        number_at.append(column)
+    if date_at is None or len(number_at) != 6:
+        raise SourceError("header does not name a date column and six number columns")
+
+    contest_at = find(_CONTEST_NAMES)
+    jolly_at = find(_JOLLY_NAMES)
+    superstar_at = find(_SUPERSTAR_NAMES)
+
+    def cell(fields: list[str], at: int | None) -> str:
+        if at is None or at >= len(fields):
+            return ""
+        return fields[at].strip().strip('"')
+
+    rows: list[dict] = []
+    skipped = 0
+    for line in lines[1:]:
+        fields = line.split(delimiter)
+        try:
+            rows.append({
+                "date": _parse_date(cell(fields, date_at)),
+                "contest": int(cell(fields, contest_at) or 0) or None,
+                "numbers": [int(cell(fields, at)) for at in number_at],
+                "jolly": int(cell(fields, jolly_at) or 0),
+                "superstar": int(cell(fields, superstar_at) or 0),
+            })
+        except (ArchiveError, ValueError):
+            skipped += 1
+    if not rows:
+        raise SourceError("header looked right but no row parsed")
+    if skipped:
+        print(f"[LocalFile] skipped {skipped} unusable rows")
+
+    assign_contest_numbers(rows)
+    draws = []
+    for row in rows:
+        try:
+            draws.append(Draw(
+                date=row["date"], contest=row["contest"], numbers=tuple(row["numbers"]),
+                jolly=row["jolly"], superstar=row["superstar"], source=source,
+            ))
+        except ArchiveError as exc:
+            print(f"[LocalFile] dropping implausible row: {exc}")
     return draws
 
 

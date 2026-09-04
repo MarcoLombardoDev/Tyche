@@ -19,6 +19,7 @@ scripting, and neither needs a window:
     python main.py --update --yes       # ...and write it
     python main.py --import FILE --yes  # import a file you downloaded
     python main.py --forecast gap       # six numbers, no window
+    python main.py --export-sqlite data/tyche.db
 
 ``--update`` and ``--import`` are dry runs unless ``--yes`` is given. That is
 the same rule the Archive tab follows and it exists for the same reason: the
@@ -67,6 +68,10 @@ def _parse_args():
     parser.add_argument(
         "--forecast", nargs="?", const="frequency", metavar="METHOD", default=None,
         help=f"print one set of numbers and exit ({', '.join(METHODS)}; default frequency)",
+    )
+    parser.add_argument(
+        "--export-sqlite", metavar="FILE", default=None,
+        help="write the archive to a SQLite file for querying, and exit",
     )
     parser.add_argument(
         "--yes", "-y", action="store_true",
@@ -285,6 +290,16 @@ def main() -> int:
         return _run_update(args.yes)
     if args.import_path:
         return _run_import(args.import_path, args.yes)
+    if args.export_sqlite:
+        from core.export import export_sqlite
+
+        draws = _load_archive_or_explain()
+        if not draws:
+            return 1
+        path = export_sqlite(draws, args.export_sqlite)
+        print(f"{len(draws):,} draws written to {path}")
+        print("Tables: draws, picks (one row per number per draw), number_stats.")
+        return 0
     if args.forecast:
         if args.forecast not in METHODS:
             print(f"unknown method {args.forecast!r}; expected one of {', '.join(METHODS)}")

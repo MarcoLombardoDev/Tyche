@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 70 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 87, GUI included
+python -m pytest tests/ -q                                   # 83 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 100, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `70 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `83 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -228,24 +228,41 @@ dependency and is deliberately not in `requirements.txt`.
   also sends is a better bot signature than admitting to being a script. The
   agent is now `Tyche/0.1.0 (SuperEnalotto archive importer)`.
 
-- **The HTML scraper has never parsed a live page, and its four URLs are
+- **The archive comes from a manual import, and that is fine.** The user
+  supplies the estrazioni.it CSV export: 4,260 draws, 1997 to yesterday,
+  labelled header, zero integrity issues. `--import FILE --yes` is the whole
+  update procedure. The scraper exists to remove that step and does not work
+  yet; the interface is honest about which of the two produced what is on
+  disk.
+
+- **The labelled-header parser exists because the positional one got it
+  wrong.** estrazioni.it puts the contest number *after* the date —
+  `03/12/1997;87;20;36;39;41;72;76;88;00` — and 87 is a perfectly good
+  SuperEnalotto number, so the line scan read the draw as `20 36 39 41 72 87`
+  with a Jolly of 76. Every value plausible, nothing raised, and every row
+  carrying a contest number silently wrong. The HTML scraper avoids the mirror
+  image of this by ignoring integers *before* the date. No positional rule
+  covers both layouts, which is the whole argument for reading a header when
+  one exists: `_parse_labelled` runs before `_parse_freeform` in `parse_any`
+  and there is a test asserting that the order is what decides it.
+
+- **The HTML scraper has never parsed a live page, and its four URLs were
   wrong.** Every Italian lottery host is blocked by the egress policy of the
   environment this was written in, so the four candidate paths were guesses.
   The `forecast` CI job, which runs on a normal network, graded them:
 
-  | host | answer |
-  |---|---|
-  | www.superenalotto.it | HTTP 404 |
-  | www.estrazionedellotto.it | HTTP 404 |
-  | www.lottologia.com | HTTP 404 |
-  | www.estrazionilottooggi.it | TLS verification failed |
+  | host | answer | then |
+  |---|---|---|
+  | www.superenalotto.it | HTTP 404 | `/archivio-estrazioni` exists; the per-year path under it is still a guess |
+  | www.estrazionedellotto.it | HTTP 404 | **fixed** — its homepage links `/superenalotto/risultati/archivio-superenalotto-2026` |
+  | www.lottologia.com | HTTP 404 | answers, but publishes no archive link on its homepage |
+  | www.estrazionilottooggi.it | TLS failure | **dropped** — a broken certificate on two independent networks, and Tyche will not skip verification |
 
-  That is a much better position than it sounds. **The hosts are up and
-  reachable; only the paths are wrong**, which is a one-line fix each rather
-  than an open question about whether any of this can work. The `scraper-recon`
-  job (manual dispatch) prints the archive-looking links each homepage
-  actually offers, which is the information needed to make that fix and the
-  one thing a blocked sandbox cannot obtain.
+  The hosts are up; only the paths were wrong. The `scraper-recon` job (manual
+  dispatch) read what each homepage actually links to, which produced the one
+  correction above and is the only way to obtain that information from a
+  blocked sandbox. The default is now the corrected estrazionedellotto.it
+  path, with estrazioni.it second.
 
   The parser itself is positional rather than class-based, so it should
   survive a redesign; that is a claim about its structure, not a test result.
@@ -254,14 +271,21 @@ dependency and is deliberately not in `requirements.txt`.
   the four URLs, then turn on page saving and check the parser against what
   comes back.**
 
-- **The bulk mirror is not merely old, it is dead.** Its HTTP response carries
-  `last-modified: Fri, 24 Jan 2020`. Searching for a replacement that is both
-  current and machine-readable found nothing reachable: SourceForge's project
-  pages, every Italian lottery host, Hugging Face and Wikipedia are all
-  blocked by the same egress policy, and there is no GitHub repository
-  publishing this data. Until the scraper is fixed against a real page, manual
-  import is the only route to anything after January 2020, and the interface
-  says so rather than implying the archive is current.
+- **The bulk mirror is not merely old, it is dead, and it is also wrong.** Its
+  HTTP response carries `last-modified: Fri, 24 Jan 2020`. Against the
+  estrazioni.it export it disagrees about the six numbers on **12 dates** and
+  about the contest id on 5 more, and two of those disagreements
+  (2012-11-03, 2013-04-27) are entirely different combinations rather than a
+  digit out of place. It remains useful as a zero-configuration bootstrap and
+  as the fixture the parser was built against. It is not a source of truth.
+
+- **`repair_year_offset` was verified against ground truth, and it is
+  correct.** The estrazioni.it export is an independent record of the same
+  nine draws, and all nine agree with the repair — including 1999/2 and
+  1999/8, the two that share a date with their duplicate, that no test on
+  dates can separate, and that the first implementation swapped. The
+  position-based tie-break is right. This is the strongest kind of evidence a
+  heuristic like that can get and it is worth not throwing away.
 
 - **One set of defaults, and a test that enforces it.** `DEFAULT_SETTINGS` in
   `core/data_manager.py` is the only copy; `config/settings.template.json` is
@@ -297,20 +321,43 @@ the next person to wonder has a number instead of two lists to eyeball. Do not
 turn it into an assertion: it is a fact about *this* input, and feeding the
 model the presence or gap representation should change it.
 
-## The sum-of-numbers finding
+## The sum-of-numbers finding, and the claim I got wrong about it
 
-`sum_distribution_test` reports z = +4.20, p ≈ 3e-5 on the bulk archive: the
-mean sum of the six numbers is 277.7 where 273.0 is expected, and the
-correlation between a number and its draw count is +0.41. It is stable across
-every sub-period tested rather than driven by one era.
+`sum_distribution_test` reports z = +3.73, p = 0.0002 on the 4,260-draw
+archive: the mean sum of the six numbers is 276.5 where 273.0 is expected.
+
+**The first write-up of this said the effect was "stable across every
+sub-period tested rather than driven by one era". That was wrong**, and it was
+wrong for a reason worth remembering: the archive it was measured on stopped
+in January 2020, so "every sub-period" meant two coarse slices of old data.
+With the current archive the picture is not stability, it is decay:
+
+| period | draws | mean sum |
+|---|---|---|
+| 1997–1999 | 217 | 282.3 |
+| 2000s | 1,287 | 278.5 |
+| 2010s | 1,565 | 276.2 |
+| 2020s | 1,191 | 273.8 |
+
+Expected 273.0. On the 2020s alone z = +0.42 and the correlation between a
+number and its draw count falls from +0.37 across the whole archive to +0.05.
+The effect is real in the old data — it reproduces on two independent sources,
+so it is not an artefact of the mirror — and it is absent from the last six
+years.
+
+Two lessons, both cheap to state and expensive to relearn:
+
+- **A trend read off a truncated archive looks like a constant.** Nothing
+  about the analysis was wrong; the data stopped before the interesting part.
+  This is the concrete argument for the freshness indicator being on screen
+  rather than in the documentation.
+- **"Stable across sub-periods" needs the sub-periods to span the question.**
+  Two twelve-year slices cannot show a twenty-five-year decay.
 
 **Do not remove the test to make the output tidy, and do not present the
-finding as established.** It rests on a single unverified mirror that is
-already known to be wrong about nine rows, and it has not been checked against
-the official archive — which is the obvious next step for a session with
-network access. An artefact of the file is more likely than a property of the
-game. Either way it is far too small to matter to a player, and the README
-says so.
+finding as established.** It is one statistic on two sources that may share an
+ancestor, and it is far too small to matter to a player even where it was
+strongest. The README says all of this.
 
 ## Editing the README
 
@@ -323,6 +370,32 @@ unless there is a real need, and count the `$` before pushing if there ever is.
 
 Heading anchors follow GitHub's slug rules: lowercase, punctuation stripped,
 spaces mapped to `-` and **not collapsed**, so `## A & B` is `#a--b`.
+
+## Why the archive is a CSV and not a database
+
+Asked directly, and worth recording with the measurements rather than as a
+preference. On the 4,260-draw archive:
+
+```
+CSV      238 KB on disk, 80 ms to load
+SQLite   316 KB on disk,  7 ms to load
+```
+
+SQLite reads eleven times faster, which sounds decisive until it is expressed
+as what it is: **73 milliseconds saved, once, at startup**, for a file a third
+larger. Building the feature matrices costs 63 ms and the five independence
+tests 52 ms, so the CSV load is the same order as work the program does
+anyway. Against that, the CSV greps, diffs inside a commit, and opens in a
+spreadsheet.
+
+There is no volume problem here. Four thousand rows is not a lot of rows.
+
+What would change the answer, and none of it is true yet: per-draw prize tiers
+and payouts (ten times the rows and a second table), a prediction log growing
+without bound, or a real need for indexed ad-hoc queries rather than one full
+scan. Until then `core/export.py` and `--export-sqlite` give SQL over the
+archive without moving the storage, and the database is a disposable snapshot
+that nothing reads back.
 
 ## Licensing
 

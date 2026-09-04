@@ -542,7 +542,10 @@ class Freshness:
         if self.last_date is None:
             return "The archive is empty."
         if not self.stale:
-            return f"Current as of {self.last_date} ({self.days_behind} days ago)."
+            when = "today" if self.days_behind == 0 else (
+                "1 day ago" if self.days_behind == 1 else f"{self.days_behind} days ago"
+            )
+            return f"Current as of {self.last_date} ({when})."
         return (
             f"Last draw on record is {self.last_date}, {self.days_behind} days ago — "
             f"roughly {self.estimated_missing} draws missing at the archive's own "

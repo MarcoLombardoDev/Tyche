@@ -58,18 +58,41 @@ from core.sources.base import (
 # ``{year}`` is substituted per request. Kept as a setting rather than a
 # constant because the day this path changes, the fix should not need a
 # release — see config/settings.template.json.
-DEFAULT_URL_TEMPLATE = "https://www.superenalotto.it/archivio-estrazioni/{year}"
+DEFAULT_URL_TEMPLATE = (
+    "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}"
+)
 
 # Tried in order after whatever the user configured, and only until one of
-# them yields rows. Since none of these has been reached from a machine that
-# could test them, one URL is one guess; four is four guesses, and the cost of
-# a wrong one is a failed request rather than bad data — the parser rejects
-# anything that does not look like a draw. Ordered official first.
+# them yields rows. The cost of a wrong one is a failed request rather than
+# bad data: the parser rejects anything that does not look like a draw.
+#
+# The first version of this list was four guesses made from a sandbox that
+# could not reach any of the hosts, and all four missed — three 404s and a TLS
+# failure. The `scraper-recon` CI job then read what the homepages actually
+# link to, and these are the corrections:
+#
+#   estrazionedellotto.it   its homepage links
+#                           /superenalotto/risultati/archivio-superenalotto-2026
+#                           directly, so the {year} form below is that link
+#                           with the year substituted. This is the one entry
+#                           here taken from evidence rather than shape.
+#   estrazioni.it           the source the archive currently comes from, via
+#                           its CSV export. The page form is included because
+#                           it is known to exist; the export URL is not known
+#                           and is the next thing to find.
+#   superenalotto.it        /archivio-estrazioni exists and is linked; the
+#                           per-year path under it is still a guess.
+#   lottologia.com          answers, but publishes no archive link on its
+#                           homepage. Kept last, as a long shot.
+#
+# estrazionilottooggi.it has been dropped: it fails TLS verification from two
+# independent networks, which is a broken certificate rather than a blocked
+# egress, and Tyche will not skip verification to reach it.
 FALLBACK_URL_TEMPLATES = (
+    "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}",
+    "https://estrazioni.it/index.php?p=home&anno={year}&tipo=superenalotto",
     "https://www.superenalotto.it/archivio-estrazioni/{year}",
-    "https://www.estrazionedellotto.it/superenalotto/archivio-{year}",
     "https://www.lottologia.com/superenalotto/archivio-estrazioni/?anno={year}",
-    "https://www.estrazionilottooggi.it/superenalotto/archivio-superenalotto-{year}",
 )
 
 _DATE_PATTERNS = (

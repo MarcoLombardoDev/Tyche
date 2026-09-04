@@ -41,6 +41,8 @@ python main.py --validate 500           # walk-forward backtest, baselines only
 python main.py --update                 # refresh the archive — dry run
 python main.py --update --yes           # ...and write it
 python main.py --import FILE --yes      # import a file you downloaded
+python main.py --forecast timesfm       # six numbers, no window
+python main.py --export-sqlite data/tyche.db
 ```
 
 `--update` and `--import` report what they would change and write nothing
@@ -75,17 +77,21 @@ Face. Everything except the Predict tab's TimesFM option works without them.
 
 Three sources, none of which is both current and verified:
 
-- **Bulk archive** — one request, the whole history. It is the only source
-  that has been run end to end, and it stops in **January 2020**; the mirror
-  is not maintained. It bootstraps an archive, it cannot keep one.
-- **Per-year scrape** — the source that would keep the archive current, and
-  the one that has **never been run against the live site**, because every
-  Italian lottery host was unreachable from the environment it was written
-  in. It parses positionally rather than by CSS class, so it is structurally
-  robust and completely untested. Check what it imports.
-- **Manual import** — any CSV, TXT or TSV you downloaded yourself. Tyche
-  sniffs its own format, the bulk twelve-column format, and any file with a
-  date and six numbers per line. This one cannot break.
+- **Manual import** — any CSV, TXT or TSV you downloaded yourself. This is
+  the one Tyche's own archive comes from: the export from estrazioni.it, a
+  semicolon-separated file with a labelled header, **4,260 draws from
+  3 December 1997 to yesterday**. The importer reads its own format, any file
+  with a labelled header, the twelve-column bulk format, and as a last resort
+  any file with a date and six numbers per line. It cannot break, and it does
+  not need the network.
+- **Bulk archive** — one request, the whole history, no header. Useful as a
+  bootstrap and **it stops in January 2020**: the mirror's own response says
+  `last-modified: 24 Jan 2020`. It is also wrong in places — see below.
+- **Per-year scrape** — the source that would keep the archive current
+  without a manual download. Its URLs were four guesses made from an
+  environment that could not reach any of the hosts, and all four missed. One
+  has since been corrected from evidence; the rest are still guesses. Check
+  what it imports.
 
 The Archive tab shows an **integrity report** next to the draw list, because
 the bulk mirror is wrong in a way no per-row check can see: the first nine
@@ -94,8 +100,8 @@ and two pairs of different draws sharing a date. Tyche detects and repairs
 that on import, from evidence rather than a hardcoded list — see
 `core/archive.py::repair_year_offset`.
 
-Two consequences of having one verified-but-dead source and one live-but-
-unverified one:
+Two consequences of having one source that is trustworthy but manual and one
+that is automatic but unverified:
 
 - **Imports are supervised.** Before anything is written, Tyche dry-runs the
   merge and shows what it would change: rows added, rows that *contradict* a
@@ -117,40 +123,51 @@ unverified one:
 
 ## What the tests actually found
 
-Run against the bulk archive: **3,076 draws, 3 December 1997 to 21 January 2020**.
+Run against **4,260 draws, 3 December 1997 to 3 September 2026**.
 
 | Test | Result |
 |---|---|
-| Uniformity of the 90 numbers | χ² = 96.9 on 89 dof, p = 0.27 — no bias |
-| Gap (*ritardo*) distribution | χ² = 50.5 on 50 dof, p = 0.45 — gaps are geometric, nothing is ever "due" |
-| Serial independence, draw t → t+1 | χ² = 0.16, p = 0.69 — the last draw tells you nothing |
-| Repeats between consecutive draws | χ² = 1.21 on 3 dof, p = 0.75 — mean overlap 0.396 against 0.400 expected |
-| Sum of the six numbers | z = +4.20, **p = 0.00003** — see below |
+| Uniformity of the 90 numbers | χ² = 94.3 on 89 dof, p = 0.33 — no bias |
+| Gap (*ritardo*) distribution | χ² = 45.7 on 50 dof, p = 0.64 — gaps are geometric, nothing is ever "due" |
+| Serial independence, draw t → t+1 | χ² = 0.95, p = 0.33 — the last draw tells you nothing |
+| Repeats between consecutive draws | χ² = 2.10 on 3 dof, p = 0.55 — mean overlap 0.391 against 0.400 expected |
+| Sum of the six numbers | z = +3.73, **p = 0.0002** — see below |
 
 Four of five are exactly what a fair game produces. The fifth is not, and it
-is the one honest finding in this repository:
+is the one real finding here — but not the finding it first appeared to be.
 
-> **The mean sum of the six numbers is 277.7 against an expected 273.0.** The
-> effect is small (about +0.8 per number, a tilt of under 2%), stable across
-> every sub-period tested, and shows as a +0.41 correlation between a number
-> and how often it has been drawn — numbers 46–90 come up about 5% more often
-> than 1–45.
+**The mean sum of the six numbers is 276.5 against an expected 273.0.** It was
+first measured on a different archive entirely, and the obvious explanation
+was that the file was wrong. It is not: the effect reproduces on a second,
+independent source. What it does instead is *fade*.
 
-Before treating that as real: it was measured on **one unverified mirror**,
-which is already known to be wrong about nine of its rows, and it has not been
-checked against the official archive. It is more likely to be an artefact of
-that file than a property of the game. And even taken at face value it is
-worthless to a player: a 5% tilt does not begin to close a gap where the prize
-fund is a fixed minority share of the stakes.
+| Period | Draws | Mean sum |
+|---|---|---|
+| 1997–1999 | 217 | 282.3 |
+| 2000s | 1,287 | 278.5 |
+| 2010s | 1,565 | 276.2 |
+| 2020s | 1,191 | **273.8** |
 
-The walk-forward backtest is the part that settles the practical question.
-Over the last 800 draws, six picks each:
+Expected: 273.0. On the last 1,191 draws the test finds nothing at all —
+z = +0.42, and the correlation between a number and how often it is drawn
+falls from +0.37 over the whole archive to +0.05. Something was pulling the
+draw towards high numbers, it got steadily weaker for twenty-five years, and
+for the last six there has been nothing to see. Which is roughly the shape you
+would expect if it were ever physical.
+
+Two things it is not. It is not a reason to play high numbers: the tilt is
+gone, and even at its strongest it was under 2% per number against a prize
+fund that keeps a fixed minority share of every euro staked. And it is not
+established: it is one statistic on two sources that may share an ancestor.
+
+The walk-forward backtest settles the practical question. The last 1,000
+draws, six picks each:
 
 | Method | Hits per draw | Against chance | p |
 |---|---|---|---|
-| random | 0.3700 | −24.0 | 0.15 |
-| frequency ("hot") | 0.3987 | −1.0 | 0.95 |
-| gap (*ritardo*) | 0.3975 | −2.0 | 0.91 |
+| random | 0.3790 | −21.0 | 0.26 |
+| frequency ("hot") | 0.3930 | −7.0 | 0.71 |
+| gap (*ritardo*) | 0.3900 | −10.0 | 0.59 |
 
 Chance is 0.4000. Nothing beats it, including the 330-million-parameter model.
 
@@ -171,6 +188,28 @@ Exact combinatorics on a 90-number wheel, six drawn:
 These hold whatever numbers are played. Prizes are pari-mutuel — a share of
 the stakes rather than a fixed payout — so the operator keeps a fixed cut and
 the expected return on a line is below its price, always.
+
+---
+
+## Querying the archive
+
+The archive is a CSV because at 4,260 rows that is the right answer: 238 KB,
+80 ms to load, and it greps, diffs and opens in a spreadsheet. SQLite reads it
+in 7 ms, which is eleven times faster and saves 73 milliseconds once per
+launch, against a file a third larger — for comparison, building the feature
+matrices costs 63 ms.
+
+So SQL gets an export rather than the storage layer:
+
+```
+python main.py --export-sqlite data/tyche.db
+```
+
+Three tables: `draws` (one row per draw, with the sum precomputed), `picks`
+(one row per number per draw, indexed — this is what makes "how often did 37
+come up in 2024" a `GROUP BY`), and `number_stats` (the frequency table, with
+each count's expectation beside it). The database is a disposable snapshot;
+nothing in Tyche reads it back.
 
 ---
 
@@ -226,13 +265,13 @@ native multivariate forecasting and is not a drop-in replacement for what
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                    # 70 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 87, GUI included
+python -m pytest tests/ -q                                    # 83 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 100, GUI included
 python -m ruff check .
 ```
 
 The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "70 passed, 1 skipped" means the entire interface went untested.
+reporting "83 passed, 1 skipped" means the entire interface went untested.
 `TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
 intend to have verified a GUI change. CI sets it.
 

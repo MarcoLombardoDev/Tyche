@@ -62,7 +62,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 
     # --- Sources ---
     "bulk_archive_url": "https://downloads.sourceforge.net/project/superenalotto/EnalStorico.CSV",
-    "html_archive_url": "https://www.superenalotto.it/archivio-estrazioni/{year}",
+    "html_archive_url": (
+        "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}"
+    ),
     "auto_repair_labels": True,
 
     # --- Prediction ---
