@@ -472,6 +472,21 @@ def test_local_file_parser_raises_on_an_unrecognisable_file():
         parse_any("this file contains no draws at all\n")
 
 
+def test_network_failures_are_reported_in_one_short_clause():
+    """Four hosts times 250 characters of nested requests exception is a
+    sentence nobody reads to the end."""
+    import requests
+
+    from core.sources.base import _reason
+
+    assert _reason(requests.exceptions.ProxyError("x" * 300)) == (
+        "blocked or unreachable through the proxy"
+    )
+    assert _reason(requests.exceptions.ConnectTimeout("x" * 300)) == "timed out"
+    assert _reason(requests.exceptions.ConnectionError("x" * 300)) == "could not connect"
+    assert len(_reason(ValueError("y" * 300))) <= 120
+
+
 def test_scraper_puts_the_configured_template_first_and_does_not_repeat_it():
     from core.sources.html_table import DEFAULT_URL_TEMPLATE, HtmlTableSource
 

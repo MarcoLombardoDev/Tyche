@@ -10,7 +10,7 @@ archive and forecasts it with TimesFM 3.0. Same shape as Argus: logic in
 `core/`, interface in `gui/`, no GUI imports below `gui/`.
 
 ```
-main.py       entry point, plus --check and --validate for headless runs
+main.py       entry point, plus --check/--validate/--update/--import headless
 core/         archive, sources, features, statistics, forecasting (no GUI imports)
 core/sources/ the three ways draw history gets in
 gui/          one module per panel
@@ -166,6 +166,11 @@ dependency and is deliberately not in `requirements.txt`.
   "when is the next one", which nothing here asks. The cadence is read off the
   last fifty draws rather than hardcoded, because the schedule has changed
   three times already.
+
+- **Every write path goes through `preview_merge`, including the headless
+  one.** `--update` and `--import` are dry runs without `--yes` and refuse to
+  write even with it when the preview is unsafe. `main._apply` is shared by
+  both so they cannot drift into disagreeing about when writing is safe.
 
 - **Imports are supervised, and the scraper always is.** `preview_merge`
   dry-runs a merge and reports rows that would *contradict* a stored draw plus

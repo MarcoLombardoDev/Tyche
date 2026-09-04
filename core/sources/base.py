@@ -89,10 +89,33 @@ def http_get(url: str, timeout: int = DEFAULT_TIMEOUT) -> bytes:
             allow_redirects=True,
         )
     except Exception as exc:  # requests raises a family, all equally fatal here
-        raise SourceError(f"{url}: {exc}") from exc
+        raise SourceError(f"{url}: {_reason(exc)}") from exc
     if response.status_code != 200:
         raise SourceError(f"{url}: HTTP {response.status_code}")
     return response.content
+
+
+def _reason(exc: Exception) -> str:
+    """A requests exception as one short clause.
+
+    ``str()`` on a ``requests`` connection error is three nested exceptions and
+    about 250 characters, most of it the URL again. The scraper tries four
+    hosts and reports every failure, so the untruncated version produces a
+    thousand-character sentence that nobody reads to the end — and the useful
+    part, "the host could not be reached", was in the first four words. The
+    original is still chained for anyone with a debugger.
+    """
+    name = type(exc).__name__
+    if "Proxy" in name:
+        return "blocked or unreachable through the proxy"
+    if "Timeout" in name:
+        return "timed out"
+    if "SSL" in name:
+        return "TLS verification failed"
+    if "ConnectionError" in name:
+        return "could not connect"
+    text = str(exc).splitlines()[0] if str(exc) else name
+    return text if len(text) <= 120 else f"{text[:117]}…"
 
 
 def assign_contest_numbers(rows: list[dict]) -> list[dict]:

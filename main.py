@@ -13,8 +13,17 @@ run without a display — the reality check and the backtest are the parts worth
 scripting, and neither needs a window:
 
     python main.py --version
-    python main.py --check          # the five independence tests
-    python main.py --validate 500   # walk-forward backtest, baselines only
+    python main.py --check              # the five independence tests
+    python main.py --validate 500       # walk-forward backtest, baselines only
+    python main.py --update             # refresh the archive (dry run)
+    python main.py --update --yes       # ...and write it
+    python main.py --import FILE --yes  # import a file you downloaded
+
+``--update`` and ``--import`` are dry runs unless ``--yes`` is given. That is
+the same rule the Archive tab follows and it exists for the same reason: the
+HTML scraper has never been checked against a real page, the archive has no
+undo, and a cron job that writes whatever it parsed is the one shape of this
+feature that can quietly destroy the history.
 
 ``--version`` is handled before ``gui.app`` is imported. Importing the GUI
 pulls in CustomTkinter and Tk; asking a frozen bundle for its version number
@@ -44,6 +53,18 @@ def _parse_args():
     parser.add_argument(
         "--validate", type=int, metavar="N", default=None,
         help="walk-forward backtest over the last N draws (baselines only) and exit",
+    )
+    parser.add_argument(
+        "--update", action="store_true",
+        help="refresh the archive from the configured sources and exit",
+    )
+    parser.add_argument(
+        "--import", dest="import_path", metavar="FILE", default=None,
+        help="import draws from a file you downloaded, and exit",
+    )
+    parser.add_argument(
+        "--yes", "-y", action="store_true",
+        help="write the result of --update or --import instead of only reporting it",
     )
     args, unknown = parser.parse_known_args()
     if unknown:
@@ -101,6 +122,95 @@ def _run_validation(n_draws: int) -> int:
     return 0
 
 
+def _apply(incoming, write: bool) -> int:
+    """Report what an import would do, and do it when asked.
+
+    Shared by --update and --import so the two cannot drift into disagreeing
+    about when it is safe to write.
+    """
+    from core.archive import load_archive, merge_draws, preview_merge, save_archive
+    from core.data_manager import ARCHIVE_PATH
+
+    existing = load_archive(ARCHIVE_PATH)
+    preview = preview_merge(existing, incoming)
+    print(f"\n{preview.describe()}")
+    for issue in preview.new_issues:
+        print(f"  [{issue.severity}] {issue.message}")
+    for line in preview.conflicts[:10]:
+        print(f"  conflict: {line}")
+
+    if not preview.added and not preview.updated:
+        return 0
+    if not write:
+        print("\nDry run — nothing written. Pass --yes to apply.")
+        return 0
+    if not preview.safe:
+        print(
+            "\nRefusing to write: this import contradicts stored draws or would "
+            "introduce integrity errors. Review it in the Archive tab, which can "
+            "show it row by row."
+        )
+        return 1
+
+    merged, added, updated = merge_draws(existing, incoming)
+    save_archive(ARCHIVE_PATH, merged)
+    print(f"\nWritten: {added} added, {updated} updated, {len(merged):,} on record.")
+    return 0
+
+
+def _run_update(write: bool) -> int:
+    """Bootstrap from the bulk mirror, then try the per-year scrape.
+
+    Both are attempted and a failure of either is reported rather than fatal:
+    the bulk source is reachable and dead, the scraper is live and unproven,
+    and on any given day it is entirely normal for exactly one of them to
+    work.
+    """
+    from datetime import date
+
+    from core.archive import load_archive
+    from core.data_manager import ARCHIVE_PATH, load_settings
+    from core.sources import BulkArchiveSource, HtmlTableSource, SourceError
+
+    settings = load_settings()
+    existing = load_archive(ARCHIVE_PATH)
+    incoming = []
+
+    def report(message, fraction=0.0):
+        print(f"  {message}")
+
+    if not existing:
+        print("No archive yet — bootstrapping from the bulk mirror.")
+        try:
+            incoming += BulkArchiveSource(settings["bulk_archive_url"]).fetch(report)
+        except SourceError as exc:
+            print(f"  bulk archive failed: {exc}")
+
+    last_year = existing[-1].year if existing else date.today().year
+    years = list(range(last_year, date.today().year + 1))
+    print(f"Scraping {years[0]}–{years[-1]}.")
+    try:
+        incoming += HtmlTableSource(settings["html_archive_url"], years).fetch(report)
+    except SourceError as exc:
+        print(f"  scrape failed: {exc}")
+
+    if not incoming:
+        print("\nNo source produced anything. Download a file by hand and use --import.")
+        return 1
+    return _apply(incoming, write)
+
+
+def _run_import(path: str, write: bool) -> int:
+    from core.sources import LocalFileSource, SourceError
+
+    try:
+        incoming = LocalFileSource(path).fetch(lambda m, f=0.0: print(f"  {m}"))
+    except SourceError as exc:
+        print(f"Import failed: {exc}")
+        return 1
+    return _apply(incoming, write)
+
+
 def main() -> int:
     args = _parse_args()
     if args.version:
@@ -113,6 +223,10 @@ def main() -> int:
         return _run_check()
     if args.validate is not None:
         return _run_validation(args.validate)
+    if args.update:
+        return _run_update(args.yes)
+    if args.import_path:
+        return _run_import(args.import_path, args.yes)
 
     from gui.app import TycheApp
 

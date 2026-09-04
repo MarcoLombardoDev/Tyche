@@ -33,13 +33,21 @@ than to assert it.
 purple-on-black balls of the Predict tab look exactly as confident whichever
 of them produced them.*
 
-There is also a command line for the two parts worth scripting:
+There is also a command line, for the parts worth scripting:
 
 ```
-python main.py --version
-python main.py --check          # the five independence tests
-python main.py --validate 500   # walk-forward backtest, baselines only
+python main.py --check                  # the five independence tests
+python main.py --validate 500           # walk-forward backtest, baselines only
+python main.py --update                 # refresh the archive — dry run
+python main.py --update --yes           # ...and write it
+python main.py --import FILE --yes      # import a file you downloaded
 ```
+
+`--update` and `--import` report what they would change and write nothing
+unless `--yes` is given, and they refuse `--yes` outright when the import
+would contradict a stored draw. The archive has no undo and one of the two
+network sources has never been verified; a cron job that writes whatever it
+parsed is the one shape of this feature that can quietly destroy the history.
 
 ---
 
