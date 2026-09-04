@@ -174,6 +174,30 @@ jobs:
           assert spread > 0, "every number scored identically — the ranking would be arbitrary"
           print(f"90 finite scores, spread {spread:.6f}")
           print("top six:", sorted(scores, key=scores.get, reverse=True)[:6])
+
+          # How much of the forecast is just the last value of each series?
+          # The first run of this job showed TimesFM's top six sharing five
+          # numbers with the plain frequency baseline and its spread matching
+          # to four decimals, which is what a persistence forecast looks like.
+          # Measured rather than asserted: it is a fact about this data, not a
+          # contract the model owes anyone.
+          import numpy as np
+
+          from core.features import build_context
+
+          context = build_context(
+              draws,
+              representation=settings["representation"],
+              window=int(settings["frequency_window"]),
+              context_length=int(settings["context_length"]),
+          )
+          last = context[:, -1].astype(float)
+          predicted = np.array([scores[n] for n in range(1, 91)])
+          correlation = float(np.corrcoef(last, predicted)[0, 1])
+          drift = float(np.mean(np.abs(predicted - last)))
+          print(f"correlation with the last observed value: {correlation:+.4f}")
+          print(f"mean absolute change from it: {drift:.6f} "
+                f"({drift / max(spread, 1e-12):.1%} of the score spread)")
           PY
 
       - name: Drive the walk-forward harness through the real model
@@ -219,4 +243,68 @@ jobs:
               print(result.summary())
           print(f"\n{report.verdict()}")
           print(f"\n{elapsed:.0f}s for {scored} draws — {elapsed / scored:.1f}s per model call")
+          PY
+
+  scraper-recon:
+    # A diagnostic, not a test, and manual only.
+    #
+    # core/sources/html_table.py has never met a live page: every Italian
+    # lottery host is blocked from the environment it was written in, so its
+    # four candidate URLs are four guesses. The first real run graded them —
+    # three answered HTTP 404 and one failed TLS verification, which is a much
+    # better position than it sounds. The hosts are up and reachable; only the
+    # paths are wrong, and a wrong path is a one-line fix.
+    #
+    # This job prints the archive-looking links each homepage actually offers,
+    # which is the information needed to make that fix and the one thing a
+    # blocked sandbox cannot obtain. A handful of GETs to public pages, under
+    # Tyche's own honest user agent, on demand.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: What do these hosts actually publish?
+        run: |
+          python - <<'PY'
+          import re
+
+          from core.sources.base import USER_AGENT
+          import requests
+
+          HOSTS = [
+              "https://www.superenalotto.it/",
+              "https://www.estrazionedellotto.it/",
+              "https://www.lottologia.com/",
+              "https://www.estrazionilottooggi.it/",
+          ]
+          LINK = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+          INTERESTING = ("archivio", "estrazioni", "storico", "archive")
+
+          for host in HOSTS:
+              print(f"\n=== {host}")
+              try:
+                  response = requests.get(
+                      host, timeout=20,
+                      headers={"User-Agent": USER_AGENT, "Accept": "*/*"},
+                  )
+              except Exception as exc:
+                  print(f"  unreachable: {type(exc).__name__}")
+                  continue
+              print(f"  HTTP {response.status_code}, {len(response.content):,} bytes")
+              if response.status_code != 200:
+                  continue
+              seen = []
+              for href in LINK.findall(response.text):
+                  low = href.lower()
+                  if any(word in low for word in INTERESTING) and href not in seen:
+                      seen.append(href)
+              for href in seen[:25]:
+                  print(f"    {href}")
+              if not seen:
+                  print("    no archive-looking links on the homepage")
           PY

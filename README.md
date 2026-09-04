@@ -194,6 +194,20 @@ Two details that are easy to get wrong:
   white noise looks like a trend. Tyche defaults to frequency and offers
   presence, which forecasts to a flat line — worth seeing once.
 
+And what it does with them, from a real run on a machine that could download
+the weights:
+
+```
+frequency  top six: 15 32 37 52 66 90    score spread 0.100000
+timesfm    top six: 32 37 52 66 79 90    score spread 0.099857
+```
+
+Five of the six numbers are the same and the spread matches the input series'
+own to four decimals. Given ninety series with no signal in them, the model
+predicts approximately the last value of each — which is exactly right, and
+which makes its ranking a copy of the hot-numbers baseline. That is the whole
+result in two lines.
+
 ---
 
 ## Licensing

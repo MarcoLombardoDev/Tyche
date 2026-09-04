@@ -228,17 +228,31 @@ dependency and is deliberately not in `requirements.txt`.
   also sends is a better bot signature than admitting to being a script. The
   agent is now `Tyche/0.1.0 (SuperEnalotto archive importer)`.
 
-- **The HTML scraper has never run against a live page.** Every Italian
-  lottery host — superenalotto.it, sisal.it, lottologia.com,
-  estrazionilottooggi.it, and Wikipedia for good measure — is blocked by the
-  egress policy of the environment this was written in. The parser is
-  positional rather than class-based, which makes it structurally robust and
-  no more tested for that. Its URL is a setting so a wrong path can be fixed
-  without a release. It now tries four candidate hosts in order and takes the
-  first that yields rows, and it can save every page it fetches
-  (`data/fetched-pages/`, off by default). **First job for a session with real
-  network access: turn that on, save one live page, look at it, and fix the
-  parser against it.**
+- **The HTML scraper has never parsed a live page, and its four URLs are
+  wrong.** Every Italian lottery host is blocked by the egress policy of the
+  environment this was written in, so the four candidate paths were guesses.
+  The `forecast` CI job, which runs on a normal network, graded them:
+
+  | host | answer |
+  |---|---|
+  | www.superenalotto.it | HTTP 404 |
+  | www.estrazionedellotto.it | HTTP 404 |
+  | www.lottologia.com | HTTP 404 |
+  | www.estrazionilottooggi.it | TLS verification failed |
+
+  That is a much better position than it sounds. **The hosts are up and
+  reachable; only the paths are wrong**, which is a one-line fix each rather
+  than an open question about whether any of this can work. The `scraper-recon`
+  job (manual dispatch) prints the archive-looking links each homepage
+  actually offers, which is the information needed to make that fix and the
+  one thing a blocked sandbox cannot obtain.
+
+  The parser itself is positional rather than class-based, so it should
+  survive a redesign; that is a claim about its structure, not a test result.
+  It can save every page it fetches (`data/fetched-pages/`, off by default).
+  **First job for a session with real network access: run `scraper-recon`, fix
+  the four URLs, then turn on page saving and check the parser against what
+  comes back.**
 
 - **The bulk mirror is not merely old, it is dead.** Its HTTP response carries
   `last-modified: Fri, 24 Jan 2020`. Searching for a replacement that is both
@@ -257,6 +271,31 @@ dependency and is deliberately not in `requirements.txt`.
   `useExchangeBalance` is `True` in one and `false` in the other — so a setting
   that reads as safe in the template is live in the running app. Do not
   reproduce that here; regenerate and commit instead.
+
+## What TimesFM actually does here
+
+The first real run of the `forecast` job produced this, on the 3,076-draw
+archive with the default rolling-frequency series:
+
+```
+frequency  top six: 15 32 37 52 66 90    score spread 0.100000
+timesfm    top six: 32 37 52 66 79 90    score spread 0.099857
+```
+
+Five of six numbers shared, and a spread agreeing to four decimals with the
+input series' own. **On this data the 330M-parameter foundation model is a
+persistence forecaster**: handed ninety series with no signal in them, it
+predicts approximately the last value of each, which is the correct thing for
+a good forecaster to do and leaves its ranking a copy of the frequency
+baseline's. It also explains why the two score identically in validation —
+they are very nearly the same method.
+
+This is an observation from one run, not a theorem. The `forecast` job now
+measures it directly, printing the correlation between the forecast and the
+last observed value of each series and the mean absolute change from it, so
+the next person to wonder has a number instead of two lists to eyeball. Do not
+turn it into an assertion: it is a fact about *this* input, and feeding the
+model the presence or gap representation should change it.
 
 ## The sum-of-numbers finding
 
