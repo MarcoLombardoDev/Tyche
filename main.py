@@ -70,6 +70,14 @@ def _parse_args():
         help=f"print one set of numbers and exit ({', '.join(METHODS)}; default frequency)",
     )
     parser.add_argument(
+        "--self-check", action="store_true",
+        help="check that a built bundle can start Tk and run the analysis, then exit",
+    )
+    parser.add_argument(
+        "--self-check-report", metavar="FILE", default=None,
+        help="also write the self-check report here; a windowed build has no stdout",
+    )
+    parser.add_argument(
         "--export-sqlite", metavar="FILE", default=None,
         help="write the archive to a SQLite file for querying, and exit",
     )
@@ -299,6 +307,10 @@ def main() -> int:
         # print() is a no-op when sys.stdout is None, so the exit code stays 0.
         print(f"{APP_NAME} {__version__}")
         return 0
+    if args.self_check:
+        from core import selfcheck
+
+        return selfcheck.run(args.self_check_report)
     if args.check:
         return _run_check()
     if args.validate is not None:

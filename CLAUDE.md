@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 111 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 128, GUI included
+python -m pytest tests/ -q                                   # 127 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 145, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `111 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `127 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -149,14 +149,43 @@ Three things that are load-bearing and easy to undo by accident:
   the two `run:` lines are byte-identical, because two ways of running the
   suite is two ways for one of them to rot.
 
-**No binaries.** Argus freezes itself for three platforms with PyInstaller and
-its `release.yml` is ten times the size of this one for that reason alone.
-Tyche does not, because freezing it means bundling PyTorch — a few hundred
-megabytes per platform, unsigned, for a program that tells its user it cannot
-help them win anything. If that changes, PyInstaller does not cross-compile
-and this becomes a three-runner matrix; Argus's workflow is the worked example
-to copy, along with its `build.py`, `tools/collect_licences.py` and the
-launcher scripts in `packaging/`.
+**One binary, for Windows**, built by the `windows` job after the tests pass.
+Argus builds three; Tyche builds one because running from source is a normal
+thing to do on macOS and Linux and each extra platform is another unsigned
+several-hundred-megabyte archive to smoke-test and keep honest. Argus's
+`release.yml` is the worked example if that changes.
+
+Three things about that build worth knowing before touching it:
+
+- **It is a folder build, not `--onefile`, and that is the one real divergence
+  from `Argus.spec`.** A onefile bundle extracts its whole payload to a
+  temporary directory on every launch. Tyche's payload includes PyTorch, so
+  that would be the better part of a minute of waiting each time. `COLLECT`
+  produces `dist/Tyche/`, which starts immediately and zips to the same size.
+  A consequence: the folder build is a *single* process, so `start.cmd` can
+  wait on the handle `Start-Process` returns. Argus cannot — a onefile
+  bootloader re-runs itself and the child draws the window — and its launcher
+  polls by image name instead. If Tyche ever becomes onefile, that wait breaks
+  silently and the console announces nothing happened while the program is on
+  screen.
+- **`--self-check` is what makes the bundle verifiable**, and `--version` is
+  not. argparse prints the version and exits before anything else is imported,
+  so a bundle whose Tcl/Tk was never collected passes it. `core/selfcheck.py`
+  starts Tk, reports the windowing system, builds the feature matrices, runs
+  the independence tests, round-trips an archive and writes a SQLite export.
+  The workflow greps its report for `self-check: PASSED`, for `win32`, and for
+  `timesfm: bundled` — that last one because a bundle that silently lost
+  TimesFM passes everything else.
+- **`timesfm3` is collected explicitly.** `core/forecaster.py` imports it
+  lazily, so PyInstaller's static analysis never sees it and the frozen build
+  would report "timesfm is not installed" whatever was in the build
+  environment. `collect_all` in the spec is wrapped in a `try`, so a build
+  machine without torch still produces a working smaller bundle and says so.
+
+The checkpoint is **not** bundled: 1.3 GB, downloaded on first use, and
+non-commercial where the package code around it is Apache-2.0. Shipping
+weights inside the archive would make it a redistribution of them, which is a
+different question from running them locally.
 
 ## Screenshots
 

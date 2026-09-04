@@ -15,11 +15,13 @@ name: Release
 # tag's push both fire when a release is published from the UI, and two runs
 # would then race to write the same notes.
 #
-# No binaries. Tyche is run from source: freezing it would mean bundling
-# PyTorch, which is a few hundred megabytes per platform, unsigned, for a
-# program whose own README says it cannot help you win anything. If that
-# changes, PyInstaller does not cross-compile and this becomes a three-runner
-# matrix — see Argus's release.yml, which is what that looks like.
+# One binary, for Windows. PyInstaller does not cross-compile: a genuine .exe
+# can only be produced on Windows, and GitHub hands out a windows-latest
+# runner on demand, which is the only way to get one without owning the
+# machine. macOS and Linux are deliberately not built — running from source is
+# a normal thing to do on both, and each extra platform is another unsigned
+# several-hundred-megabyte archive to smoke-test and keep honest. Argus builds
+# all three; its release.yml is the worked example if that ever changes here.
 
 on:
   push:
@@ -46,6 +48,9 @@ jobs:
   release:
     name: Verify and publish
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - name: Work out which tag to publish
         id: tag
@@ -142,3 +147,254 @@ jobs:
           # left as an invisible draft.
           gh release create "$TAG" --title "$title" --notes-file release-notes.md \
             || gh release edit "$TAG" --title "$title" --notes-file release-notes.md --draft=false
+
+  windows:
+    name: Windows (x64)
+    # After the release exists, so there is somewhere to upload to, and after
+    # the tests, so nothing is built from a commit that failed them.
+    needs: release
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          # Torch decides how big the bundle gets, and it is installed first
+          # and from the CPU-only index so pip finds it already satisfied and
+          # does not pull the CUDA build from PyPI — several extra gigabytes
+          # of NVIDIA runtime that only pays off on a matching GPU.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt -r requirements-build.txt
+
+      - name: Build
+        run: python build.py
+
+      # A bundle that cannot start is worse than no bundle, so it is run
+      # before it is offered for download.
+      #
+      # --version is not a smoke test: argparse prints it and exits before
+      # anything else is imported, so a bundle whose Tcl/Tk was never
+      # collected passes it. --self-check starts Tk for real, reports the
+      # windowing system, builds the feature matrices, runs the independence
+      # tests and round-trips a file through the program's own code.
+      #
+      # The report is read from a file rather than from stdout because the
+      # bundle is built windowed: on Windows the process has no stdout at all,
+      # so parsing it would check nothing.
+      - name: Smoke-test the bundle
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          exe="dist/Tyche/Tyche.exe"
+          # tr -d because a Windows build prints CRLF and the comparison would
+          # fail on the carriage return alone.
+          reported=$("$exe" --version | tr -d '\r' | awk '{print $NF}')
+          echo "tag says $VERSION, the bundle says $reported"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error::the bundle reports $reported but the tag says $VERSION"
+            exit 1
+          fi
+
+          "$exe" --self-check --self-check-report self-check.txt || true
+          cat self-check.txt
+          grep -q "^self-check: PASSED" self-check.txt || {
+            echo "::error::the bundle failed its own self-check"; exit 1; }
+
+          backend=$(sed -n 's/^windowing system: //p' self-check.txt | tr -d '\r')
+          if [ "$backend" != "win32" ]; then
+            echo "::error::the Windows bundle came up on windowing system '$backend'"
+            exit 1
+          fi
+
+          # The whole point of building on Windows with torch installed. A
+          # bundle that silently lost TimesFM would pass everything above.
+          grep -q "^timesfm: bundled" self-check.txt || {
+            echo "::error::TimesFM is not in the bundle"; exit 1; }
+
+      # The digest travels inside the archive, so it catches a truncated
+      # download or a half-finished unpack — the failure that actually happens
+      # to people — and not tampering. The checksum in the release notes is the
+      # one that answers that, because it arrives by a route the archive did
+      # not.
+      - name: Record the executable's digest beside it
+        shell: bash
+        run: |
+          python - <<'PY'
+          import hashlib
+          import pathlib
+
+          exe = pathlib.Path("dist/Tyche/Tyche.exe")
+          with exe.open("rb") as handle:
+              digest = hashlib.file_digest(handle, "sha256").hexdigest()
+          # The format sha256sum -c reads, with the name relative to the file,
+          # so start.cmd is not the only thing that can check it.
+          exe.with_suffix(".exe.sha256").write_text(f"{digest}  {exe.name}\n", encoding="utf-8")
+          print(f"{digest}  {exe.name}")
+          PY
+
+      # A launcher that refuses to launch is worse than no launcher, and one
+      # that launches whatever it finds is decoration. Both halves are checked,
+      # on a copy — some programs create folders next to themselves on first
+      # run, and a check that leaves its droppings inside the archive has
+      # broken the thing it was protecting.
+      - name: The launcher starts it, and refuses a bad checksum
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/launchcheck"
+          cp -R dist/Tyche "$RUNNER_TEMP/launchcheck"
+          check="$RUNNER_TEMP/launchcheck"
+
+          ( cd "$check" && cmd //c start.cmd --self-check --self-check-report launcher.txt )
+          if [ ! -s "$check/launcher.txt" ]; then
+            echo "::error::the launcher did not start Tyche"
+            exit 1
+          fi
+          grep -q "^self-check: PASSED" "$check/launcher.txt"
+
+          # A digest of the right shape and the wrong value: the launcher has
+          # to reject it on the comparison, not on failing to parse it.
+          python - "$check/Tyche.exe.sha256" <<'PY'
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          digest, _, rest = path.read_text(encoding="utf-8").partition("  ")
+          path.write_text(f"{'f' * len(digest)}  {rest}", encoding="utf-8")
+          PY
+
+          if ( cd "$check" && cmd //c start.cmd --version ) > /dev/null 2>&1; then
+            echo "::error::the launcher started a binary that failed its checksum"
+            exit 1
+          fi
+          echo "the launcher refuses a mismatched checksum"
+          rm -rf "$check"
+
+      - name: Package
+        id: package
+        shell: bash
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          name="Tyche-$VERSION-windows-x64.zip"
+          # 7z ships on the Windows runner and, unlike Compress-Archive, keeps
+          # the top-level folder. Run from inside dist/ so the archive unpacks
+          # to Tyche/ and not to dist/Tyche/.
+          ( cd dist && 7z a -tzip "../$name" Tyche > /dev/null )
+          ls -l "$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Checksum the archive
+        id: checksum
+        shell: bash
+        env:
+          ASSET: ${{ steps.package.outputs.name }}
+        run: |
+          python - "$ASSET" <<'PY'
+          import hashlib
+          import os
+          import pathlib
+          import sys
+
+          archive = pathlib.Path(sys.argv[1])
+          with archive.open("rb") as handle:
+              digest = hashlib.file_digest(handle, "sha256").hexdigest()
+          line = f"{digest}  {archive.name}"
+          print(line)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"line={line}\n")
+          PY
+
+      - name: Upload to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+          ASSET: ${{ steps.package.outputs.name }}
+        run: gh release upload "$TAG" "$ASSET" --clobber
+
+      # Into the notes rather than up as another asset. A checksum is worth
+      # something only if it arrives by a route the archive did not, and the
+      # notes GitHub renders on the release page are exactly such a route —
+      # it is the archive that gets copied around, not the page.
+      - name: Write the download section into the notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release.outputs.tag }}
+          ASSET: ${{ steps.package.outputs.name }}
+          LINE: ${{ steps.checksum.outputs.line }}
+        run: |
+          gh release view "$TAG" --json body --jq .body > body.md
+          python - body.md <<'PY'
+          import os
+          import pathlib
+
+          asset = os.environ["ASSET"]
+          line = os.environ["LINE"]
+          block = f"""<!-- download -->
+          ## Download
+
+          | Platform | File |
+          |---|---|
+          | Windows (x64) | `{asset}` |
+
+          Built on a Windows runner — no cross-compilation. Unpack and run: no
+          installation and no Python needed. It unpacks to a single `Tyche/`
+          folder; start it with `start.cmd` beside the program, which checks
+          the executable against the digest recorded when the archive was built
+          and stops rather than launching if they disagree. The program starts
+          on its own too.
+
+          There is no macOS or Linux build. Running from source works fine on
+          both and is described above.
+
+          ### Windows will say the publisher is unknown
+
+          It is meant to. This build carries **no code-signing certificate**, so
+          SmartScreen shows *"Windows protected your PC"* and offers only **Don't
+          run**. Click **More info**, then **Run anyway**. Nothing is wrong with
+          the download; SmartScreen is reporting that it has never seen this
+          publisher, which is true.
+
+          Because that warning asks you to trust a file you cannot check by
+          looking at it, here is the SHA-256 of the archive as the build machine
+          produced it. In PowerShell:
+
+          ```powershell
+          Get-FileHash .\{asset} -Algorithm SHA256
+          ```
+
+          ```
+          {line}
+          ```
+
+          That digest is here rather than in the archive on purpose: one that
+          travels with the file it describes can only tell you the file is
+          undamaged.
+          <!-- /download -->"""
+          block = "\n".join(l[10:] if l.startswith(" " * 10) else l for l in block.splitlines())
+
+          path = pathlib.Path("body.md")
+          body = path.read_text(encoding="utf-8")
+          head, marker, rest = body.partition("<!-- download -->")
+          if marker:
+              # A re-run rewrites its own block rather than stacking another.
+              _, _, tail = rest.partition("<!-- /download -->")
+              body = head + block + tail
+          else:
+              body = body.rstrip("\n") + "\n\n" + block + "\n"
+          path.write_text(body, encoding="utf-8")
+          print(body)
+          PY
+          gh release edit "$TAG" --notes-file body.md

@@ -317,3 +317,20 @@ def test_the_scraper_always_asks_even_when_the_preview_is_clean(app, monkeypatch
     app._panels["archive"]._merge_result([fresh], always_confirm=True)
     app.update()
     assert len(asked) == 1
+
+
+def test_the_self_check_passes_and_writes_its_report(tmp_path):
+    """What the release workflow runs against the Windows bundle.
+
+    Not using the `app` fixture: --self-check starts its own Tk root, and the
+    point is to exercise exactly the path the frozen build takes.
+    """
+    from core.selfcheck import run
+
+    report = tmp_path / "self-check.txt"
+    assert run(str(report)) == 0
+    text = report.read_text(encoding="utf-8")
+    assert "self-check: PASSED" in text
+    # The workflow greps for this line to confirm the bundle came up on the
+    # platform's real toolkit rather than a fallback.
+    assert "windowing system:" in text

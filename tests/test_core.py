@@ -54,6 +54,7 @@ def test_all_core_modules_import():
     import core.forecaster  # noqa: F401
     import core.predictor  # noqa: F401
     import core.randomness  # noqa: F401
+    import core.selfcheck  # noqa: F401
     import core.sources  # noqa: F401
     import core.sources.estrazioni_it  # noqa: F401
     import core.statistics  # noqa: F401
@@ -934,6 +935,43 @@ def test_walk_forward_refuses_when_there_is_no_history_to_spare():
 
     with pytest.raises(ValueError):
         walk_forward(random_archive(50), n_draws=10, min_history=200)
+
+
+# ─────────────────────────────────────────────────────────────
+# The bundle self-check
+# ─────────────────────────────────────────────────────────────
+
+def test_the_headless_self_checks_pass():
+    """Everything --self-check does that does not need a display.
+
+    These run in the core suite because they are the checks a frozen bundle
+    fails when numpy's compiled extensions or sqlite3 were not collected, and
+    that has nothing to do with having a screen.
+    """
+    from core.selfcheck import _check_analysis, _check_export, _check_persistence
+
+    for check in (_check_analysis, _check_persistence, _check_export):
+        ok, message = check()
+        assert ok, message
+
+
+def test_the_self_check_reports_whether_timesfm_is_bundled_rather_than_failing():
+    """A bundle without torch is a smaller working program, not a broken one."""
+    from core.selfcheck import _check_timesfm
+
+    ok, message = _check_timesfm()
+    assert ok
+    assert "bundled" in message
+
+
+def test_the_self_check_fixture_builds_valid_draws():
+    """It failed on its own fixture once: a fixed Jolly beside six random
+    numbers eventually collides with one of them, and Draw rejects that."""
+    from core.selfcheck import _check_export
+
+    for _ in range(5):
+        ok, message = _check_export()
+        assert ok, message
 
 
 # ─────────────────────────────────────────────────────────────

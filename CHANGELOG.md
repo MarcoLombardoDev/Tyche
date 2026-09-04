@@ -46,6 +46,15 @@ First release.
 - Exact prize-category odds, and a SQLite export for querying the archive
   with SQL.
 
+### Getting it
+
+- A **Windows x64 build**, attached to this release. Unpack the folder and run
+  `start.cmd`, which checks the executable against the digest recorded at
+  build time before starting it. Unsigned, so SmartScreen will say the
+  publisher is unknown — the archive's SHA-256 is in these notes so the
+  download can be checked by a route it did not travel on.
+- macOS and Linux run from source. So does Windows, if you would rather.
+
 ### The forecast
 
 - TimesFM 3.0 (`google/timesfm-3.0-pytorch`, 330M parameters) over ninety

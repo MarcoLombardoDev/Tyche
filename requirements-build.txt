@@ -1,0 +1,11 @@
+# Build-only dependency for producing the standalone Tyche executable.
+# Not needed to run Tyche from source — see requirements.txt for that.
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt -r requirements-build.txt
+#   python build.py
+#
+# PyInstaller is GPL-2.0 *with the bootloader exception*, which exists
+# precisely to allow proprietary frozen applications — the same reasoning
+# Argus records for its own build.
+pyinstaller>=6.0.0

@@ -17,9 +17,9 @@ no claim to any. The odds it prints are exact and unchangeable: 1 in
 the operator keeps a fixed share of every euro staked and the expected return
 on a line is below its price whatever is played.
 
-## Running it
+## Running it from source
 
-No binaries: run it from source.
+A Windows build is attached below; on anything else, run it from source.
 
 ```
 git clone https://github.com/MarcoLombardoDev/Tyche.git
@@ -48,12 +48,22 @@ python main.py --export-sqlite data/tyche.db
 
 ## What was verified before this was published
 
-Every release runs, on the tagged commit, before the release is created:
+On the tagged commit, before the release was created:
 
 - `ruff check .` across the repository;
 - the whole test suite with `TYCHE_REQUIRE_GUI=1` under Xvfb, so the
   interface is genuinely exercised rather than skipped;
 - a check that the version the program reports matches the tag on this page.
+
+And on the Windows build, before it was attached:
+
+- it starts Tk for real and comes up on the `win32` backend, builds the
+  feature matrices, runs the five independence tests and round-trips an
+  archive through its own persistence code — that is `--self-check`, and
+  `--version` alone would prove none of it;
+- TimesFM is genuinely inside the bundle, not silently dropped;
+- the launcher starts the program, and refuses to when the recorded digest
+  does not match.
 
 ## Licence
 

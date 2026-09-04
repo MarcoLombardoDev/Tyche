@@ -268,13 +268,13 @@ native multivariate forecasting and is not a drop-in replacement for what
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                    # 111 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 128, GUI included
+python -m pytest tests/ -q                                    # 127 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 145, GUI included
 python -m ruff check .
 ```
 
 The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "111 passed, 1 skipped" means the entire interface went untested.
+reporting "127 passed, 1 skipped" means the entire interface went untested.
 `TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
 intend to have verified a GUI change. CI sets it.
 
@@ -293,8 +293,17 @@ Tagging a version publishes one. `.github/workflows/release.yml` checks out
 the tag, lints, runs the whole suite with the interface included, checks that
 the version the program reports matches the tag, and only then creates the
 release — with notes composed from `CHANGELOG.md` rather than from the commit
-log. There are no binaries to download: Tyche runs from source, and freezing
-it would mean shipping a few hundred megabytes of PyTorch per platform.
+log.
+
+A **Windows build** is then produced on a Windows runner and attached. Before
+it is uploaded it has to start Tk for real, come up on the `win32` backend,
+run the analysis, round-trip an archive, prove TimesFM is genuinely inside it,
+and be started through its own launcher — which is also checked to refuse a
+binary whose digest does not match. The archive's SHA-256 goes into the notes
+rather than beside the file, so it arrives by a route the download did not.
+
+macOS and Linux have no build. Running from source works on both, and the
+instructions above are the whole of it.
 
 ---
 

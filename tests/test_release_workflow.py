@@ -230,15 +230,110 @@ def test_the_release_body_says_what_was_verified():
     assert "TYCHE_REQUIRE_GUI" in body
 
 
-def test_the_release_body_does_not_promise_downloads_that_are_not_built():
-    """The download table Argus needs is exactly what Tyche must not have.
+def test_the_static_notes_do_not_hardcode_an_archive_name():
+    """The download block is written by the job that built the archive.
 
-    A release page listing archives nobody built is the most annoying possible
-    release page, and it is a mistake these projects have made before.
+    Naming the file in the preamble instead would put the version in two
+    places, and the two would disagree the first time one of them was edited.
     """
     body = BODY.read_text(encoding="utf-8").lower()
-    for promise in (".zip", ".tar.gz", ".exe"):
-        assert promise not in body, f"the notes offer {promise}, and nothing builds one"
+    for promise in (".zip", ".tar.gz"):
+        assert promise not in body, f"the preamble names a {promise}; the build job writes that"
+
+
+def test_the_notes_do_not_promise_platforms_nobody_builds():
+    """A release page listing archives nobody built is the worst kind.
+
+    Only Windows is built, so only Windows may be mentioned as a download.
+    """
+    workflow = load(WORKFLOW)
+    runners = {job["runs-on"] for job in workflow["jobs"].values()}
+    assert "macos-latest" not in runners
+    body = BODY.read_text(encoding="utf-8")
+    assert "macOS or Linux" not in body or "There is no macOS" in body
+
+
+# ─────────────────────────────────────────────────────────────
+# The Windows build
+# ─────────────────────────────────────────────────────────────
+
+def test_the_build_files_exist():
+    for path in (REPO / "Tyche.spec", REPO / "build.py",
+                 REPO / "requirements-build.txt", REPO / "packaging" / "start.cmd"):
+        assert path.exists(), f"{path.relative_to(REPO)} is missing"
+
+
+def test_the_windows_job_builds_on_windows():
+    """PyInstaller does not cross-compile: a .exe needs a Windows runner."""
+    job = load(WORKFLOW)["jobs"]["windows"]
+    assert job["runs-on"] == "windows-latest"
+
+
+def test_the_windows_job_waits_for_the_tests():
+    """Nothing is built from a commit that failed them."""
+    assert load(WORKFLOW)["jobs"]["windows"]["needs"] == "release"
+
+
+def test_the_bundle_is_smoke_tested_before_it_is_uploaded():
+    steps = load(WORKFLOW)["jobs"]["windows"]["steps"]
+    runs = [s.get("run", "") for s in steps]
+    checked = next(i for i, r in enumerate(runs) if "--self-check" in r)
+    uploaded = next(i for i, r in enumerate(runs) if "gh release upload" in r)
+    assert checked < uploaded
+
+
+def test_the_smoke_test_is_more_than_version():
+    """--version exits before the toolkit is imported and proves almost nothing."""
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    assert "self-check: PASSED" in text
+    assert "windowing system" in text
+    # A bundle that silently lost TimesFM would pass everything else.
+    assert "timesfm: bundled" in text
+
+
+def test_the_bundle_version_must_match_the_tag_too():
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    assert "the bundle reports" in text
+
+
+def test_the_launcher_is_checked_both_ways():
+    """It has to start the program, and refuse a binary that fails its digest."""
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    assert "the launcher did not start Tyche" in text
+    assert "started a binary that failed its checksum" in text
+
+
+def test_the_archive_checksum_reaches_the_notes():
+    """A digest that travels inside the archive can only prove it is undamaged."""
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    assert "gh release edit" in text
+    assert "<!-- download -->" in text
+
+
+def test_the_spec_builds_a_folder_and_not_one_file():
+    """Bundling PyTorch into onefile means unpacking it on every launch."""
+    spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")
+    assert "COLLECT(" in spec
+    assert "exclude_binaries=True" in spec
+
+
+def test_the_spec_collects_what_pyinstaller_cannot_see():
+    spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")
+    # customtkinter's themes are package data; timesfm3 is imported lazily by
+    # core/forecaster.py, so static analysis never finds it.
+    assert 'collect_data_files("customtkinter")' in spec
+    assert "timesfm3" in spec
+
+
+def test_the_spec_excludes_readline_for_the_licensing_reason():
+    """libreadline is GPL-3.0-or-later with no linking exception."""
+    spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")
+    assert '"readline"' in spec and '"rlcompleter"' in spec
+
+
+def test_pyinstaller_is_a_build_dependency_and_not_a_runtime_one():
+    assert "pyinstaller" in (REPO / "requirements-build.txt").read_text(encoding="utf-8").lower()
+    assert "pyinstaller" not in (REPO / "requirements.txt").read_text(encoding="utf-8").lower()
 
 
 def test_the_release_body_keeps_the_disclaimer():
