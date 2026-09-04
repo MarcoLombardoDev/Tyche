@@ -68,6 +68,23 @@ while `python3` is a 3.11 build from `/usr/local/bin`, so it changes nothing.
 The fix used here was a `python3.12 -m venv --system-site-packages` with the
 dependencies reinstalled into it.
 
+**`.claude/hooks/session-start.sh` does that automatically**, so no future
+session has to rediscover it. It installs `python3-tk` and `xvfb`, then probes
+`python3.13`, `3.12`, `3.11`, `3.10` and `python3` *in that order* for one that
+can import `tkinter` **after** the apt install, and builds `.venv` from
+whichever answers — with `--system-site-packages`, which is what lets the
+virtualenv see an apt-installed module. `python3` is probed last on purpose:
+an explicitly versioned interpreter that works beats the default one that may
+not. The hook runs only when `CLAUDE_CODE_REMOTE=true`, and when nothing can
+import tkinter it says so and carries on rather than failing the session —
+`TYCHE_REQUIRE_GUI=1` is then the thing that refuses, which is the intended
+place for that failure.
+
+It is registered synchronously in `.claude/settings.json`. Async would start
+the session sooner and would let an agent run the tests before the venv
+exists, which is the race this project least wants: the symptom is a skipped
+GUI suite reporting green.
+
 `torch` and `timesfm` are imported lazily, so both suites run without them —
 `core/forecaster.py` reports a missing model rather than raising, and there is
 a test for that. CI relies on it: the `test` job installs numpy, requests,
