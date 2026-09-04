@@ -170,18 +170,25 @@ def _apply(incoming, write: bool) -> int:
 
 
 def _run_update(write: bool) -> int:
-    """Bootstrap from the bulk mirror, then try the per-year scrape.
+    """Try each source in order of trust, and report what each one did.
 
-    Both are attempted and a failure of either is reported rather than fatal:
-    the bulk source is reachable and dead, the scraper is live and unproven,
-    and on any given day it is entirely normal for exactly one of them to
-    work.
+    estrazioni.it publishes the whole archive as one CSV and is the best
+    source known; when it answers, nothing else needs to run. The bulk mirror
+    is the zero-configuration bootstrap for an empty archive, and the scrape
+    is the last resort. A failure of any of them is reported rather than
+    fatal: on any given day it is entirely normal for one to work and the
+    others not to.
     """
     from datetime import date
 
     from core.archive import load_archive
     from core.data_manager import ARCHIVE_PATH, load_settings
-    from core.sources import BulkArchiveSource, HtmlTableSource, SourceError
+    from core.sources import (
+        BulkArchiveSource,
+        EstrazioniItSource,
+        HtmlTableSource,
+        SourceError,
+    )
 
     settings = load_settings()
     existing = load_archive(ARCHIVE_PATH)
@@ -189,6 +196,16 @@ def _run_update(write: bool) -> int:
 
     def report(message, fraction=0.0):
         print(f"  {message}")
+
+    print("Fetching the full export from estrazioni.it.")
+    try:
+        incoming += EstrazioniItSource().fetch(report)
+    except SourceError as exc:
+        print(f"  estrazioni.it failed: {exc}")
+    else:
+        # That export runs from 1997 to the last draw, so nothing else has
+        # anything to add and there is no reason to bother four other hosts.
+        return _apply(incoming, write)
 
     if not existing:
         print("No archive yet — bootstrapping from the bulk mirror.")

@@ -31,7 +31,12 @@ from core.archive import (
     save_archive,
 )
 from core.data_manager import ARCHIVE_PATH, DATA_DIR
-from core.sources import BulkArchiveSource, HtmlTableSource, LocalFileSource
+from core.sources import (
+    BulkArchiveSource,
+    EstrazioniItSource,
+    HtmlTableSource,
+    LocalFileSource,
+)
 from gui.theme import BG_ROOT, GOOD, MUTED, WARN
 from gui.widgets import ReportBox, section
 
@@ -53,8 +58,10 @@ class ArchivePanel(ctk.CTkFrame):
         sources.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(sources.body, fg_color="transparent")
         row.pack(fill="x")
-        ctk.CTkButton(row, text="Bootstrap from bulk archive", width=210,
-                      command=self._fetch_bulk).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Update from estrazioni.it", width=200,
+                      command=self._fetch_export).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(row, text="Bulk archive (to 2020)", width=180,
+                      command=self._fetch_bulk).pack(side="left", padx=8)
         ctk.CTkButton(row, text="Scrape recent years", width=170,
                       command=self._fetch_html).pack(side="left", padx=8)
         ctk.CTkButton(row, text="Import a file…", width=140,
@@ -83,6 +90,20 @@ class ArchivePanel(ctk.CTkFrame):
         self.recent_box.pack(fill="both", expand=True)
 
     # ── actions ──────────────────────────────────────────────
+    def _fetch_export(self) -> None:
+        """The whole archive in one request, always confirmed before writing.
+
+        Confirmed even when the preview is clean, for the same reason the
+        scraper is: the download URL was inferred from two other URLs on the
+        site rather than read from any documentation, so a day when it starts
+        returning something else is a day the user should see what arrived.
+        """
+        self.app.run_worker(
+            "estrazioni.it export",
+            lambda report: EstrazioniItSource().fetch(report),
+            lambda incoming: self._merge_result(incoming, always_confirm=True),
+        )
+
     def _fetch_bulk(self) -> None:
         url = self.app.settings.get("bulk_archive_url", "")
         self.app.run_worker(

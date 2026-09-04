@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 83 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 100, GUI included
+python -m pytest tests/ -q                                   # 87 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 104, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `83 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `87 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -228,12 +228,22 @@ dependency and is deliberately not in `requirements.txt`.
   also sends is a better bot signature than admitting to being a script. The
   agent is now `Tyche/0.1.0 (SuperEnalotto archive importer)`.
 
-- **The archive comes from a manual import, and that is fine.** The user
-  supplies the estrazioni.it CSV export: 4,260 draws, 1997 to yesterday,
-  labelled header, zero integrity issues. `--import FILE --yes` is the whole
-  update procedure. The scraper exists to remove that step and does not work
-  yet; the interface is honest about which of the two produced what is on
-  disk.
+- **estrazioni.it is the source, and its download URL is inferred.** The
+  export is 4,260 draws, 1997 to the last draw, labelled header, zero
+  integrity issues — against fourteen for the bulk mirror, which also
+  disagrees with it about twelve draws. `EstrazioniItSource` fetches it in one
+  request and `--update` tries it first and stops there when it answers.
+
+  The URL is not documented anywhere. It was inferred from two others on the
+  site: the SuperEnalotto page is `index.php?p=home&anno=2026&tipo=superenalotto`
+  and carries a download link reading `index.php?p=download&tipo=lotto&formato=csv`,
+  so `tipo` is the game selector and the SuperEnalotto export should be that
+  download URL with the same value. Four spellings are tried, the CI
+  `scraper-recon` job fetches each and prints its size and first line, and the
+  GUI confirms the import even when the preview is clean. **If that job ever
+  reports the URL failing, fix the URL — do not assume the site is down.**
+  Manual import stays the fallback that cannot break, and it is how the
+  archive on disk was first built.
 
 - **The labelled-header parser exists because the positional one got it
   wrong.** estrazioni.it puts the contest number *after* the date —

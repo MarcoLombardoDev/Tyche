@@ -279,6 +279,31 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install requests
+      - name: Does the inferred estrazioni.it download URL actually work?
+        # core/sources/estrazioni_it.py guesses this URL from two others on the
+        # site. This is the step that turns the guess into a fact, or tells us
+        # it is wrong before a user finds out. Not allowed to fail the job:
+        # the recon output below is what a failure needs in order to be fixed.
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          from core.sources.estrazioni_it import DOWNLOAD_URLS, EstrazioniItSource
+          from core.sources.base import SourceError, http_get
+
+          for url in DOWNLOAD_URLS:
+              try:
+                  payload = http_get(url)
+                  head = payload[:120].decode("utf-8-sig", errors="replace").splitlines()
+                  print(f"{len(payload):>9,} bytes  {url}")
+                  print(f"           first line: {head[0] if head else '(empty)'}")
+              except SourceError as exc:
+                  print(f"{'failed':>9}  {exc}")
+
+          draws = EstrazioniItSource().fetch()
+          print(f"\nparsed {len(draws):,} draws, {min(d.date for d in draws)} "
+                f"to {max(d.date for d in draws)}")
+          PY
+
       - name: What do these hosts actually publish?
         run: |
           python - <<'PY'

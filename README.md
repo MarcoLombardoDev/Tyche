@@ -38,7 +38,7 @@ There is also a command line, for the parts worth scripting:
 ```
 python main.py --check                  # the five independence tests
 python main.py --validate 500           # walk-forward backtest, baselines only
-python main.py --update                 # refresh the archive — dry run
+python main.py --update                 # refresh from estrazioni.it — dry run
 python main.py --update --yes           # ...and write it
 python main.py --import FILE --yes      # import a file you downloaded
 python main.py --forecast timesfm       # six numbers, no window
@@ -77,13 +77,16 @@ Face. Everything except the Predict tab's TimesFM option works without them.
 
 Three sources, none of which is both current and verified:
 
-- **Manual import** — any CSV, TXT or TSV you downloaded yourself. This is
-  the one Tyche's own archive comes from: the export from estrazioni.it, a
-  semicolon-separated file with a labelled header, **4,260 draws from
-  3 December 1997 to yesterday**. The importer reads its own format, any file
-  with a labelled header, the twelve-column bulk format, and as a last resort
-  any file with a date and six numbers per line. It cannot break, and it does
-  not need the network.
+- **estrazioni.it** — the whole archive in one request: **4,260 draws from
+  3 December 1997 to the last one**, labelled header, zero integrity issues.
+  This is where Tyche's archive comes from and what `--update` tries first.
+  Its download URL is inferred rather than documented, so CI checks it and the
+  import is always confirmed before anything is written.
+- **Manual import** — any CSV, TXT or TSV you downloaded yourself, including
+  that same export. The importer reads Tyche's own format, any file with a
+  labelled header, the twelve-column bulk format, and as a last resort any
+  file with a date and six numbers per line. It cannot break and needs no
+  network.
 - **Bulk archive** — one request, the whole history, no header. Useful as a
   bootstrap and **it stops in January 2020**: the mirror's own response says
   `last-modified: 24 Jan 2020`. It is also wrong in places — see below.
@@ -265,13 +268,13 @@ native multivariate forecasting and is not a drop-in replacement for what
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                    # 83 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 100, GUI included
+python -m pytest tests/ -q                                    # 87 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 104, GUI included
 python -m ruff check .
 ```
 
 The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "83 passed, 1 skipped" means the entire interface went untested.
+reporting "87 passed, 1 skipped" means the entire interface went untested.
 `TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
 intend to have verified a GUI change. CI sets it.
 

@@ -55,6 +55,7 @@ def test_all_core_modules_import():
     import core.predictor  # noqa: F401
     import core.randomness  # noqa: F401
     import core.sources  # noqa: F401
+    import core.sources.estrazioni_it  # noqa: F401
     import core.statistics  # noqa: F401
     import core.stats_tests  # noqa: F401
     import core.validation  # noqa: F401
@@ -632,6 +633,49 @@ def test_scraper_saves_the_page_when_asked(tmp_path, monkeypatch):
     assert "Concorso" in saved[0].read_text()
 
 
+def test_estrazioni_source_parses_the_export_with_the_shared_parser(monkeypatch):
+    """The downloaded file and a hand-downloaded one must not take two paths."""
+    import core.sources.estrazioni_it as source_module
+
+    payload = (LABELLED_SAMPLE * 3000).encode()      # comfortably over the size floor
+    monkeypatch.setattr(source_module, "http_get", lambda url, timeout=30: payload)
+    draws = source_module.EstrazioniItSource().fetch()
+    assert draws
+    assert all(d.source == "estrazioni.it" for d in draws)
+
+
+def test_estrazioni_source_rejects_a_short_error_page_that_returned_200():
+    """These sites answer a bad query with a 200 and a courtesy page."""
+    import core.sources.estrazioni_it as source_module
+
+    class Stub(source_module.EstrazioniItSource):
+        pass
+
+    original = source_module.http_get
+    source_module.http_get = lambda url, timeout=30: b"<html>not found</html>"
+    try:
+        with pytest.raises(source_module.SourceError, match="too small"):
+            Stub().fetch()
+    finally:
+        source_module.http_get = original
+
+
+def test_estrazioni_source_falls_through_its_candidate_urls(monkeypatch):
+    """The download URL is inferred, so a wrong first guess must not be fatal."""
+    import core.sources.estrazioni_it as source_module
+
+    good = source_module.DOWNLOAD_URLS[-1]
+    payload = (LABELLED_SAMPLE * 3000).encode()
+
+    def fake_get(url, timeout=30):
+        if url != good:
+            raise source_module.SourceError(f"{url}: HTTP 404")
+        return payload
+
+    monkeypatch.setattr(source_module, "http_get", fake_get)
+    assert source_module.EstrazioniItSource().fetch()
+
+
 # ─────────────────────────────────────────────────────────────
 # Statistics primitives
 # ─────────────────────────────────────────────────────────────
@@ -951,6 +995,12 @@ def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeyp
     monkeypatch.setattr(dm, "ARCHIVE_PATH", tmp_path / "empty.csv")
     requested: dict = {}
 
+    class FakeExport:
+        """estrazioni.it down, which is what puts the other two in play."""
+
+        def fetch(self, progress=None):
+            raise sources.SourceError("blocked")
+
     class FakeBulk:
         def __init__(self, url):
             pass
@@ -968,12 +1018,43 @@ def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeyp
         def fetch(self, progress=None):
             raise sources.SourceError("blocked, as it is everywhere this was written")
 
+    monkeypatch.setattr(sources, "EstrazioniItSource", FakeExport)
     monkeypatch.setattr(sources, "BulkArchiveSource", FakeBulk)
     monkeypatch.setattr(sources, "HtmlTableSource", FakeHtml)
 
     cli._run_update(write=False)
     assert requested["years"][0] == 2020
     assert requested["years"][-1] == date.today().year
+
+
+def test_update_stops_after_the_export_and_bothers_nobody_else(tmp_path, monkeypatch):
+    """The estrazioni.it export is the whole archive; nothing else can add to it."""
+    import core.data_manager as dm
+    import core.sources as sources
+    import main as cli
+
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", tmp_path / "empty.csv")
+    touched: list[str] = []
+
+    class FakeExport:
+        def fetch(self, progress=None):
+            touched.append("export")
+            return random_archive(30)
+
+    class ShouldNotRun:
+        def __init__(self, *a, **k):
+            touched.append("other")
+
+        def fetch(self, progress=None):
+            touched.append("other")
+            return []
+
+    monkeypatch.setattr(sources, "EstrazioniItSource", FakeExport)
+    monkeypatch.setattr(sources, "BulkArchiveSource", ShouldNotRun)
+    monkeypatch.setattr(sources, "HtmlTableSource", ShouldNotRun)
+
+    assert cli._run_update(write=False) == 0
+    assert touched == ["export"]
 
 
 def test_update_writes_nothing_without_yes(tmp_path, monkeypatch):
