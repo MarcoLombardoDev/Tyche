@@ -14,6 +14,12 @@ pytest>=8.0
 # needs none of the runtime dependencies and runs in a second.
 ruff>=0.5
 
+# Parses .github/workflows/*.yml, so a broken release workflow is caught by
+# the test suite rather than by the next tag silently publishing nothing.
+# Imported hard by tests/test_release_workflow.py: a skip there would stop
+# testing the file that publishes the releases, and say nothing about it.
+pyyaml>=6.0
+
 # Screenshot capture for docs/generate_screenshots.py. A documentation
 # dependency, not a runtime one — Tyche never imports it.
 pillow>=10.0

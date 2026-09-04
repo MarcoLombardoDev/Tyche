@@ -268,13 +268,13 @@ native multivariate forecasting and is not a drop-in replacement for what
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                    # 87 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 104, GUI included
+python -m pytest tests/ -q                                    # 111 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 128, GUI included
 python -m ruff check .
 ```
 
 The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "87 passed, 1 skipped" means the entire interface went untested.
+reporting "111 passed, 1 skipped" means the entire interface went untested.
 `TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
 intend to have verified a GUI change. CI sets it.
 
@@ -284,6 +284,17 @@ change to the interface:
 ```
 SHOTDIR=docs/screenshots xvfb-run -a python docs/generate_screenshots.py
 ```
+
+---
+
+## Releases
+
+Tagging a version publishes one. `.github/workflows/release.yml` checks out
+the tag, lints, runs the whole suite with the interface included, checks that
+the version the program reports matches the tag, and only then creates the
+release — with notes composed from `CHANGELOG.md` rather than from the commit
+log. There are no binaries to download: Tyche runs from source, and freezing
+it would mean shipping a few hundred megabytes of PyTorch per platform.
 
 ---
 

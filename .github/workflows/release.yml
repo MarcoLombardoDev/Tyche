@@ -1,0 +1,144 @@
+name: Release
+
+# Tag a version, get a release. One job, because the steps have to happen in
+# order and the last one must not happen if any earlier one fails: the release
+# is created *after* the tests pass, on the tagged commit, or not at all.
+#
+# Two ways in, converging on the same result:
+#
+#   * a "v*" tag appears — this runs and creates the release. Pushing the tag
+#     with git does it, and so does publishing a release through GitHub's own
+#     UI, which creates the tag and fires the same push event.
+#   * run it by hand — pass the tag; it attaches to that release.
+#
+# Deliberately NOT also triggered by "release: published". That event and the
+# tag's push both fire when a release is published from the UI, and two runs
+# would then race to write the same notes.
+#
+# No binaries. Tyche is run from source: freezing it would mean bundling
+# PyTorch, which is a few hundred megabytes per platform, unsigned, for a
+# program whose own README says it cannot help you win anything. If that
+# changes, PyInstaller does not cross-compile and this becomes a three-runner
+# matrix — see Argus's release.yml, which is what that looks like.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to verify and publish (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Two runs on the same tag would overwrite each other's notes.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  release:
+    name: Verify and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Work out which tag to publish
+        id: tag
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          case "$tag" in
+            v[0-9]*) ;;
+            *)
+              echo "::error::'$tag' is not a version tag. Expected something like v0.1.0."
+              exit 1
+              ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # tkinter is an OS package and has to belong to the interpreter running
+      # the tests. setup-python ships its own _tkinter, but that extension
+      # links against libtcl/libtk at load time and python3-tk is what
+      # provides those. Xvfb is what gives Tk a display to come up on.
+      - name: Install Xvfb and the Tk runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk
+
+      - name: Install dependencies
+        # The lean set, as in ci.yml: torch and timesfm are gigabytes and no
+        # test needs them, because core/forecaster.py reports a missing model
+        # rather than raising and there is a test asserting exactly that.
+        run: pip install numpy requests customtkinter pytest ruff pyyaml
+
+      - name: Confirm tkinter is importable by the interpreter under test
+        run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+
+      - name: Lint
+        run: ruff check .
+
+      # The trap this exists for: a tag alone will happily publish v2.3.0 of a
+      # program that answers 0.1.0 when asked its version — a release whose
+      # name and contents disagree, which is the one thing a release must not
+      # be. core/version.py is the single source of truth; the tag has to
+      # match it, and if it does not, the fix is to correct one of the two
+      # rather than to publish anyway.
+      - name: The program's version must match the tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          reported=$(python main.py --version | awk '{print $NF}')
+          echo "tag says $VERSION, the program says $reported"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error::core/version.py says $reported but the tag says $VERSION."
+            echo "::error::Update __version__, or tag the version the source actually has."
+            exit 1
+          fi
+
+      # The whole suite, interface included. TYCHE_REQUIRE_GUI is what turns a
+      # skipped GUI suite into a failure: without it a machine with no display
+      # reports "87 passed, 1 skipped" and has tested no interface at all,
+      # which is exactly the green-but-meaningless run a release must not be
+      # published on.
+      - name: Tests, GUI included
+        env:
+          TYCHE_REQUIRE_GUI: "1"
+        run: xvfb-run -a python -m pytest tests/ -q
+
+      # Composed from .github/release-body.md and this version's section of
+      # CHANGELOG.md. Fails when that section is missing, which is the check
+      # that stops a version being published with nothing said about it.
+      - name: Compose the release notes
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          python tools/release_notes.py "$VERSION" > release-notes.md
+          echo "--- notes ---"
+          cat release-notes.md
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          title="Tyche $TAG"
+          # `gh release create` fails outright when a release already exists
+          # for the tag — the normal case when the tag was created by
+          # publishing a release through GitHub's own UI, and when a tag is
+          # moved onto a release that is already there. The fallback converges
+          # on the same state: same title, same notes, published rather than
+          # left as an invisible draft.
+          gh release create "$TAG" --title "$title" --notes-file release-notes.md \
+            || gh release edit "$TAG" --title "$title" --notes-file release-notes.md --draft=false

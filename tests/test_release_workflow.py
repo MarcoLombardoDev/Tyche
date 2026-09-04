@@ -1,0 +1,260 @@
+# Tyche — SuperEnalotto Archive Analysis & TimesFM Forecasting
+# Copyright (C) 2026 Marco Lombardo
+#
+# Private project. All rights reserved; see LICENSE.
+# Distributed WITHOUT ANY WARRANTY.
+
+"""
+tests/test_release_workflow.py — Tyche
+
+Tests for ``.github/workflows/release.yml``, ``.github/release-body.md`` and
+``CHANGELOG.md``.
+
+Only GitHub Actions can actually run the workflow, so these parse the
+checked-in files instead. They are worth having because the release path runs
+about twice a year: every bug in it is found by a person waiting for a
+download, months after the change that caused it, and each of the guards below
+corresponds to a mistake already shipped once across these projects — a
+release published as an invisible draft, notes that were the raw commit log,
+and a download whose name promised a version the program did not report.
+
+PyYAML is imported hard, not via ``importorskip``. It is in
+``requirements-dev.txt``; a run without it is a broken environment, not a
+lighter one, and a skip here would silently stop testing the file that
+publishes the releases.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO))
+
+WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
+CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+BODY = REPO / ".github" / "release-body.md"
+CHANGELOG = REPO / "CHANGELOG.md"
+
+
+def load(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def workflow() -> dict:
+    return load(WORKFLOW)
+
+
+@pytest.fixture(scope="module")
+def steps(workflow) -> list[dict]:
+    return workflow["jobs"]["release"]["steps"]
+
+
+def step_text(steps: list[dict]) -> str:
+    """Every ``run:`` in the job, concatenated. Enough for "does it do X"."""
+    return "\n".join(step.get("run", "") for step in steps)
+
+
+def suite_step(steps: list[dict]) -> dict:
+    """The step that runs the suite.
+
+    Not named ``test_*``: pytest would collect this helper as a test case,
+    which it did, and then warn that the test returned a dict.
+
+    Matched on ``-m pytest`` and not on the bare word: the dependency-install
+    step also contains "pytest", and selecting that one instead made two of
+    the checks below assert things about a pip line while reporting green.
+    """
+    return next(s for s in steps if "-m pytest" in s.get("run", ""))
+
+
+def triggers(workflow) -> dict:
+    # PyYAML's 1.1 reader parses a bare ``on:`` key as the boolean True. That
+    # is a quirk of the library, not of the workflow file.
+    return workflow.get("on") or workflow[True]
+
+
+# ─────────────────────────────────────────────────────────────
+# The files exist and refer to each other
+# ─────────────────────────────────────────────────────────────
+
+def test_the_release_files_all_exist():
+    for path in (WORKFLOW, BODY, CHANGELOG, REPO / "tools" / "release_notes.py"):
+        assert path.exists(), f"{path.relative_to(REPO)} is missing"
+
+
+def test_the_workflow_only_runs_scripts_that_are_in_the_repository():
+    """A workflow calling a script nobody kept is found at release time."""
+    text = step_text(load(WORKFLOW)["jobs"]["release"]["steps"])
+    for line in text.splitlines():
+        if "tools/" in line:
+            script = line.split("tools/")[1].split()[0].strip('"')
+            assert (REPO / "tools" / script).exists(), f"tools/{script} is missing"
+
+
+# ─────────────────────────────────────────────────────────────
+# Triggers
+# ─────────────────────────────────────────────────────────────
+
+def test_a_version_tag_starts_a_release(workflow):
+    assert triggers(workflow)["push"]["tags"] == ["v*"]
+
+
+def test_it_can_also_be_run_by_hand_with_a_tag(workflow):
+    inputs = triggers(workflow)["workflow_dispatch"]["inputs"]
+    assert inputs["tag"]["required"] is True
+
+
+def test_it_does_not_also_fire_on_release_published(workflow):
+    """Both events fire when a release is published from the UI.
+
+    Two runs would then race to write the same notes onto the same release.
+    """
+    assert "release" not in triggers(workflow)
+
+
+def test_it_can_write_to_the_repository(workflow):
+    assert workflow["permissions"]["contents"] == "write"
+
+
+def test_two_runs_on_one_tag_cannot_race(workflow):
+    concurrency = workflow["concurrency"]
+    assert "release-" in concurrency["group"]
+    # Not cancel-in-progress: a half-cancelled publish is worse than a slow one.
+    assert concurrency["cancel-in-progress"] is False
+
+
+# ─────────────────────────────────────────────────────────────
+# What has to happen before anything is published
+# ─────────────────────────────────────────────────────────────
+
+def test_the_tag_shape_is_validated(steps):
+    assert "is not a version tag" in step_text(steps)
+
+
+def test_it_checks_out_the_tag_and_not_the_default_branch(steps):
+    checkout = next(s for s in steps if str(s.get("uses", "")).startswith("actions/checkout"))
+    assert "tag" in checkout["with"]["ref"]
+
+
+def test_the_linter_runs(steps):
+    assert "ruff check ." in step_text(steps)
+
+
+def test_the_whole_suite_runs_with_the_gui_required(steps):
+    """A release must not be published on a run that skipped the interface."""
+    step = suite_step(steps)
+    assert step["env"]["TYCHE_REQUIRE_GUI"] == "1"
+    assert "xvfb-run" in step["run"]
+
+
+def test_the_tag_must_match_the_version_the_program_reports(steps):
+    """Otherwise v2.3.0 can ship a program that answers 0.1.0."""
+    text = step_text(steps)
+    assert "main.py --version" in text
+    assert "core/version.py says" in text
+
+
+def test_the_release_is_created_after_the_tests_and_not_before(steps):
+    """Order is the only thing making this a gate rather than a bystander."""
+    names = [s.get("name", "") for s in steps]
+    runs = [s.get("run", "") for s in steps]
+    tested = next(i for i, r in enumerate(runs) if "-m pytest" in r)
+    published = next(i for i, r in enumerate(runs) if "gh release create" in r)
+    assert tested < published, f"tests run after publishing: {names}"
+
+
+# ─────────────────────────────────────────────────────────────
+# The notes
+# ─────────────────────────────────────────────────────────────
+
+def test_the_notes_come_from_a_file_and_not_from_the_commit_log(steps):
+    """--generate-notes emits the commit log, which is engineering shorthand."""
+    text = step_text(steps)
+    assert "--notes-file" in text
+    assert "--generate-notes" not in text
+
+
+def test_a_release_that_already_exists_is_updated_rather_than_left_as_a_draft(steps):
+    """Publishing from GitHub's UI creates the tag, so `create` fails."""
+    text = step_text(steps)
+    assert "gh release edit" in text
+    assert "--draft=false" in text
+
+
+def test_the_release_gets_a_title(steps):
+    assert "--title" in step_text(steps)
+
+
+def test_the_notes_compose_for_the_current_version():
+    """The version in core/version.py must have something written about it."""
+    from core.version import __version__
+    from tools.release_notes import compose
+
+    notes = compose(__version__)
+    assert f"What is in v{__version__}" in notes
+    assert len(notes) > 500
+
+
+def test_composing_notes_for_an_unwritten_version_is_an_error():
+    from tools.release_notes import compose
+
+    with pytest.raises(SystemExit, match="no section"):
+        compose("99.99.99")
+
+
+def test_the_changelog_has_a_section_for_the_current_version():
+    from core.version import __version__
+    from tools.release_notes import changelog_section
+
+    body, _ = changelog_section(__version__, CHANGELOG.read_text(encoding="utf-8"))
+    assert body.strip()
+
+
+def test_the_changelog_parser_stops_at_the_next_version_heading():
+    from tools.release_notes import changelog_section
+
+    text = "# Changelog\n\n## [2.0.0] — 2026-01-01\n\nsecond\n\n## [1.0.0] — 2025-01-01\n\nfirst\n"
+    assert changelog_section("2.0.0", text)[0] == "second"
+    assert changelog_section("1.0.0", text)[0] == "first"
+
+
+def test_the_release_body_says_what_was_verified():
+    """The page has to say what the badge on it means."""
+    body = BODY.read_text(encoding="utf-8")
+    assert "TYCHE_REQUIRE_GUI" in body
+
+
+def test_the_release_body_does_not_promise_downloads_that_are_not_built():
+    """The download table Argus needs is exactly what Tyche must not have.
+
+    A release page listing archives nobody built is the most annoying possible
+    release page, and it is a mistake these projects have made before.
+    """
+    body = BODY.read_text(encoding="utf-8").lower()
+    for promise in (".zip", ".tar.gz", ".exe"):
+        assert promise not in body, f"the notes offer {promise}, and nothing builds one"
+
+
+def test_the_release_body_keeps_the_disclaimer():
+    """It is a lottery program. The page that offers it has to say so."""
+    body = BODY.read_text(encoding="utf-8")
+    assert "cannot help you win" in body
+    assert "622,614,630" in body
+
+
+# ─────────────────────────────────────────────────────────────
+# CI and release must not drift apart
+# ─────────────────────────────────────────────────────────────
+
+def test_ci_and_release_run_the_same_test_command():
+    """Two ways of running the suite is two ways for one of them to rot."""
+    ci = suite_step(load(CI_WORKFLOW)["jobs"]["test"]["steps"])
+    rel = suite_step(load(WORKFLOW)["jobs"]["release"]["steps"])
+    assert ci["run"].strip() == rel["run"].strip()
+    assert ci["env"]["TYCHE_REQUIRE_GUI"] == rel["env"]["TYCHE_REQUIRE_GUI"]

@@ -54,7 +54,10 @@ jobs:
       # written to report a missing model rather than raise, and there is a
       # test asserting exactly that. The dependencies job below is what checks
       # the full file still resolves.
-      - run: pip install numpy requests customtkinter pytest
+      # pyyaml is here for tests/test_release_workflow.py, which parses the
+      # workflow files. Without it that module fails at collection and the
+      # guards on the file that publishes releases stop being run.
+      - run: pip install numpy requests customtkinter pytest pyyaml
 
       - name: Tests, GUI included
         # The whole point of the switch: without it a machine with no display

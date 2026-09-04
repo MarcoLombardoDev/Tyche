@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 87 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 104, GUI included
+python -m pytest tests/ -q                                   # 111 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 128, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `87 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `111 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -120,6 +120,43 @@ extension links against the runner's libtcl and libtk at load time and
 `python3-tk` is what provides those. There is an explicit "confirm tkinter is
 importable" step before the tests, because otherwise a missing Tk arrives as
 twelve failing GUI tests and reads like a code regression.
+
+## Releasing
+
+```
+# bump __version__ in core/version.py, write the CHANGELOG section, then:
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+`.github/workflows/release.yml` takes it from there: it checks out the tag,
+lints, runs the whole suite with `TYCHE_REQUIRE_GUI=1` under Xvfb, checks that
+the version the program reports matches the tag, composes the notes, and only
+then creates the release. One job, because the order is the point — the
+release step must not run if anything before it failed.
+
+Three things that are load-bearing and easy to undo by accident:
+
+- **The tag must match `core/version.py`.** Without that check a tag will
+  happily publish `v2.3.0` of a program that answers `0.1.0`, which is a
+  download whose name and contents disagree. `tests/test_release_workflow.py`
+  asserts the check is still in the workflow.
+- **The notes are composed, not generated.** `tools/release_notes.py` joins
+  `.github/release-body.md` (the standing description) to this version's
+  section of `CHANGELOG.md`, and *fails* when that section is missing. GitHub's
+  `--generate-notes` emits the commit log, which on a first release is the
+  whole project history.
+- **CI and release must run the same test command.** There is a test asserting
+  the two `run:` lines are byte-identical, because two ways of running the
+  suite is two ways for one of them to rot.
+
+**No binaries.** Argus freezes itself for three platforms with PyInstaller and
+its `release.yml` is ten times the size of this one for that reason alone.
+Tyche does not, because freezing it means bundling PyTorch — a few hundred
+megabytes per platform, unsigned, for a program that tells its user it cannot
+help them win anything. If that changes, PyInstaller does not cross-compile
+and this becomes a three-runner matrix; Argus's workflow is the worked example
+to copy, along with its `build.py`, `tools/collect_licences.py` and the
+launcher scripts in `packaging/`.
 
 ## Screenshots
 
