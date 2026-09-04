@@ -108,3 +108,100 @@ jobs:
           assert hasattr(TimesFM3Evaluator, "predict_batch")
           print("TimesFM 3.0 API matches what core/forecaster.py expects")
           PY
+
+  forecast:
+    # The only thing in this repository that downloads the 1.3 GB TimesFM
+    # checkpoint and runs a real forward pass. Everything else about the
+    # forecaster is covered by tests that stop short of the weights, so this
+    # is the job that answers "does core/forecaster.py actually work" —
+    # a question the sandbox it was written in could not answer, because
+    # Hugging Face was blocked there.
+    #
+    # Manual only. Weights that size do not belong in a weekly run, and the
+    # answer does not change unless core/forecaster.py or TimesFM does.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with a CPU-only PyTorch
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+
+      - name: Bootstrap the archive
+        # Also the only place the bulk source is fetched over a real network
+        # by anything other than a person clicking the button.
+        run: python main.py --update --yes
+
+      - name: Forecast with a baseline first
+        # If this fails the problem is not TimesFM, and knowing that before
+        # a 1.3 GB download is worth one second.
+        run: python main.py --forecast frequency
+
+      - name: Forecast with TimesFM 3.0
+        run: python main.py --forecast timesfm
+
+      - name: The forecast has to be ninety usable scores
+        # A wrapper can "work" and still return NaNs, a flat line, or the
+        # wrong number of series — the shapes that would make the validation
+        # harness silently score noise.
+        run: |
+          python - <<'PY'
+          import math
+          from core.archive import load_archive
+          from core.data_manager import ARCHIVE_PATH, load_settings
+          from core.forecaster import TimesFMForecaster
+
+          settings = load_settings()
+          draws = load_archive(ARCHIVE_PATH)
+          model = TimesFMForecaster(
+              checkpoint=settings["timesfm_checkpoint"],
+              device="cpu",
+              context_length=int(settings["context_length"]),
+              representation=settings["representation"],
+              window=int(settings["frequency_window"]),
+          )
+          assert model.load_model(), "the checkpoint did not load"
+          scores = model.score_numbers(draws)
+
+          assert set(scores) == set(range(1, 91)), f"got {len(scores)} series, expected 90"
+          assert all(math.isfinite(v) for v in scores.values()), "non-finite forecasts"
+          spread = max(scores.values()) - min(scores.values())
+          assert spread > 0, "every number scored identically — the ranking would be arbitrary"
+          print(f"90 finite scores, spread {spread:.6f}")
+          print("top six:", sorted(scores, key=scores.get, reverse=True)[:6])
+          PY
+
+      - name: Score TimesFM against the baselines over 60 draws
+        # Small on purpose: one model call per draw on a CPU runner. The point
+        # is that the walk-forward harness drives the real model end to end,
+        # not that 60 draws settles anything statistically.
+        run: |
+          python - <<'PY'
+          from core.archive import load_archive
+          from core.data_manager import ARCHIVE_PATH, load_settings
+          from core.forecaster import TimesFMForecaster
+          from core.validation import walk_forward
+
+          settings = load_settings()
+          draws = load_archive(ARCHIVE_PATH)
+          model = TimesFMForecaster(
+              checkpoint=settings["timesfm_checkpoint"], device="cpu",
+              context_length=int(settings["context_length"]),
+              representation=settings["representation"],
+              window=int(settings["frequency_window"]),
+          )
+          assert model.load_model()
+          report = walk_forward(
+              draws, methods=["timesfm", "frequency", "random"],
+              n_draws=60, forecaster=model,
+          )
+          for result in report.results:
+              print(result.summary())
+          print()
+          print(report.verdict())
+          PY

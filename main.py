@@ -18,6 +18,7 @@ scripting, and neither needs a window:
     python main.py --update             # refresh the archive (dry run)
     python main.py --update --yes       # ...and write it
     python main.py --import FILE --yes  # import a file you downloaded
+    python main.py --forecast gap       # six numbers, no window
 
 ``--update`` and ``--import`` are dry runs unless ``--yes`` is given. That is
 the same rule the Archive tab follows and it exists for the same reason: the
@@ -36,6 +37,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from core.predictor import METHODS
 from core.version import APP_NAME, APP_TITLE, __version__
 
 
@@ -61,6 +63,10 @@ def _parse_args():
     parser.add_argument(
         "--import", dest="import_path", metavar="FILE", default=None,
         help="import draws from a file you downloaded, and exit",
+    )
+    parser.add_argument(
+        "--forecast", nargs="?", const="frequency", metavar="METHOD", default=None,
+        help=f"print one set of numbers and exit ({', '.join(METHODS)}; default frequency)",
     )
     parser.add_argument(
         "--yes", "-y", action="store_true",
@@ -211,6 +217,53 @@ def _run_import(path: str, write: bool) -> int:
     return _apply(incoming, write)
 
 
+def _run_forecast(method: str) -> int:
+    """One prediction, printed. Also the end-to-end check on the model.
+
+    ``--forecast timesfm`` is the only code path that downloads the checkpoint
+    and runs a real forward pass, which makes it the thing CI runs on demand:
+    everything else about the forecaster is exercised by tests that stop short
+    of the 1.3 GB of weights.
+    """
+    from core.data_manager import load_settings
+    from core.predictor import predict, value_note
+
+    draws = _load_archive_or_explain()
+    if not draws:
+        return 1
+    settings = load_settings()
+
+    forecaster = None
+    if method == "timesfm":
+        from core.forecaster import TimesFMForecaster
+
+        forecaster = TimesFMForecaster(
+            checkpoint=settings["timesfm_checkpoint"],
+            device=settings["timesfm_device"],
+            context_length=int(settings["context_length"]),
+            representation=settings["representation"],
+            window=int(settings["frequency_window"]),
+            hf_token=settings.get("hf_token", ""),
+        )
+        print(forecaster.describe())
+        if not forecaster.load_model():
+            print("\nTimesFM could not be loaded. Install it with `pip install timesfm[torch]`.")
+            return 1
+
+    prediction = predict(
+        draws, method=method, combinations=int(settings["combinations"]),
+        forecaster=forecaster, window=int(settings["frequency_window"]),
+    )
+    print(f"\n{prediction.method} — {prediction.note}")
+    print(f"archive: {prediction.archive_size:,} draws up to {prediction.archive_last_date}\n")
+    for i, combination in enumerate(prediction.combinations, 1):
+        print(f"  {i}. " + "  ".join(f"{n:2d}" for n in combination))
+    spread = prediction.scores[prediction.ranked[0]] - prediction.scores[prediction.ranked[-1]]
+    print(f"\nscore spread across the ninety numbers: {spread:.6f}")
+    print(f"\n{value_note()}")
+    return 0
+
+
 def main() -> int:
     args = _parse_args()
     if args.version:
@@ -227,6 +280,11 @@ def main() -> int:
         return _run_update(args.yes)
     if args.import_path:
         return _run_import(args.import_path, args.yes)
+    if args.forecast:
+        if args.forecast not in METHODS:
+            print(f"unknown method {args.forecast!r}; expected one of {', '.join(METHODS)}")
+            return 2
+        return _run_forecast(args.forecast)
 
     from gui.app import TycheApp
 

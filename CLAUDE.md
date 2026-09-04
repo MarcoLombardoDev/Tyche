@@ -96,6 +96,15 @@ and on demand only — and asserts that the `ModelConfig` fields
 TimesFM renaming something under us; it deliberately does not download the
 1.3 GB of weights.
 
+The `forecast` job does. **It is the only place `core/forecaster.py` is run
+for real**, because a GitHub runner has the unrestricted network the sandbox
+this was written in did not: it fetches the archive over the wire, downloads
+the checkpoint, scores the ninety numbers and then drives sixty draws of the
+walk-forward harness through the actual model. It asserts the shapes that
+would otherwise fail silently — ninety series, all finite, and a non-zero
+spread, since a flat forecast makes the ranking arbitrary and the validation
+harness would happily score the noise. Manual dispatch only.
+
 CI does install `python3-tk` even though `setup-python` ships its own
 `_tkinter`. The two are not the same thing: the module is there, but the
 extension links against the runner's libtcl and libtk at load time and
