@@ -1,0 +1,88 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ─────────────────────────────────────────────────────────────
+# SENSITIVE / GENERATED — never commit
+# Deny-by-default on the risky paths: the whole runtime data directory is
+# excluded, so a new artefact appearing there cannot be committed by
+# accident. Allowlist the one file you need; do not loosen the directory.
+# ─────────────────────────────────────────────────────────────
+
+# Secrets store, in every variant
+.env
+.env.*
+*.env
+env.txt
+!.env.example
+!.env.template
+
+# User configuration, which holds the Hugging Face token.
+# The *template* stays tracked and is generated from DEFAULT_SETTINGS.
+config/settings.json
+config/settings*.json
+!config/settings.template.json
+settings.json
+
+# Runtime output: the draw archive, the prediction log, validation runs.
+# The archive is downloadable in one click and is not source; committing it
+# would also freeze a copy of data that is known to be wrong in places.
+data/
+
+# Common credential filenames
+credentials*
+secrets*
+keys.txt
+*.pem
+*.p12
+*.pfx
+*.key
+id_rsa*
+*.keystore
+
+# Model weights and the Hugging Face cache. The TimesFM 3.0 checkpoint is
+# about 1.3 GB and carries its own non-commercial licence; it does not belong
+# in a git history.
+.cache/
+huggingface/
+*.safetensors
+*.pth
+
+# Private notes and backups
+info-private.txt
+*-private.*
+*.bak
+*.backup
+*.orig
+
+# Scratch / temp
+scratch_*.py
+tmp/
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,15 @@
+# Development and test dependencies for Tyche.
+#
+# Install a CPU-only PyTorch first if you do not have a CUDA card, or pip will
+# resolve the CUDA build from PyPI and download several extra gigabytes:
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-dev.txt
+-r requirements.txt
+
+# The test suite. Absent from requirements.txt: running Tyche never needs it.
+pytest>=8.0
+
+# Static analysis. It parses the sources rather than importing them, so it
+# needs none of the runtime dependencies and runs in a second.
+ruff>=0.5

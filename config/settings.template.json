@@ -1,0 +1,21 @@
+{
+  "timesfm_checkpoint": "google/timesfm-3.0-pytorch",
+  "timesfm_device": "cpu",
+  "hf_token": "",
+  "representation": "frequency",
+  "frequency_window": 150,
+  "context_length": 1024,
+  "bulk_archive_url": "https://downloads.sourceforge.net/project/superenalotto/EnalStorico.CSV",
+  "html_archive_url": "https://www.superenalotto.it/archivio-estrazioni/{year}",
+  "auto_repair_labels": true,
+  "prediction_method": "timesfm",
+  "combinations": 5,
+  "numbers_per_combination": 6,
+  "validation_draws": 300,
+  "validation_baselines": [
+    "random",
+    "frequency",
+    "gap"
+  ],
+  "last_archive_update": ""
+}

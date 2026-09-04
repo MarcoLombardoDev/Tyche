@@ -1,0 +1,35 @@
+Tyche — SuperEnalotto Archive Analysis & TimesFM Forecasting
+Copyright (C) 2026 Marco Lombardo
+
+All rights reserved.
+
+This is a private project. It is not published under an open-source licence
+and no permission is granted to use, copy, modify or distribute it.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+────────────────────────────────────────────────────────────────────────────
+Third-party components
+
+Tyche depends on TimesFM. Two different licences apply to it and the
+distinction matters if this project ever stops being private:
+
+  • The `timesfm` package source is Apache-2.0.
+  • The `google/timesfm-3.0-pytorch` *weights* Tyche downloads at runtime are
+    distributed under `timesfm-non-commercial-license-v1.0` and are
+    restricted to non-commercial, non-production use. Commercial or
+    production use of those weights is not permitted.
+
+Weights up to TimesFM 2.5 remain Apache-2.0, so a commercial build would have
+to drop to 2.5 — which cannot do native multivariate forecasting and is not a
+drop-in swap for what core/forecaster.py does.
+
+CustomTkinter is MIT. NumPy is BSD-3-Clause. Requests is Apache-2.0.
+────────────────────────────────────────────────────────────────────────────
+Draw data
+
+Historical draw results are facts, not creative works. The archive files Tyche
+downloads are third-party compilations and each carries its own terms of use;
+check them before redistributing a copy of the archive itself.

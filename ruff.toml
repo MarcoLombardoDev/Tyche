@@ -1,0 +1,20 @@
+# Tyche's lint configuration. Argus, Iris and Proteus keep theirs in a
+# ruff.toml rather than in a pyproject.toml, which none of them has; Tyche
+# follows the family, and starts from the same rule set.
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+  "B008",
+  "SIM108",
+  # E501 is *enforced* here, unlike in Argus. Argus disabled it because 429 of
+  # its lines were already over the limit and rewrapping them would have been
+  # the largest diff in its history for no behaviour change. Tyche is new
+  # code: the limit costs nothing now and would cost that same diff later.
+]
+
+[lint.per-file-ignores]
+# Tests build option dictionaries that read as keyword tables.
+"tests/*" = ["C408"]

@@ -1,0 +1,37 @@
+# --- GUI ---
+customtkinter>=5.2.0
+# NOTE: tkinter ships with CPython but on Linux it is a separate OS package
+#       (Debian/Ubuntu: sudo apt install python3-tk), and it must match the
+#       interpreter running the code — a python3-tk built for 3.12 does
+#       nothing for a 3.11 interpreter.
+
+# --- Data & numerics ---
+numpy>=1.24.0
+requests>=2.31.0
+
+# --- Forecasting ---
+# TimesFM 3.0: 330M parameters, native multivariate, released August 2026.
+# The package code is Apache-2.0; the 3.0 *weights* it downloads from Hugging
+# Face are under timesfm-non-commercial-license-v1.0 and are restricted to
+# non-commercial, non-production use. That is fine for a private tool and
+# would not be for anything sold — see README.md.
+#
+# Installing this pulls in PyTorch. For a CPU-only install, which is several
+# gigabytes smaller and all Tyche needs:
+#
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+timesfm[torch]>=3.0.0
+
+# NOTE on what is deliberately absent:
+#
+# - pandas. The archive is a few thousand rows read once into a list of
+#   frozen dataclasses; numpy covers the matrix work in core/features.py and
+#   nothing here needs a DataFrame.
+# - scipy. core/stats_tests.py implements the four distribution functions the
+#   analysis needs, in about a hundred lines. Every number in the validation
+#   report is a claim about whether a prediction beat chance, and a reader has
+#   to be able to check how the p-value was produced without leaving the repo.
+# - beautifulsoup4. core/sources/html_table.py deliberately does not key on
+#   CSS classes or the DOM; it works on rows, cells and positions, which the
+#   standard library handles.
