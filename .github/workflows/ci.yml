@@ -121,7 +121,7 @@ jobs:
     # answer does not change unless core/forecaster.py or TimesFM does.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -176,12 +176,22 @@ jobs:
           print("top six:", sorted(scores, key=scores.get, reverse=True)[:6])
           PY
 
-      - name: Score TimesFM against the baselines over 60 draws
-        # Small on purpose: one model call per draw on a CPU runner. The point
-        # is that the walk-forward harness drives the real model end to end,
-        # not that 60 draws settles anything statistically.
+      - name: Drive the walk-forward harness through the real model
+        # Twelve draws, and the number is load-bearing. One forward pass over
+        # ninety variates and a 1024-draw context costs about thirty seconds on
+        # a two-core runner, so the first version of this step asked for sixty
+        # and spent half an hour before the job timed out — a red build that
+        # said nothing about the code. The purpose here is that walk_forward
+        # can drive the real model end to end, which twelve calls establish as
+        # well as sixty; the statistics are the Validate tab's job, on a
+        # machine somebody is sitting at.
+        #
+        # The per-call timing is printed so the next person to change this
+        # number is changing it from evidence.
         run: |
           python - <<'PY'
+          import time
+
           from core.archive import load_archive
           from core.data_manager import ARCHIVE_PATH, load_settings
           from core.forecaster import TimesFMForecaster
@@ -196,12 +206,17 @@ jobs:
               window=int(settings["frequency_window"]),
           )
           assert model.load_model()
+
+          scored = 12
+          started = time.monotonic()
           report = walk_forward(
               draws, methods=["timesfm", "frequency", "random"],
-              n_draws=60, forecaster=model,
+              n_draws=scored, forecaster=model,
           )
+          elapsed = time.monotonic() - started
+
           for result in report.results:
               print(result.summary())
-          print()
-          print(report.verdict())
+          print(f"\n{report.verdict()}")
+          print(f"\n{elapsed:.0f}s for {scored} draws — {elapsed / scored:.1f}s per model call")
           PY

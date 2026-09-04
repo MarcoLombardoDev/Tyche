@@ -99,11 +99,20 @@ TimesFM renaming something under us; it deliberately does not download the
 The `forecast` job does. **It is the only place `core/forecaster.py` is run
 for real**, because a GitHub runner has the unrestricted network the sandbox
 this was written in did not: it fetches the archive over the wire, downloads
-the checkpoint, scores the ninety numbers and then drives sixty draws of the
-walk-forward harness through the actual model. It asserts the shapes that
-would otherwise fail silently — ninety series, all finite, and a non-zero
-spread, since a flat forecast makes the ranking arbitrary and the validation
-harness would happily score the noise. Manual dispatch only.
+the checkpoint, scores the ninety numbers and then drives the walk-forward
+harness through the actual model. It asserts the shapes that would otherwise
+fail silently — ninety series, all finite, and a non-zero spread, since a flat
+forecast makes the ranking arbitrary and the validation harness would happily
+score the noise. Manual dispatch only.
+
+**One forward pass costs about thirty seconds there**, over ninety variates
+and a 1024-draw context on a two-core runner. That number is why the harness
+step scores twelve draws and not sixty: the first version asked for sixty,
+spent half an hour and timed the job out, producing a red build that said
+nothing about the code. Twelve establishes that `walk_forward` drives the real
+model end to end, which is all this job is for — the statistics belong to the
+Validate tab, on a machine somebody is sitting at. The step prints its own
+seconds-per-call so the next change to that number comes from evidence.
 
 CI does install `python3-tk` even though `setup-python` ships its own
 `_tkinter`. The two are not the same thing: the module is there, but the
