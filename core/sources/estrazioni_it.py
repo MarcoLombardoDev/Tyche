@@ -22,10 +22,24 @@ SuperEnalotto page carries a download link reading
 SuperEnalotto page, which is either a static navigation link or a leftover.
 The page's own address is ``index.php?p=home&anno=2026&tipo=superenalotto``,
 so ``tipo`` is the game selector and the SuperEnalotto export should be the
-same download URL with the same value substituted. That is an inference from
-two observed URLs rather than documentation, which is why several spellings
-are tried and why CI fetches the file and counts the rows: a guess nobody
-checks is a guess that fails in front of the user.
+same download URL with that value substituted.
+
+It is. Confirmed from CI, which runs on a network that can reach the host:
+
+    158,321 bytes  index.php?p=download&tipo=superenalotto&formato=csv
+               first line: DATA;CONCORSO;N1;N2;N3;N4;N5;N6;JOLLY;SUPERSTAR
+    parsed 4,260 draws, 1997-12-03 to 2026-09-03
+
+158,321 bytes is byte-for-byte the size of the file the owner downloaded from
+the site by hand, so this is that export and not something that resembles it.
+
+The inference is still an inference, and the checks around it stay. ``tipo``
+is case-sensitive — ``tipo=superEnalotto`` answers HTTP 500 — which is the
+kind of thing that changes silently on somebody else's site. So: several URLs
+are tried, the response has to clear a size floor because this kind of CMS
+answers a bad query with a 200 and a courtesy page, CI re-checks every
+candidate on each dispatch and prints its size and first line, and the GUI
+confirms the import even when the preview is clean.
 
 The response is parsed by :func:`core.sources.local_file.parse_any`, so a
 downloaded file and a hand-downloaded one go through exactly the same code.
@@ -37,17 +51,25 @@ from __future__ import annotations
 from core.archive import Draw
 from core.sources.base import DrawSource, ProgressCallback, SourceError, http_get
 
-# Tried in order. The first is the inference above; the rest cover the
-# spellings the same page could plausibly be using.
+# Tried in order. All three are confirmed working: the first two are the same
+# endpoint with and without ``www``, and the third is a second path the site
+# serves the identical file from, kept because a CMS offering two routes may
+# retire either one.
+#
+# A fourth candidate, ``tipo=superEnalotto``, was dropped — it answers HTTP
+# 500. The parameter is case-sensitive, which is worth knowing before editing
+# this list from memory.
 DOWNLOAD_URLS = (
     "https://estrazioni.it/index.php?p=download&tipo=superenalotto&formato=csv",
     "https://www.estrazioni.it/index.php?p=download&tipo=superenalotto&formato=csv",
-    "https://estrazioni.it/index.php?p=download&tipo=superEnalotto&formato=csv",
     "https://estrazioni.it/superenalotto/download.php?formato=csv",
 )
 
-# The export is around 160 KB. Anything much smaller is an error page that
-# happened to return 200, which this kind of site does routinely.
+# The export is 158,321 bytes as of September 2026. Anything much smaller is
+# an error page that happened to return 200, which this kind of site does
+# routinely. The floor is an eighth of that: low enough to survive the archive
+# shrinking for a reason nobody predicted, high enough to catch a courtesy
+# page.
 MIN_PLAUSIBLE_BYTES = 20_000
 
 
@@ -62,8 +84,8 @@ class EstrazioniItSource(DrawSource):
     def describe(self) -> str:
         return (
             "Full CSV export from estrazioni.it — one request, 1997 to the last "
-            "draw. The download URL is inferred rather than documented, so the "
-            "import is confirmed before anything is written."
+            "draw. The download URL is undocumented and was inferred, so CI "
+            "re-checks it and the import is confirmed before anything is written."
         )
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:

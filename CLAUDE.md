@@ -237,13 +237,17 @@ dependency and is deliberately not in `requirements.txt`.
   The URL is not documented anywhere. It was inferred from two others on the
   site: the SuperEnalotto page is `index.php?p=home&anno=2026&tipo=superenalotto`
   and carries a download link reading `index.php?p=download&tipo=lotto&formato=csv`,
-  so `tipo` is the game selector and the SuperEnalotto export should be that
-  download URL with the same value. Four spellings are tried, the CI
-  `scraper-recon` job fetches each and prints its size and first line, and the
-  GUI confirms the import even when the preview is clean. **If that job ever
-  reports the URL failing, fix the URL — do not assume the site is down.**
-  Manual import stays the fallback that cannot break, and it is how the
-  archive on disk was first built.
+  so `tipo` is the game selector and the SuperEnalotto export is that download
+  URL with the same value. CI confirmed it — 158,321 bytes, byte-for-byte the
+  size of the file downloaded from the site by hand, parsing to 4,260 draws.
+
+  `tipo` is case-sensitive: `superEnalotto` answers HTTP 500. The checks around
+  the inference stay anyway — three candidate URLs, a size floor because this
+  CMS answers a bad query with a 200 and a courtesy page, a CI step that
+  re-fetches every candidate on each dispatch, and a GUI confirmation even
+  when the preview is clean. **If that step ever reports the URL failing, fix
+  the URL — do not assume the site is down.** Manual import stays the fallback
+  that cannot break, and it is how the archive on disk was first built.
 
 - **The labelled-header parser exists because the positional one got it
   wrong.** estrazioni.it puts the contest number *after* the date —
