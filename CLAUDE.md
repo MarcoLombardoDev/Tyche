@@ -152,16 +152,21 @@ Three things that are load-bearing and easy to undo by accident:
 **One binary, for Windows**, built by the `windows` job after the tests pass.
 Argus builds three; Tyche builds one because running from source is a normal
 thing to do on macOS and Linux and each extra platform is another unsigned
-several-hundred-megabyte archive to smoke-test and keep honest. Argus's
-`release.yml` is the worked example if that changes.
+160 MB archive to smoke-test and keep honest. Argus's `release.yml` is the
+worked example if that changes.
+
+v0.1.0 is the measurement to size future changes against: dependency install
+2 minutes, PyInstaller 2m21s, smoke test and launcher checks 15 seconds, zip
+36 seconds, upload 9 seconds — six minutes end to end for the whole job.
 
 Three things about that build worth knowing before touching it:
 
 - **It is a folder build, not `--onefile`, and that is the one real divergence
   from `Argus.spec`.** A onefile bundle extracts its whole payload to a
-  temporary directory on every launch. Tyche's payload includes PyTorch, so
-  that would be the better part of a minute of waiting each time. `COLLECT`
-  produces `dist/Tyche/`, which starts immediately and zips to the same size.
+  temporary directory on every launch. Tyche's payload includes PyTorch —
+  **the v0.1.0 build is 160 MB zipped**, and a onefile version would unpack
+  that on every start. `COLLECT` produces `dist/Tyche/`, which starts
+  immediately and zips no larger.
   A consequence: the folder build is a *single* process, so `start.cmd` can
   wait on the handle `Start-Process` returns. Argus cannot — a onefile
   bootloader re-runs itself and the child draws the window — and its launcher

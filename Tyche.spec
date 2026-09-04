@@ -7,10 +7,10 @@
 # Argus's spec.** Argus freezes to --onefile, which is tidier: one executable,
 # nothing to unpack. A onefile build works by packing everything into the
 # executable and extracting it to a temporary folder on *every* launch. Argus
-# gets away with it. Tyche bundles PyTorch, so its payload is several hundred
-# megabytes, and extracting that on every start would mean waiting the better
-# part of a minute to see a window — every time. A folder starts immediately
-# and zips to the same size.
+# gets away with it. Tyche bundles PyTorch: the built folder is around 400 MB
+# and zips to 160 MB, and extracting that on every start would mean waiting to
+# see a window every single time. A folder build starts immediately and the
+# archive is no bigger for it.
 #
 # User data — config/settings.json, data/ — is written next to the executable,
 # not inside the bundle. core/paths.py::writable_base_dir is the single place
