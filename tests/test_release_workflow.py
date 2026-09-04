@@ -310,6 +310,45 @@ def test_the_archive_checksum_reaches_the_notes():
     assert "<!-- download -->" in text
 
 
+def test_the_notes_step_forces_utf8_on_windows():
+    """The failure this exists for, from the first real release.
+
+    Windows defaults Python's stdout to cp1252 and the notes carry an em dash
+    and a warning sign. body.md was written correctly and then `print(body)`
+    raised UnicodeEncodeError, `bash -e` failed the step, and `gh release edit`
+    never ran — so the archive was attached and the download section was not.
+    Writing the file was already explicitly UTF-8; echoing it to the log was
+    the part that was not.
+    """
+    step = next(
+        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
+        if "download section" in s.get("name", "")
+    )
+    assert step["env"]["PYTHONIOENCODING"] == "utf-8"
+
+
+def test_the_notes_step_does_not_echo_the_whole_body():
+    """Printing it is what crashed. A length is enough for a log."""
+    step = next(
+        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
+        if "download section" in s.get("name", "")
+    )
+    assert "print(body)" not in step["run"]
+
+
+def test_the_notes_block_is_a_raw_string():
+    r"""It contains a PowerShell `.\` path, and `\{` is an invalid escape.
+
+    Ruff caught this same mistake in this very docstring, which is a fair
+    demonstration that the rule earns its place.
+    """
+    step = next(
+        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
+        if "download section" in s.get("name", "")
+    )
+    assert 'block = rf"""' in step["run"]
+
+
 def test_the_spec_builds_a_folder_and_not_one_file():
     """Bundling PyTorch into onefile means unpacking it on every launch."""
     spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")

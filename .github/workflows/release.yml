@@ -334,6 +334,15 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
           ASSET: ${{ steps.package.outputs.name }}
           LINE: ${{ steps.checksum.outputs.line }}
+          # Windows defaults Python's stdout to cp1252, and the notes contain
+          # an em dash and a warning sign. The first real run of this job wrote
+          # body.md correctly and then died on `print(body)` with a
+          # UnicodeEncodeError, so `gh release edit` never ran: the archive was
+          # attached and the download section was not. Everything the file
+          # itself does was already explicitly UTF-8; it was echoing it to the
+          # log that was not.
+          PYTHONIOENCODING: utf-8
+          PYTHONUTF8: "1"
         run: |
           gh release view "$TAG" --json body --jq .body > body.md
           python - body.md <<'PY'
@@ -342,7 +351,11 @@ jobs:
 
           asset = os.environ["ASSET"]
           line = os.environ["LINE"]
-          block = f"""<!-- download -->
+          # A *raw* f-string. The PowerShell line below contains `.\`, and in
+          # a normal string literal `\{` is an invalid escape sequence —
+          # Python warns and leaves the backslash, which happens to be what
+          # was wanted, but relying on a deprecation is not a plan.
+          block = rf"""<!-- download -->
           ## Download
 
           | Platform | File |
@@ -395,6 +408,6 @@ jobs:
           else:
               body = body.rstrip("\n") + "\n\n" + block + "\n"
           path.write_text(body, encoding="utf-8")
-          print(body)
+          print(f"wrote {len(body)} characters to {path}")
           PY
           gh release edit "$TAG" --notes-file body.md
