@@ -513,3 +513,162 @@ def repair_year_offset(draws: list[Draw]) -> tuple[list[Draw], list[str]]:
     repaired = [moved.get(id(d), d) for d in draws]
     repaired.sort(key=lambda d: (d.date, d.contest))
     return repaired, notes
+
+
+# ─────────────────────────────────────────────────────────────
+# Is the archive current, and what would an import do to it?
+# ─────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Freshness:
+    """How far behind the archive is, and how many draws that is."""
+
+    last_date: date | None
+    days_behind: int
+    average_interval_days: float
+    estimated_missing: int
+
+    @property
+    def stale(self) -> bool:
+        """Behind by more than about two draws.
+
+        One missed draw is a user who has not clicked update since Tuesday.
+        Three is an archive that has stopped being maintained, which is the
+        state the bulk mirror leaves it in permanently.
+        """
+        return self.estimated_missing >= 2
+
+    def describe(self) -> str:
+        if self.last_date is None:
+            return "The archive is empty."
+        if not self.stale:
+            return f"Current as of {self.last_date} ({self.days_behind} days ago)."
+        return (
+            f"Last draw on record is {self.last_date}, {self.days_behind} days ago — "
+            f"roughly {self.estimated_missing} draws missing at the archive's own "
+            f"cadence of one every {self.average_interval_days:.1f} days."
+        )
+
+
+def freshness(draws: list[Draw], today: date | None = None, sample: int = 50) -> Freshness:
+    """How stale the archive is, measured against its own draw cadence.
+
+    The cadence is taken from the last ``sample`` draws rather than hardcoded,
+    because SuperEnalotto's schedule has changed repeatedly — twice a week at
+    the start, three a week from 2005, a fourth day added later. A constant
+    here would be wrong for most of the archive and would quietly become wrong
+    again at the next change.
+
+    The *mean* interval, not the median. The question being answered is "how
+    many draws happened while nobody was updating", over a horizon of years,
+    and at that length the occasional Christmas gap is part of the rate rather
+    than an outlier to suppress. On a Tuesday/Thursday/Saturday schedule the
+    intervals are 2, 2 and 3 days: the median is 2.0 and overstates the count
+    by a sixth, the mean is 2.33 and does not. The median would be the right
+    answer to "when is the next one", which is a different question and one
+    nothing here asks.
+    """
+    today = today or date.today()
+    if not draws:
+        return Freshness(None, 0, 0.0, 0)
+    last = max(d.date for d in draws)
+    days_behind = max((today - last).days, 0)
+
+    recent = sorted(d.date for d in draws)[-(sample + 1):]
+    intervals = [(b - a).days for a, b in zip(recent, recent[1:], strict=False)]
+    # Floored at one day: a corrupt archive with several draws on one date
+    # would otherwise divide by zero, and an interval under a day is not a
+    # schedule this game has ever run.
+    average = max(sum(intervals) / len(intervals), 1.0) if intervals else 1.0
+    return Freshness(last, days_behind, average, int(days_behind // average))
+
+
+@dataclass(frozen=True)
+class MergePreview:
+    """What merging a fetch into the archive would do, before it does it.
+
+    The scraper in :mod:`core.sources.html_table` has never run against a live
+    page, so "fetch and write" is the wrong shape for it: a parser that
+    silently misreads a column would overwrite good rows with plausible
+    nonsense, and the archive has no undo. This is what the Archive tab shows
+    the user first.
+    """
+
+    added: int
+    updated: int
+    unchanged: int
+    conflicts: list[str]
+    new_issues: list[IntegrityIssue]
+    first_new: date | None
+    last_new: date | None
+    samples: list[Draw]
+
+    @property
+    def safe(self) -> bool:
+        return not self.conflicts and not any(i.severity == "error" for i in self.new_issues)
+
+    def describe(self) -> str:
+        if not self.added and not self.updated:
+            parts = [f"Nothing new: all {self.unchanged} fetched draws are already on record."]
+        else:
+            parts = [
+                f"{self.added} draws to add, {self.updated} to change, "
+                f"{self.unchanged} already identical."
+            ]
+            if self.first_new:
+                parts.append(f"New draws span {self.first_new} to {self.last_new}.")
+        if self.conflicts:
+            parts.append(
+                f"{len(self.conflicts)} of them contradict a draw already stored: "
+                + "; ".join(self.conflicts[:3])
+                + ("; …" if len(self.conflicts) > 3 else "")
+            )
+        errors = [i for i in self.new_issues if i.severity == "error"]
+        if errors:
+            parts.append(f"The merge would introduce {len(errors)} new integrity errors.")
+        return " ".join(parts)
+
+
+def preview_merge(existing: list[Draw], incoming: list[Draw]) -> MergePreview:
+    """Dry-run :func:`merge_draws` and report what it would change.
+
+    A *conflict* is an incoming row whose numbers differ from a stored row for
+    the same date. That is the signature of a mis-parse, and it is worth
+    separating from an ordinary update — which is usually a row gaining its
+    SuperStar or its contest number.
+    """
+    by_date = {d.date: d for d in existing}
+    added = updated = unchanged = 0
+    conflicts: list[str] = []
+    new_dates: list[date] = []
+    for draw in incoming:
+        old = by_date.get(draw.date)
+        if old is None:
+            added += 1
+            new_dates.append(draw.date)
+            continue
+        if old.numbers != draw.numbers:
+            conflicts.append(f"{draw.date}: stored {old.numbers}, fetched {draw.numbers}")
+            updated += 1
+        elif draw.to_row()[:-1] != old.to_row()[:-1]:
+            updated += 1
+        else:
+            unchanged += 1
+
+    merged, _, _ = merge_draws(existing, incoming)
+    before = {(i.kind, i.message) for i in integrity_report(existing)}
+    new_issues = [i for i in integrity_report(merged) if (i.kind, i.message) not in before]
+
+    samples = sorted(
+        (d for d in incoming if d.date not in by_date), key=lambda d: d.date
+    )[-5:]
+    return MergePreview(
+        added=added,
+        updated=updated,
+        unchanged=unchanged,
+        conflicts=conflicts,
+        new_issues=new_issues,
+        first_new=min(new_dates) if new_dates else None,
+        last_new=max(new_dates) if new_dates else None,
+        samples=samples,
+    )

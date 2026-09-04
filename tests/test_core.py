@@ -32,9 +32,11 @@ from core.archive import (  # noqa: E402
     ArchiveError,
     Draw,
     describe_archive,
+    freshness,
     integrity_report,
     load_archive,
     merge_draws,
+    preview_merge,
     repair_year_offset,
     save_archive,
     superenalotto_only,
@@ -290,6 +292,91 @@ def test_repair_is_a_no_op_on_a_clean_archive():
 
 
 # ─────────────────────────────────────────────────────────────
+# Freshness and merge preview
+# ─────────────────────────────────────────────────────────────
+
+def _tue_thu_sat(weeks: int, start: date = date(2024, 1, 2)) -> list[Draw]:
+    """An archive on the real Tuesday/Thursday/Saturday schedule."""
+    draws, contest, day = [], 1, start
+    while len(draws) < weeks * 3:
+        if day.weekday() in (1, 3, 5):
+            draws.append(Draw(date=day, contest=contest,
+                              numbers=(1, 2, 3, 4, 5, 6), jolly=7))
+            contest += 1
+        day += timedelta(days=1)
+    return draws
+
+
+def test_freshness_of_an_empty_archive_says_so():
+    state = freshness([])
+    assert state.last_date is None and not state.stale
+
+
+def test_freshness_reads_the_cadence_off_the_archive_itself():
+    """Tuesday/Thursday/Saturday is 2, 2, 3 days: a mean of 2.33, not 2."""
+    draws = _tue_thu_sat(20)
+    state = freshness(draws, today=draws[-1].date)
+    assert state.average_interval_days == pytest.approx(7 / 3, abs=0.05)
+    assert state.days_behind == 0 and not state.stale
+
+
+def test_freshness_counts_the_draws_missed_while_nobody_updated():
+    draws = _tue_thu_sat(20)
+    state = freshness(draws, today=draws[-1].date + timedelta(days=70))
+    # 70 days at three draws a week is about 30. The median interval of 2.0
+    # would say 35, which is the overcount the mean exists to avoid.
+    assert 28 <= state.estimated_missing <= 32
+    assert state.stale
+    assert "missing" in state.describe()
+
+
+def test_freshness_tolerates_one_draw_and_duplicate_dates():
+    """A degenerate archive must not divide by a zero-day interval."""
+    single = [Draw(date=date(2024, 1, 2), contest=1, numbers=(1, 2, 3, 4, 5, 6), jolly=7)]
+    assert freshness(single, today=date(2024, 1, 2)).average_interval_days >= 1.0
+    twice = [*single, Draw(date=date(2024, 1, 2), contest=2,
+                           numbers=(1, 2, 3, 4, 5, 8), jolly=9)]
+    assert freshness(twice, today=date(2024, 1, 3)).average_interval_days >= 1.0
+
+
+def test_preview_counts_what_a_merge_would_change():
+    draws = random_archive(50)
+    preview = preview_merge(draws[:40], draws)
+    assert (preview.added, preview.updated, preview.unchanged) == (10, 0, 40)
+    assert preview.first_new == draws[40].date
+    assert preview.last_new == draws[-1].date
+    assert preview.safe
+
+
+def test_preview_flags_a_row_that_contradicts_a_stored_draw():
+    """The signature of a mis-parse, and the reason the scraper asks first."""
+    draws = random_archive(20)
+    bad = Draw(date=draws[5].date, contest=draws[5].contest,
+               numbers=(11, 22, 33, 44, 55, 66), jolly=1, year=draws[5].year)
+    preview = preview_merge(draws, [bad])
+    assert len(preview.conflicts) == 1
+    assert not preview.safe
+    assert "contradict" in preview.describe()
+
+
+def test_preview_reports_integrity_errors_the_merge_would_introduce():
+    draws = random_archive(30)
+    clash = Draw(date=date(1999, 5, 5), contest=draws[0].contest,
+                 numbers=(7, 8, 9, 10, 11, 12), jolly=13, year=draws[0].year)
+    preview = preview_merge(draws, [clash])
+    assert any(i.severity == "error" for i in preview.new_issues)
+    assert not preview.safe
+
+
+def test_preview_of_an_identical_fetch_changes_nothing():
+    draws = random_archive(25)
+    preview = preview_merge(draws, draws)
+    assert (preview.added, preview.updated) == (0, 0)
+    assert preview.safe
+    assert "Nothing new" in preview.describe()
+
+
+# ─────────────────────────────────────────────────────────────
 # Source parsers
 # ─────────────────────────────────────────────────────────────
 
@@ -383,6 +470,66 @@ def test_local_file_parser_raises_on_an_unrecognisable_file():
 
     with pytest.raises(SourceError):
         parse_any("this file contains no draws at all\n")
+
+
+def test_scraper_puts_the_configured_template_first_and_does_not_repeat_it():
+    from core.sources.html_table import DEFAULT_URL_TEMPLATE, HtmlTableSource
+
+    source = HtmlTableSource(DEFAULT_URL_TEMPLATE, [2024])
+    assert source.templates[0] == DEFAULT_URL_TEMPLATE
+    assert source.templates.count(DEFAULT_URL_TEMPLATE) == 1
+
+    custom = HtmlTableSource("https://example.invalid/{year}", [2024])
+    assert custom.templates[0] == "https://example.invalid/{year}"
+    assert DEFAULT_URL_TEMPLATE in custom.templates
+
+
+def test_scraper_falls_through_to_the_first_host_that_answers(monkeypatch):
+    """One unreachable host must not be the end of the attempt."""
+    import core.sources.html_table as ht
+
+    served = {"https://good.invalid/2024": HTML_SAMPLE.replace("2020", "2024")}
+
+    def fake_get(url, timeout=30):
+        if url not in served:
+            raise ht.SourceError(f"{url}: HTTP 403")
+        return served[url].encode()
+
+    monkeypatch.setattr(ht, "http_get", fake_get)
+    source = ht.HtmlTableSource(
+        "https://bad.invalid/{year}", [2024],
+        fallbacks=("https://alsobad.invalid/{year}", "https://good.invalid/{year}"),
+    )
+    draws = source.fetch()
+    assert len(draws) == 2
+    assert all("good.invalid" in d.source for d in draws)
+
+
+def test_scraper_reports_every_host_it_tried_when_all_of_them_fail(monkeypatch):
+    import core.sources.html_table as ht
+
+    monkeypatch.setattr(ht, "http_get", lambda url, timeout=30: b"<html>nope</html>")
+    source = ht.HtmlTableSource(
+        "https://a.invalid/{year}", [2024], fallbacks=("https://b.invalid/{year}",)
+    )
+    with pytest.raises(ht.SourceError) as caught:
+        source.fetch()
+    assert "a.invalid" in str(caught.value) and "b.invalid" in str(caught.value)
+
+
+def test_scraper_saves_the_page_when_asked(tmp_path, monkeypatch):
+    """The parser cannot be fixed from a description of what went wrong."""
+    import core.sources.html_table as ht
+
+    monkeypatch.setattr(
+        ht, "http_get", lambda url, timeout=30: HTML_SAMPLE.replace("2020", "2024").encode()
+    )
+    ht.HtmlTableSource(
+        "https://saved.invalid/{year}", [2024], fallbacks=(), debug_dir=tmp_path
+    ).fetch()
+    saved = list(tmp_path.glob("*.html"))
+    assert [p.name for p in saved] == ["saved.invalid-2024.html"]
+    assert "Concorso" in saved[0].read_text()
 
 
 # ─────────────────────────────────────────────────────────────

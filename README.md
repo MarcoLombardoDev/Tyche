@@ -12,6 +12,8 @@ the tests say so, and every method in the program scores 0.4 hits out of six,
 which is exactly chance. Tyche is built to demonstrate that carefully rather
 than to assert it.
 
+![Reality check](docs/screenshots/01_reality_check.png)
+
 ---
 
 ## What it does
@@ -24,6 +26,12 @@ than to assert it.
 | **Predict** | Six numbers, from TimesFM 3.0 or from three baselines including a random one. |
 | **Validate** | Walk-forward backtest of every method against the last *N* draws. |
 | **Settings** | Checkpoint, device, context length, source URLs. |
+
+![Validate](docs/screenshots/05_validate.png)
+
+*The Validate tab. Three methods, 400 draws, chance is 0.4000 — and the
+purple-on-black balls of the Predict tab look exactly as confident whichever
+of them produced them.*
 
 There is also a command line for the two parts worth scripting:
 
@@ -77,6 +85,25 @@ draws of 1999 are labelled 1998, which gives nine duplicated contest numbers
 and two pairs of different draws sharing a date. Tyche detects and repairs
 that on import, from evidence rather than a hardcoded list — see
 `core/archive.py::repair_year_offset`.
+
+Two consequences of having one verified-but-dead source and one live-but-
+unverified one:
+
+- **Imports are supervised.** Before anything is written, Tyche dry-runs the
+  merge and shows what it would change: rows added, rows that *contradict* a
+  stored draw, and any integrity error the merge would introduce. A clean
+  import from a trusted source goes straight through; anything from the
+  scraper is always confirmed, because a confident-looking mis-parse is
+  precisely what an untested parser produces. There is also a "save fetched
+  pages" switch — the parser cannot be fixed from a description of what went
+  wrong, only from the page that went wrong.
+- **Staleness is on screen, not in the documentation.** The footer and the
+  Archive tab report how far behind the archive is, in draws, measured
+  against the archive's own cadence rather than a hardcoded schedule. Boot-
+  strapping from the bulk mirror today reads *"roughly 1033 draws missing"*,
+  which is the honest description of what you have.
+
+![Archive](docs/screenshots/02_archive.png)
 
 ---
 
@@ -177,14 +204,22 @@ native multivariate forecasting and is not a drop-in replacement for what
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                    # core only
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # everything
+python -m pytest tests/ -q                                    # 70 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 87, GUI included
+python -m ruff check .
 ```
 
 The GUI suite skips itself when there is no display or no tkinter, and a run
-reporting "58 passed, 1 skipped" means the entire interface went untested.
+reporting "70 passed, 1 skipped" means the entire interface went untested.
 `TYCHE_REQUIRE_GUI=1` turns that skip into a failure; set it whenever you
-intend to have verified a GUI change.
+intend to have verified a GUI change. CI sets it.
+
+The README screenshots are committed files and go stale silently. After any
+change to the interface:
+
+```
+SHOTDIR=docs/screenshots xvfb-run -a python docs/generate_screenshots.py
+```
 
 ---
 

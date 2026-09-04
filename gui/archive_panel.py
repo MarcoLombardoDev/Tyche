@@ -22,10 +22,17 @@ from datetime import date
 
 import customtkinter as ctk
 
-from core.archive import describe_archive, integrity_report, merge_draws, save_archive
-from core.data_manager import ARCHIVE_PATH
+from core.archive import (
+    describe_archive,
+    freshness,
+    integrity_report,
+    merge_draws,
+    preview_merge,
+    save_archive,
+)
+from core.data_manager import ARCHIVE_PATH, DATA_DIR
 from core.sources import BulkArchiveSource, HtmlTableSource, LocalFileSource
-from gui.theme import BG_ROOT, MUTED
+from gui.theme import BG_ROOT, GOOD, MUTED, WARN
 from gui.widgets import ReportBox, section
 
 
@@ -52,8 +59,17 @@ class ArchivePanel(ctk.CTkFrame):
         ctk.CTkButton(row, text="Import a file…", width=140,
                       command=self._import_file).pack(side="left", padx=8)
 
+        self.debug_html = ctk.CTkCheckBox(
+            row, text="save fetched pages", width=170,
+        )
+        self.debug_html.pack(side="left", padx=(16, 0))
+
         self.status = ctk.CTkLabel(sources.body, text="", anchor="w", text_color=MUTED)
         self.status.pack(fill="x", pady=(10, 0))
+        self.freshness = ctk.CTkLabel(
+            sources.body, text="", anchor="w", justify="left", wraplength=1000
+        )
+        self.freshness.pack(fill="x", pady=(4, 0))
 
         health = section(self, "Integrity", "What is wrong with the archive on disk.")
         health.pack(fill="both", expand=True, padx=16, pady=8)
@@ -84,10 +100,16 @@ class ArchivePanel(ctk.CTkFrame):
         template = self.app.settings.get("html_archive_url", "")
         last_year = self.app.draws[-1].year if self.app.draws else 1997
         years = list(range(last_year, date.today().year + 1))
+        debug_dir = DATA_DIR / "fetched-pages" if self.debug_html.get() else None
         self.app.run_worker(
             f"Scraping {years[0]}–{years[-1]}",
-            lambda report: HtmlTableSource(template, years).fetch(report),
-            self._merge_result,
+            lambda report: HtmlTableSource(
+                template, years, debug_dir=debug_dir
+            ).fetch(report),
+            # Always confirmed, even when the preview looks clean: this is the
+            # source that has never been checked against a real page, and a
+            # confident-looking mis-parse is exactly what it would produce.
+            lambda incoming: self._merge_result(incoming, always_confirm=True),
         )
 
     def _import_file(self) -> None:
@@ -105,7 +127,23 @@ class ArchivePanel(ctk.CTkFrame):
             self._merge_result,
         )
 
-    def _merge_result(self, incoming) -> None:
+    def _merge_result(self, incoming, always_confirm: bool = False) -> None:
+        """Show what the fetch would do, then write it — or not.
+
+        The archive has no undo and the parsers are of uneven reliability, so
+        a merge that would contradict stored draws or introduce integrity
+        errors is put to the user rather than performed. A clean merge from a
+        trusted source goes straight through: a confirmation dialog that
+        always says "everything is fine" is one nobody reads.
+        """
+        preview = preview_merge(self.app.draws, incoming)
+        if (always_confirm and (preview.added or preview.updated)) or not preview.safe:
+            from tkinter import messagebox
+
+            if not messagebox.askyesno("Confirm import", self._confirm_text(preview)):
+                self.app.set_status("Import cancelled — nothing was written.")
+                return
+
         merged, added, updated = merge_draws(self.app.draws, incoming)
         save_archive(ARCHIVE_PATH, merged)
         self.app.set_draws(merged)
@@ -113,12 +151,26 @@ class ArchivePanel(ctk.CTkFrame):
             f"{added} draws added, {updated} updated — {len(merged):,} on record."
         )
 
+    @staticmethod
+    def _confirm_text(preview) -> str:
+        lines = [preview.describe(), ""]
+        if preview.samples:
+            lines.append("Newest rows this would add:")
+            lines += [
+                f"  {d.date}  {' '.join(f'{n:2d}' for n in d.numbers)}   [{d.source}]"
+                for d in preview.samples
+            ]
+            lines.append("")
+        lines.append("Write these to the archive?")
+        return "\n".join(lines)
+
     # ── display ──────────────────────────────────────────────
     def refresh(self) -> None:
         draws = self.app.draws
         info = describe_archive(draws)
         if not draws:
             self.status.configure(text="No archive yet. Start with the bulk bootstrap.")
+            self.freshness.configure(text="", text_color=MUTED)
             self.health_box.set_text("")
             self.recent_box.set_text("")
             return
@@ -127,6 +179,10 @@ class ArchivePanel(ctk.CTkFrame):
                 f"{info['count']:,} draws, {info['first']} to {info['last']}, "
                 f"{info['with_superstar']:,} with a SuperStar. Stored in {ARCHIVE_PATH}."
             )
+        )
+        state = freshness(draws)
+        self.freshness.configure(
+            text=state.describe(), text_color=WARN if state.stale else GOOD
         )
 
         issues = integrity_report(draws)

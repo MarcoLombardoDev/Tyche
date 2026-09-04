@@ -13,3 +13,7 @@ pytest>=8.0
 # Static analysis. It parses the sources rather than importing them, so it
 # needs none of the runtime dependencies and runs in a second.
 ruff>=0.5
+
+# Screenshot capture for docs/generate_screenshots.py. A documentation
+# dependency, not a runtime one — Tyche never imports it.
+pillow>=10.0

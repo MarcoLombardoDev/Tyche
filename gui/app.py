@@ -38,7 +38,7 @@ import traceback
 
 import customtkinter as ctk
 
-from core.archive import describe_archive, load_archive
+from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
 from core.version import APP_NAME, APP_TITLE, __version__
 from gui.archive_panel import ArchivePanel
@@ -46,11 +46,12 @@ from gui.prediction_panel import PredictionPanel
 from gui.reality_panel import RealityPanel
 from gui.settings_panel import SettingsPanel
 from gui.statistics_panel import StatisticsPanel
-from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT
+from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT, WARN, apply_theme
 from gui.validation_panel import ValidationPanel
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+apply_theme()
 
 VIEWS = [
     ("reality", "Reality check", RealityPanel),
@@ -152,13 +153,23 @@ class TycheApp(ctk.CTk):
         save_settings(self.settings)
 
     def _refresh_footer(self) -> None:
+        """Draw count, span, and how far behind the archive is.
+
+        The staleness marker is in the footer rather than only on the Archive
+        tab because it qualifies every number the other five tabs show. A
+        frequency table computed from an archive six years out of date is not
+        wrong, but it is not about this year either.
+        """
         info = describe_archive(self.draws)
-        if info["count"]:
-            self._archive_label.configure(
-                text=f"{info['count']:,} draws · {info['first']} → {info['last']}"
-            )
-        else:
-            self._archive_label.configure(text="archive empty")
+        if not info["count"]:
+            self._archive_label.configure(text="archive empty", text_color=MUTED)
+            return
+        state = freshness(self.draws)
+        suffix = f"  ·  {state.estimated_missing} draws behind" if state.stale else ""
+        self._archive_label.configure(
+            text=f"{info['count']:,} draws · {info['first']} → {info['last']}{suffix}",
+            text_color=WARN if state.stale else MUTED,
+        )
 
     # ── worker threads ───────────────────────────────────────
     def run_worker(self, label: str, work, on_success) -> None:

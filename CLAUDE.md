@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 58 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 70, GUI included
+python -m pytest tests/ -q                                   # 70 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 87, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `58 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `70 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -70,7 +70,33 @@ dependencies reinstalled into it.
 
 `torch` and `timesfm` are imported lazily, so both suites run without them —
 `core/forecaster.py` reports a missing model rather than raising, and there is
-a test for that.
+a test for that. CI relies on it: the `test` job installs numpy, requests,
+customtkinter and pytest and nothing else, because pulling TimesFM and PyTorch
+into every run costs gigabytes to exercise a code path the tests do not touch.
+The separate `dependencies` job installs the real `requirements.txt` — weekly
+and on demand only — and asserts that the `ModelConfig` fields
+`core/forecaster.py` passes still exist. That is the check that would catch
+TimesFM renaming something under us; it deliberately does not download the
+1.3 GB of weights.
+
+CI does install `python3-tk` even though `setup-python` ships its own
+`_tkinter`. The two are not the same thing: the module is there, but the
+extension links against the runner's libtcl and libtk at load time and
+`python3-tk` is what provides those. There is an explicit "confirm tkinter is
+importable" step before the tests, because otherwise a missing Tk arrives as
+twelve failing GUI tests and reads like a code regression.
+
+## Screenshots
+
+```
+SHOTDIR=docs/screenshots xvfb-run -a python docs/generate_screenshots.py
+```
+
+Committed files, and they go stale silently — same rule as Argus. The script
+fills every panel with real output before capturing it, and it prefers the
+real archive on disk over a synthetic one: screenshots of a game that is fair
+by construction would be evidence of nothing. Pillow is a documentation
+dependency and is deliberately not in `requirements.txt`.
 
 ## Things worth knowing before changing code
 
@@ -132,6 +158,28 @@ a test for that.
   than chance" would be indistinguishable from a harness that cannot detect
   skill at all.
 
+- **Staleness is measured with the mean interval, not the median.** The
+  question `freshness` answers is "how many draws happened while nobody was
+  updating", over a horizon of years. On a Tuesday/Thursday/Saturday schedule
+  the intervals are 2, 2 and 3 days: the median is 2.0 and overstates the
+  count by a sixth, the mean is 2.33 and does not. The median would answer
+  "when is the next one", which nothing here asks. The cadence is read off the
+  last fifty draws rather than hardcoded, because the schedule has changed
+  three times already.
+
+- **Imports are supervised, and the scraper always is.** `preview_merge`
+  dry-runs a merge and reports rows that would *contradict* a stored draw plus
+  any integrity error the merge would introduce; the Archive panel only shows
+  a dialog when that preview is unsafe — except for the HTML scraper, where it
+  always asks. A confirmation that always says "everything is fine" is one
+  nobody reads, so the two cases are deliberately different.
+
+- **The accent colour is set once, in `gui/theme.apply_theme`.** It rewrites
+  CustomTkinter's `ThemeManager` before any widget exists. Setting `fg_color`
+  per widget instead means the next widget somebody adds is CustomTkinter blue
+  against Tyche's purple and nobody notices until a screenshot. It has to run
+  before the first widget is constructed — the theme is read at construction.
+
 - **Do not fake a browser user agent.** The first version of `core/sources/base.py`
   sent a Chrome string on the usual assumption that it gets through more. It
   gets through less: SourceForge answers the Chrome string with a 403 and the
@@ -146,8 +194,20 @@ a test for that.
   egress policy of the environment this was written in. The parser is
   positional rather than class-based, which makes it structurally robust and
   no more tested for that. Its URL is a setting so a wrong path can be fixed
-  without a release. **First job for a session with real network access: save
-  one live page, look at it, and fix the parser against it.**
+  without a release. It now tries four candidate hosts in order and takes the
+  first that yields rows, and it can save every page it fetches
+  (`data/fetched-pages/`, off by default). **First job for a session with real
+  network access: turn that on, save one live page, look at it, and fix the
+  parser against it.**
+
+- **The bulk mirror is not merely old, it is dead.** Its HTTP response carries
+  `last-modified: Fri, 24 Jan 2020`. Searching for a replacement that is both
+  current and machine-readable found nothing reachable: SourceForge's project
+  pages, every Italian lottery host, Hugging Face and Wikipedia are all
+  blocked by the same egress policy, and there is no GitHub repository
+  publishing this data. Until the scraper is fixed against a real page, manual
+  import is the only route to anything after January 2020, and the interface
+  says so rather than implying the archive is current.
 
 - **One set of defaults, and a test that enforces it.** `DEFAULT_SETTINGS` in
   `core/data_manager.py` is the only copy; `config/settings.template.json` is

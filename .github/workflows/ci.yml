@@ -1,0 +1,110 @@
+name: CI
+
+# No pull_request trigger: main is the only branch this repository has, so a
+# push to it is the only event there is. workflow_dispatch is kept so the
+# heavy dependency job can be run on demand.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    # Mondays at 06:00 UTC. The dependency job is the only reason for a
+    # scheduled run: requirements.txt can stop resolving without anyone
+    # touching this repository.
+    - cron: "0 6 * * 1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      # ruff parses the sources rather than importing them, so this job needs
+      # none of the runtime dependencies and finishes in seconds.
+      - run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # tkinter is an OS package and it has to match the interpreter running
+      # the tests — the trap CLAUDE.md describes, where python3-tk installs
+      # the module for one interpreter and the tests run under another.
+      # setup-python ships its own `_tkinter` module, but that extension still
+      # links against the runner's libtcl/libtk at load time, and python3-tk
+      # is what pulls those in. Installing it is therefore right here and is
+      # *not* how the module itself gets found.
+      - name: Install Xvfb and the Tk runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk
+
+      - name: Confirm tkinter is importable by the interpreter under test
+        # Without this, a missing Tk shows up as twelve failing GUI tests and
+        # reads like a code regression.
+        run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+
+      # The lean set. requirements.txt also pulls TimesFM and PyTorch, which
+      # together are gigabytes and which no test needs: core/forecaster.py is
+      # written to report a missing model rather than raise, and there is a
+      # test asserting exactly that. The dependencies job below is what checks
+      # the full file still resolves.
+      - run: pip install numpy requests customtkinter pytest
+
+      - name: Tests, GUI included
+        # The whole point of the switch: without it a machine with no display
+        # reports "70 passed, 1 skipped" and has tested no interface at all.
+        env:
+          TYCHE_REQUIRE_GUI: "1"
+        run: xvfb-run -a python -m pytest tests/ -q
+
+      - name: Version reports without importing the GUI
+        run: python main.py --version
+
+      - name: --check explains itself when there is no archive
+        # data/ is git-ignored, so a fresh checkout has none. Exit code 1 with
+        # an explanation is the contract; a traceback or a silent 0 is not.
+        run: |
+          set +e
+          output=$(python main.py --check); code=$?
+          set -e
+          echo "$output"
+          test "$code" = "1" || { echo "expected exit 1, got $code"; exit 1; }
+          echo "$output" | grep -q "No archive at" || { echo "no explanation"; exit 1; }
+
+  dependencies:
+    # Slow and rarely interesting: it exists to catch requirements.txt no
+    # longer resolving, which is a supply-chain event rather than a code
+    # change. Manual and weekly only.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with a CPU-only PyTorch
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: TimesFM imports and the wrapper agrees with its config
+        # Not a forecast: the 3.0 weights are 1.3 GB and non-commercial, and
+        # downloading them on every scheduled run would be rude as well as
+        # slow. This checks the API the wrapper is written against still
+        # exists, which is the part that can break under us.
+        run: |
+          python - <<'PY'
+          import dataclasses
+          from timesfm3 import ModelConfig, TimesFM3Evaluator
+          fields = {f.name for f in dataclasses.fields(ModelConfig)}
+          required = {"checkpoint_path", "device", "per_core_batch_size", "token"}
+          missing = required - fields
+          assert not missing, f"core/forecaster.py passes unknown ModelConfig fields: {missing}"
+          assert hasattr(TimesFM3Evaluator, "predict_batch")
+          print("TimesFM 3.0 API matches what core/forecaster.py expects")
+          PY

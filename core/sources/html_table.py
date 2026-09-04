@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from pathlib import Path
 
 from core.archive import NUMBER_MAX, NUMBER_MIN, NUMBERS_PER_DRAW, ArchiveError, Draw
 from core.sources.base import (
@@ -59,6 +60,18 @@ from core.sources.base import (
 # release — see config/settings.template.json.
 DEFAULT_URL_TEMPLATE = "https://www.superenalotto.it/archivio-estrazioni/{year}"
 
+# Tried in order after whatever the user configured, and only until one of
+# them yields rows. Since none of these has been reached from a machine that
+# could test them, one URL is one guess; four is four guesses, and the cost of
+# a wrong one is a failed request rather than bad data — the parser rejects
+# anything that does not look like a draw. Ordered official first.
+FALLBACK_URL_TEMPLATES = (
+    "https://www.superenalotto.it/archivio-estrazioni/{year}",
+    "https://www.estrazionedellotto.it/superenalotto/archivio-{year}",
+    "https://www.lottologia.com/superenalotto/archivio-estrazioni/?anno={year}",
+    "https://www.estrazionilottooggi.it/superenalotto/archivio-superenalotto-{year}",
+)
+
 _DATE_PATTERNS = (
     (re.compile(r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b"), ("d", "m", "y")),
     (re.compile(r"\b(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})\b"), ("y", "m", "d")),
@@ -71,46 +84,106 @@ _TAG = re.compile(r"<[^>]+>")
 
 
 class HtmlTableSource(DrawSource):
-    """Per-year HTML archive scrape. Structurally generic, never live-tested."""
+    """Per-year HTML archive scrape. Structurally generic, never live-tested.
+
+    ``debug_dir`` saves every page it fetches. It is off by default and it is
+    the first thing to switch on when this source misbehaves: the parser
+    cannot be fixed from a description of what went wrong, only from the page
+    that went wrong, and that page is otherwise gone the moment the request
+    returns.
+    """
 
     name = "html-archive"
 
-    def __init__(self, url_template: str = DEFAULT_URL_TEMPLATE, years: list[int] | None = None):
+    def __init__(
+        self,
+        url_template: str = DEFAULT_URL_TEMPLATE,
+        years: list[int] | None = None,
+        fallbacks: tuple[str, ...] = FALLBACK_URL_TEMPLATES,
+        debug_dir=None,
+    ):
         self.url_template = url_template
         self.years = years or []
+        # The configured template first, then the fallbacks minus any
+        # duplicate of it, so a user who leaves the default in place does not
+        # request the same URL twice.
+        self.templates = [url_template, *(f for f in fallbacks if f != url_template)]
+        self.debug_dir = Path(debug_dir) if debug_dir else None
 
     def describe(self) -> str:
         return (
-            f"HTML archive scrape of {self.url_template} — keeps the archive current, "
-            "but has never been run against the live site; verify what it imports."
+            f"HTML archive scrape, {len(self.templates)} candidate hosts starting with "
+            f"{self.url_template} — the only source that can keep the archive current, "
+            "and one that has never been run against a live page. Review what it imports."
         )
 
     def fetch(self, progress: ProgressCallback = None) -> list[Draw]:
+        """Scrape every requested year, trying each host until one answers.
+
+        The host is chosen once, on the first year that yields rows, and then
+        reused. Mixing hosts across years would build an archive whose
+        provenance varies by row and whose disagreements are invisible.
+        """
         if not self.years:
             raise SourceError("no years requested")
-        draws: list[Draw] = []
+        years = sorted(self.years)
         failures: list[str] = []
-        for i, year in enumerate(sorted(self.years)):
-            url = self.url_template.format(year=year)
-            self._report(progress, f"Fetching {year}…", i / len(self.years))
+
+        template = self._choose_template(years[0], failures, progress)
+        if template is None:
+            raise SourceError(
+                "no candidate host returned a recognisable draw table — "
+                + "; ".join(failures)
+            )
+
+        draws: list[Draw] = []
+        for i, year in enumerate(years):
+            self._report(progress, f"Fetching {year} from {_host(template)}…", i / len(years))
             try:
-                html = http_get(url).decode("utf-8", errors="replace")
-                year_draws = parse_draw_table(html, source=self.name, expect_year=year)
+                year_draws = self._scrape(template, year)
             except SourceError as exc:
                 failures.append(f"{year}: {exc}")
                 continue
             if not year_draws:
                 failures.append(f"{year}: no rows recognised")
             draws.extend(year_draws)
+
         if not draws:
-            raise SourceError(
-                "nothing scraped from any requested year — "
-                + ("; ".join(failures) if failures else "the page layout has changed")
-            )
+            raise SourceError("nothing scraped from any requested year — " + "; ".join(failures))
         if failures:
             print(f"[HtmlTable] partial fetch: {'; '.join(failures)}")
-        self._report(progress, f"{len(draws):,} draws scraped.", 1.0)
+        self._report(
+            progress, f"{len(draws):,} draws scraped from {_host(template)}.", 1.0
+        )
         return draws
+
+    def _choose_template(self, year: int, failures: list[str], progress) -> str | None:
+        for template in self.templates:
+            self._report(progress, f"Trying {_host(template)}…", 0.0)
+            try:
+                if self._scrape(template, year):
+                    return template
+                failures.append(f"{_host(template)}: no rows recognised")
+            except SourceError as exc:
+                failures.append(f"{_host(template)}: {exc}")
+        return None
+
+    def _scrape(self, template: str, year: int) -> list[Draw]:
+        url = template.format(year=year)
+        html = http_get(url).decode("utf-8", errors="replace")
+        if self.debug_dir:
+            self.debug_dir.mkdir(parents=True, exist_ok=True)
+            (self.debug_dir / f"{_host(template)}-{year}.html").write_text(
+                html, encoding="utf-8"
+            )
+        return parse_draw_table(html, source=f"{self.name}:{_host(template)}", expect_year=year)
+
+
+def _host(url: str) -> str:
+    """The hostname, for messages and debug filenames."""
+    from urllib.parse import urlparse
+
+    return urlparse(url).netloc or url
 
 
 def parse_draw_table(

@@ -35,6 +35,19 @@ GOOD = "#3fb950"
 WARN = "#d9a441"
 BAD = "#e5534b"
 
+# CustomTkinter widgets that carry an accent — buttons, option menus, the
+# checkbox tick, entry focus — take it from the built-in "blue" theme unless
+# it is overridden. Setting fg_color on each one instead means a widget added
+# later is blue and nobody notices until a screenshot; :func:`apply_theme`
+# changes it once, centrally.
+_ACCENTED = (
+    ("CTkButton", ("fg_color", "hover_color")),
+    ("CTkOptionMenu", ("fg_color", "button_color", "button_hover_color")),
+    ("CTkCheckBox", ("fg_color", "hover_color")),
+    ("CTkSegmentedButton", ("selected_color", "selected_hover_color")),
+    ("CTkProgressBar", ("progress_color",)),
+)
+
 SCROLLBAR_V = "Tyche.Vertical.TScrollbar"
 SCROLLBAR_H = "Tyche.Horizontal.TScrollbar"
 
@@ -79,3 +92,32 @@ def dark_scrollbar(parent, orient: str, command) -> ttk.Scrollbar:
         parent, orient=orient, command=command,
         style=SCROLLBAR_V if orient == "vertical" else SCROLLBAR_H,
     )
+
+
+def apply_theme() -> None:
+    """Repaint CustomTkinter's accent from blue to Tyche's purple. Idempotent.
+
+    Called once from :class:`gui.app.TycheApp` before any widget is built;
+    ``ThemeManager.theme`` is read at widget construction, so calling it later
+    would leave whatever already exists blue.
+
+    Every colour is written as the ``(light, dark)`` pair CustomTkinter
+    expects. Tyche only ever runs in dark mode, but a single string is
+    accepted in some versions and rejected in others, and the pair is correct
+    in all of them.
+    """
+    import contextlib
+
+    import customtkinter as ctk
+
+    hover = (ACCENT_HOVER, ACCENT_HOVER)
+    accent = (ACCENT, ACCENT)
+    for widget, keys in _ACCENTED:
+        theme = ctk.ThemeManager.theme.get(widget)
+        if not theme:
+            continue
+        for key in keys:
+            if key not in theme:
+                continue
+            with contextlib.suppress(Exception):
+                theme[key] = hover if "hover" in key else accent

@@ -254,3 +254,66 @@ def test_a_failing_worker_reports_the_real_error(app):
             break
         time.sleep(0.05)
     assert "the archive caught fire" in app._status.cget("text")
+
+
+def test_archive_panel_shows_how_far_behind_the_archive_is(app):
+    """The fixture archive ends in 2005 and today is not 2005."""
+    app.show("archive")
+    app.update()
+    text = app._panels["archive"].freshness.cget("text")
+    assert "missing" in text or "Current as of" in text
+
+
+def test_footer_marks_a_stale_archive(app):
+    assert "behind" in app._archive_label.cget("text")
+
+
+def test_a_clean_import_does_not_stop_to_ask(app, monkeypatch):
+    """A dialog that always says 'everything is fine' is one nobody reads."""
+    from tkinter import messagebox
+
+    from core.archive import Draw
+
+    asked = []
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
+
+    last = max(d.date for d in app.draws)
+    fresh = Draw(date=last.replace(year=last.year + 1), contest=999,
+                 numbers=(2, 4, 6, 8, 10, 12), jolly=14)
+    before = len(app.draws)
+    app._panels["archive"]._merge_result([fresh])
+    app.update()
+    assert asked == []
+    assert len(app.draws) == before + 1
+
+
+def test_a_contradicting_import_asks_first_and_declining_writes_nothing(app, monkeypatch):
+    from tkinter import messagebox
+
+    from core.archive import Draw
+
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: False)
+    stored = app.draws[10]
+    bad = Draw(date=stored.date, contest=stored.contest,
+               numbers=(81, 82, 83, 84, 85, 86), jolly=1, year=stored.year)
+    before = [d.to_row() for d in app.draws]
+    app._panels["archive"]._merge_result([bad])
+    app.update()
+    assert [d.to_row() for d in app.draws] == before
+    assert "cancelled" in app._status.cget("text")
+
+
+def test_the_scraper_always_asks_even_when_the_preview_is_clean(app, monkeypatch):
+    """It is the source that has never been checked against a real page."""
+    from tkinter import messagebox
+
+    from core.archive import Draw
+
+    asked = []
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: asked.append(a) or True)
+    last = max(d.date for d in app.draws)
+    fresh = Draw(date=last.replace(year=last.year + 2), contest=998,
+                 numbers=(3, 5, 7, 9, 11, 13), jolly=15)
+    app._panels["archive"]._merge_result([fresh], always_confirm=True)
+    app.update()
+    assert len(asked) == 1
