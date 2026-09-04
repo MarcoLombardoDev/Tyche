@@ -401,6 +401,22 @@ def test_the_release_body_keeps_the_disclaimer():
 # CI and release must not drift apart
 # ─────────────────────────────────────────────────────────────
 
+def test_ci_greps_for_what_the_program_actually_says_with_no_archive():
+    """A grep in a workflow is a copy of a string the program owns.
+
+    The translation to Italian left ``grep -q "No archive at"`` in ci.yml
+    looking for English the program no longer prints, and the build went red on
+    a step that was testing nothing. The literal lives in ``main.NO_ARCHIVE``;
+    this asserts the workflow is still looking for it.
+    """
+    from main import NO_ARCHIVE
+
+    text = "\n".join(
+        s.get("run", "") for s in load(CI_WORKFLOW)["jobs"]["test"]["steps"]
+    )
+    assert f'grep -q "{NO_ARCHIVE}"' in text
+
+
 def test_ci_and_release_run_the_same_test_command():
     """Two ways of running the suite is two ways for one of them to rot."""
     ci = suite_step(load(CI_WORKFLOW)["jobs"]["test"]["steps"])

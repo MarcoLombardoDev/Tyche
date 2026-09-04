@@ -78,7 +78,10 @@ jobs:
           set -e
           echo "$output"
           test "$code" = "1" || { echo "expected exit 1, got $code"; exit 1; }
-          echo "$output" | grep -q "No archive at" || { echo "no explanation"; exit 1; }
+          # main.NO_ARCHIVE. tests/test_release_workflow.py fails if the two
+          # stop agreeing, which is how the English original survived the
+          # translation into a red build.
+          echo "$output" | grep -q "Nessun archivio in" || { echo "no explanation"; exit 1; }
 
   dependencies:
     # Slow and rarely interesting: it exists to catch requirements.txt no

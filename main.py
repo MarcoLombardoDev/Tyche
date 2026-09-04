@@ -95,6 +95,14 @@ def _parse_args():
     return args
 
 
+# The opening of the "there is nothing to analyse" message, and a contract
+# with .github/workflows/ci.yml: the workflow greps a fresh checkout's
+# `--check` output for it, because an empty archive has to produce an
+# explanation and exit 1 rather than a traceback or a silent success.
+# tests/test_release_workflow.py fails when the two stop agreeing.
+NO_ARCHIVE = "Nessun archivio in"
+
+
 def _load_archive_or_explain():
     from core.archive import load_archive
     from core.data_manager import ARCHIVE_PATH
@@ -102,7 +110,7 @@ def _load_archive_or_explain():
     draws = load_archive(ARCHIVE_PATH)
     if not draws:
         print(
-            f"Nessun archivio in {ARCHIVE_PATH}. Apri l'interfaccia e scarica "
+            f"{NO_ARCHIVE} {ARCHIVE_PATH}. Apri l'interfaccia e scarica "
             "l'archivio dalla scheda Archivio, oppure usa --update --yes."
         )
     return draws
