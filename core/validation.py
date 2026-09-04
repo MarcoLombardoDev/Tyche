@@ -48,6 +48,7 @@ from datetime import datetime, timezone
 from core.archive import NUMBER_MAX, NUMBERS_PER_DRAW, Draw
 from core.features import DEFAULT_WINDOW
 from core.predictor import METHODS, frequency_scores, gap_scores, random_scores, rank_numbers
+from core.scoring import MEAN_RANK, score_draw
 from core.stats_tests import (
     chi_square_goodness_of_fit,
     hypergeom_moments,
@@ -80,6 +81,14 @@ class MethodResult:
     best_draw_hits: int
     three_or_more: int
     expected_three_or_more: float
+    # The rank statistic, which reads the same run with a finer gauge — see
+    # core/scoring.py. Positive rank_z means the drawn numbers sat higher in
+    # the method's full ranking than an arbitrary order would have put them.
+    mean_rank: float = MEAN_RANK
+    rank_z: float = 0.0
+    rank_p: float = 1.0
+    top_hits: dict[int, int] = field(default_factory=dict)
+    expected_top_hits: dict[int, float] = field(default_factory=dict)
 
     @property
     def mean_hits(self) -> float:
@@ -96,6 +105,13 @@ class MethodResult:
             f"(caso {self.expected_mean:.4f}), {self.total_hits} in totale, "
             f"{self.excess:+.1f} rispetto al caso, z = {self.z:+.2f}, "
             f"p = {self.p_value:.3f}"
+        )
+
+    def rank_summary(self) -> str:
+        """The same run judged on the whole ranking rather than the top six."""
+        return (
+            f"{self.method:<10} rango medio dei numeri usciti {self.mean_rank:.2f} "
+            f"(caso {MEAN_RANK:.1f}), z = {self.rank_z:+.2f}, p = {self.rank_p:.3f}"
         )
 
 
@@ -181,19 +197,32 @@ def walk_forward(
             f"minimo di {min_history}"
         )
 
+    tops = (picks, 10, 20)
     hits: dict[str, list[int]] = {m: [] for m in methods}
+    # The rank statistic, accumulated alongside. Both come out of the one set
+    # of scores each method produces per target, so the two metrics are two
+    # readings of the same run and not two runs.
+    rank_sum: dict[str, float] = dict.fromkeys(methods, 0.0)
+    rank_var: dict[str, float] = dict.fromkeys(methods, 0.0)
+    top_hits: dict[str, dict[int, int]] = {m: dict.fromkeys(tops, 0) for m in methods}
     for step, i in enumerate(targets):
         history = draws[:i]
         actual = set(draws[i].numbers)
         for method in methods:
-            picked = _pick(method, history, picks, window, seed + i, forecaster)
-            hits[method].append(len(actual & set(picked)))
+            scores = _scores(method, history, window, seed + i, forecaster)
+            judged = score_draw(scores, actual, tops)
+            hits[method].append(judged.top_hits[picks])
+            rank_sum[method] += judged.mean_rank
+            rank_var[method] += judged.null_variance
+            for k, hit in judged.top_hits.items():
+                top_hits[method][k] += hit
         if progress and step % 10 == 0:
             progress(
                 f"Valutazione estrazione {step + 1} di {len(targets)}…",
                 step / len(targets),
             )
 
+    mean_rank_null = MEAN_RANK
     mean, variance = hypergeom_moments(NUMBER_MAX, NUMBERS_PER_DRAW, picks)
     sd = variance ** 0.5
     n = len(targets)
@@ -211,6 +240,12 @@ def walk_forward(
         chi2, dof, chi2_p = chi_square_goodness_of_fit(
             [float(h) for h in histogram], [n * p for p in null_pmf]
         )
+        # Summed over independent draws: the deviation of the total mean rank
+        # from n x 45.5, over the square root of the summed per-draw variances.
+        # Signed so that positive means better than chance, like z above.
+        rank_sd = rank_var[method] ** 0.5
+        rank_z = (mean_rank_null * n - rank_sum[method]) / rank_sd if rank_sd > 0 else 0.0
+
         results.append(MethodResult(
             method=method,
             draws_scored=n,
@@ -227,6 +262,13 @@ def walk_forward(
             best_draw_hits=max(series) if series else 0,
             three_or_more=sum(1 for h in series if h >= 3),
             expected_three_or_more=n * p_three_plus,
+            mean_rank=rank_sum[method] / n if n else mean_rank_null,
+            rank_z=rank_z,
+            rank_p=two_sided_normal_p(rank_z),
+            top_hits=dict(top_hits[method]),
+            expected_top_hits={
+                k: n * NUMBERS_PER_DRAW * k / NUMBER_MAX for k in tops
+            },
         ))
 
     if progress:
@@ -240,16 +282,27 @@ def walk_forward(
     )
 
 
+def _scores(
+    method: str, history: list[Draw], window: int, seed: int, forecaster
+) -> dict[int, float]:
+    """What a method would score all ninety numbers, given only ``history``.
+
+    Returning the whole score vector rather than the six numbers it implies is
+    what lets one pass compute both the hit count and the rank statistic. The
+    top six are still taken with :func:`core.predictor.rank_numbers`, inside
+    :func:`core.scoring.score_draw`, so the hit column is unchanged by this.
+    """
+    if method == "timesfm":
+        return forecaster.score_numbers(history)
+    if method == "frequenza":
+        return frequency_scores(history, window)
+    if method == "ritardo":
+        return gap_scores(history)
+    return random_scores(seed)
+
+
 def _pick(
     method: str, history: list[Draw], picks: int, window: int, seed: int, forecaster
 ) -> list[int]:
     """The ``picks`` numbers a method would play given only ``history``."""
-    if method == "timesfm":
-        scores = forecaster.score_numbers(history)
-    elif method == "frequenza":
-        scores = frequency_scores(history, window)
-    elif method == "ritardo":
-        scores = gap_scores(history)
-    else:
-        scores = random_scores(seed)
-    return rank_numbers(scores)[:picks]
+    return rank_numbers(_scores(method, history, window, seed, forecaster))[:picks]

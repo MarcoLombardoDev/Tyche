@@ -46,6 +46,7 @@ C'è una riga di comando per le parti che vale la pena automatizzare:
 python main.py --update --yes         # aggiorna l'archivio
 python main.py --check                # i cinque test di indipendenza
 python main.py --validate 500         # backtest walk-forward
+python main.py --power                # sensibilita' della validazione
 python main.py --forecast timesfm     # sei numeri
 python main.py --export-sqlite data/tyche.db
 ```

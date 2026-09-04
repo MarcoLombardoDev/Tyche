@@ -1245,5 +1245,220 @@ def test_scoring_refuses_a_history_too_short_to_mean_anything():
         forecaster.score_numbers(random_archive(10))
 
 
+# ─────────────────────────────────────────────────────────────
+# Rank scoring, and the blind spot it exists to cover
+# ─────────────────────────────────────────────────────────────
+
+def test_tied_numbers_share_the_group_mean_rank():
+    """Otherwise the metric reads the tie-break instead of the method.
+
+    frequenza scores ninety numbers on about fourteen distinct values, with
+    tie groups up to seventeen wide, and rank_numbers breaks those ties by the
+    number itself. Straight positional ranks would hand number 3 a better rank
+    than number 80 every time they were level, and a rank statistic would
+    report that convention as a preference for low numbers.
+    """
+    from core.scoring import mid_ranks
+
+    scores = dict.fromkeys(range(1, 91), 0.0)
+    scores[7] = 1.0                                    # one clear winner
+    ranks = mid_ranks(scores)
+    assert ranks[7] == 1.0
+    # The other 89 share positions 2..90, so all of them sit at 46.0.
+    assert {ranks[n] for n in range(1, 91) if n != 7} == {46.0}
+
+
+def test_the_mean_of_the_mid_ranks_is_always_the_null_mean():
+    """True whatever the ties are, which is what makes 45.5 the null."""
+    from core.scoring import MEAN_RANK, mid_ranks
+
+    for scores in (
+        dict.fromkeys(range(1, 91), 0.0),
+        {n: float(n) for n in range(1, 91)},
+        {n: float(n % 3) for n in range(1, 91)},
+        {n: random.Random(n).random() for n in range(1, 91)},
+    ):
+        ranks = mid_ranks(scores)
+        assert abs(sum(ranks.values()) / 90 - MEAN_RANK) < 1e-9
+
+
+def test_a_method_that_cannot_discriminate_has_no_null_variance():
+    """It cannot deviate from chance, so it must not be credited with trying."""
+    from core.scoring import mid_ranks, rank_null_variance
+
+    flat = mid_ranks(dict.fromkeys(range(1, 91), 0.0))
+    assert rank_null_variance(flat) == 0.0
+
+    distinct = mid_ranks({n: float(n) for n in range(1, 91)})
+    # Sampling six of ninety without replacement from ranks 1..90.
+    expected = ((90 ** 2 - 1) / 12 / 6) * (84 / 89)
+    assert abs(rank_null_variance(distinct) - expected) < 1e-9
+
+
+def test_the_hit_count_is_blind_to_an_edge_below_the_top_six():
+    """The reason core/scoring.py exists, asserted rather than described.
+
+    The ``nascosto`` shape pushes the drawn numbers up the ranking but caps
+    them below halfway, so the top six never change and the hit count cannot
+    move by construction. Measured on the real archive its z-score is the
+    identical number at every edge size. The rank statistic sees it.
+    """
+    from core.power import _KnownEdge
+    from core.validation import walk_forward
+
+    draws = random_archive(600, seed=11)
+    hits_z = []
+    # 0.60 is chosen so the cap is load-bearing: a number scored just under
+    # 0.5 plus 0.6 would outrank every unnudged number, so without the cap the
+    # hit count would jump and this test would fail. Checked by removing it.
+    for size in (0.0, 0.20, 0.60):
+        result = walk_forward(
+            draws, methods=["timesfm"], n_draws=300,
+            forecaster=_KnownEdge(draws, "nascosto", size),
+        ).results[0]
+        hits_z.append(round(result.z, 10))
+        if size > 0:
+            assert result.rank_z > 3, f"rank blind too at size {size}: z={result.rank_z}"
+
+    assert len(set(hits_z)) == 1, f"the hit count moved, so the cap leaks: {hits_z}"
+
+
+def test_the_hidden_edge_provably_never_reaches_the_top_six():
+    """The invariant the shape claims, asserted directly rather than inferred.
+
+    Stated as a property over every size rather than the few the test above
+    happens to run, because "the hit count did not move" is also what a shape
+    with no edge at all would produce.
+    """
+    from core.power import _KnownEdge
+    from core.predictor import rank_numbers
+
+    draws = random_archive(300, seed=15)
+    for size in (0.1, 0.5, 0.9, 5.0):
+        edge = _KnownEdge(draws, "nascosto", size)
+        baseline = _KnownEdge(draws, "nascosto", 0.0)
+        for i in range(200, 260):
+            scores = edge.score_numbers(draws[:i])
+            # Size zero leaves the same random stream untouched, so comparing
+            # against it names exactly the numbers the edge moved. A drawn
+            # number that started above 0.5 is not nudged at all and may reach
+            # the top six on its own — that is chance, not the edge, and
+            # counting it would make this test fail for the wrong reason.
+            before = baseline.score_numbers(draws[:i])
+            moved = {n for n in draws[i].numbers if scores[n] != before[n]}
+            top_six = set(rank_numbers(scores)[:6])
+            assert not (top_six & moved), (
+                f"a nudged number reached the top six at size {size}"
+            )
+            assert all(scores[n] < 0.5 for n in moved)
+
+
+def test_an_edge_at_the_top_is_seen_by_both_metrics():
+    """The complement: where the hit count works, the rank statistic agrees."""
+    from core.power import _KnownEdge
+    from core.validation import walk_forward
+
+    draws = random_archive(600, seed=12)
+    result = walk_forward(
+        draws, methods=["timesfm"], n_draws=300,
+        forecaster=_KnownEdge(draws, "diffuso", 0.05),
+    ).results[0]
+    assert result.z > 3
+    assert result.rank_z > 3
+
+
+def test_a_known_edge_of_size_zero_is_indistinguishable_from_chance():
+    """The control. Without it every other row of the calibration is noise."""
+    from core.power import _KnownEdge
+    from core.validation import walk_forward
+
+    draws = random_archive(600, seed=13)
+    result = walk_forward(
+        draws, methods=["timesfm"], n_draws=300,
+        forecaster=_KnownEdge(draws, "diffuso", 0.0),
+    ).results[0]
+    assert abs(result.z) < 3
+    assert abs(result.rank_z) < 3
+
+
+def test_a_perfect_oracle_tops_the_rank_statistic_too():
+    """3.5 is the mean of ranks 1..6: every drawn number first."""
+    from core.power import _KnownEdge
+    from core.validation import walk_forward
+
+    draws = random_archive(400, seed=14)
+    result = walk_forward(
+        draws, methods=["timesfm"], n_draws=100,
+        forecaster=_KnownEdge(draws, "concentrato", 1.0),
+    ).results[0]
+    assert result.mean_hits == 6.0
+    assert abs(result.mean_rank - 3.5) < 1e-9
+
+
+def test_the_calibration_instruments_are_not_selectable_methods():
+    """They cheat by construction, so nothing a user drives may reach them."""
+    from core.predictor import METHODS
+
+    for shape in ("concentrato", "diffuso", "nascosto"):
+        assert shape not in METHODS
+
+
+def test_an_unknown_edge_shape_is_refused():
+    from core.power import _KnownEdge
+
+    with pytest.raises(ValueError, match="forma sconosciuta"):
+        _KnownEdge(random_archive(50), "inventata", 0.1)
+
+
+# ─────────────────────────────────────────────────────────────
+# Multiple testing
+# ─────────────────────────────────────────────────────────────
+
+def test_holm_adjustment_scales_by_the_remaining_tests():
+    from core.randomness import holm_adjust
+
+    # Smallest scaled by 3, next by 2, largest by 1.
+    assert holm_adjust([0.01, 0.04, 0.05]) == pytest.approx([0.03, 0.08, 0.08])
+
+
+def test_holm_adjustment_never_lowers_a_p_value():
+    from core.randomness import holm_adjust
+
+    raw = [0.001, 0.02, 0.3, 0.04, 0.9]
+    for before, after in zip(raw, holm_adjust(raw), strict=True):
+        assert after >= before
+        assert after <= 1.0
+
+
+def test_holm_adjustment_keeps_the_ordering():
+    """A step-down procedure that inverted two p-values would be wrong."""
+    from core.randomness import holm_adjust
+
+    raw = [0.001, 0.049, 0.02, 0.5]
+    adjusted = holm_adjust(raw)
+    by_raw = sorted(range(len(raw)), key=lambda i: raw[i])
+    ordered = [adjusted[i] for i in by_raw]
+    assert ordered == sorted(ordered)
+
+
+def test_the_summary_reports_the_family_wise_risk():
+    """Five tests at 5% flag something 23% of the time. Say so with a number."""
+    from core.randomness import run_all, summarise
+
+    # A fair archive: nothing should flag, and the text says all five passed.
+    text = summarise(run_all(random_archive(1200, seed=5)))
+    assert "compatibili" in text or "Holm" in text
+
+
+def test_holm_survives_the_sum_finding_on_a_planted_bias():
+    """A real effect must not be corrected away, only a lucky one."""
+    from core.randomness import holm_adjust
+
+    # One overwhelming p-value among five ordinary ones stays significant.
+    adjusted = holm_adjust([0.0002, 0.33, 0.64, 0.55, 0.29])
+    assert adjusted[0] < 0.05
+    assert all(a > 0.05 for a in adjusted[1:])
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

@@ -197,6 +197,44 @@ def test_validation_runs_the_baselines_to_a_verdict(app):
     assert "centri per estrazione" in panel.verdict.cget("text")
 
 
+def test_validation_shows_the_whole_ranking_beside_the_hit_count(app):
+    """Both readings, or the panel has the blind spot core/power.py measures."""
+    import time
+
+    panel = app._panels["validation"]
+    app.show("validation")
+    panel.n_draws.delete(0, "end")
+    panel.n_draws.insert(0, "120")
+    panel._run()
+    for _ in range(120):
+        app.update()
+        if panel.verdict.cget("text"):
+            break
+        time.sleep(0.05)
+    text = panel.box.get("1.0", "end")
+    assert "centri/estr" in text
+    assert "rango medio" in text
+
+
+def test_the_calibration_button_reaches_a_table(app):
+    """The panel's second experiment: what edge this harness could have seen."""
+    import time
+
+    panel = app._panels["validation"]
+    app.show("validation")
+    panel.n_draws.delete(0, "end")
+    panel.n_draws.insert(0, "60")
+    # The default hundred repetitions over fifteen rows is a minute of work,
+    # which is not what a smoke test is for. This drives the same code path.
+    from core.power import calibrate
+    panel._show_calibration(calibrate(app.draws, n_draws=60, runs=2))
+    app.update()
+    time.sleep(0.01)
+    text = panel.box.get("1.0", "end")
+    assert "nascosto" in text
+    assert "soglia al" in text
+
+
 def test_validation_rejects_a_non_numeric_draw_count(app):
     panel = app._panels["validation"]
     app.show("validation")

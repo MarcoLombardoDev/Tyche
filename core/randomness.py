@@ -303,9 +303,44 @@ def run_all(draws: list[Draw]) -> list[TestResult]:
     ]
 
 
+def holm_adjust(p_values: list[float]) -> list[float]:
+    """Holm-Bonferroni adjusted p-values, in the order given.
+
+    Five tests at the 5% level flag something by chance 23% of the time, so a
+    single flag among five is not the 5% event the number beside it suggests.
+    The old wording said so in prose — "about one test in twenty does this by
+    chance" — which leaves the reader to do the correction in their head and
+    gives them nothing to do it with.
+
+    Holm rather than plain Bonferroni because it is uniformly more powerful
+    and just as safe: it controls the same family-wise error rate without
+    multiplying every p-value by the number of tests. Sorted ascending, the
+    *i*-th smallest is scaled by ``n - i`` rather than by ``n``, then the
+    sequence is made non-decreasing so a small p-value cannot end up adjusted
+    below a smaller one.
+
+    Not FDR: with five tests the question is "is any of these real", which is
+    the family-wise question, and Benjamini-Hochberg answers a different one
+    that only starts to pay off with far more tests than this.
+    """
+    n = len(p_values)
+    if n == 0:
+        return []
+    order = sorted(range(n), key=lambda i: p_values[i])
+    adjusted = [0.0] * n
+    running = 0.0
+    for rank, i in enumerate(order):
+        running = max(running, min(1.0, (n - rank) * p_values[i]))
+        adjusted[i] = running
+    return adjusted
+
+
 def summarise(results: list[TestResult]) -> str:
     """One paragraph the user can read instead of five p-values."""
+    adjusted = holm_adjust([r.p_value for r in results])
     flagged = [r for r in results if r.significant]
+    survivors = [r for r, a in zip(results, adjusted, strict=True) if a < ALPHA]
+
     if not flagged:
         return (
             f"Tutti e {len(results)} i test sono compatibili con estrazioni indipendenti "
@@ -313,13 +348,36 @@ def summarise(results: list[TestResult]) -> str:
             "sfruttabile, e nessuna previsione costruita su di esso — compresa quella "
             "di TimesFM — può fare meglio del caso."
         )
+
     names = ", ".join(r.name for r in flagged)
     verb = "si discosta" if len(flagged) == 1 else "si discostano"
-    return (
+    # With five tests the probability that at least one clears 5% by chance
+    # alone is 1 - 0.95^5, which is where the reader has to start.
+    by_chance = 1 - (1 - ALPHA) ** len(results)
+    head = (
         f"{len(flagged)} test su {len(results)} {verb} dal modello di indipendenza "
-        f"({names}). Al livello del 5% circa un test su venti lo fa per caso, quindi "
-        "verifica se il risultato si ripete su una porzione diversa dell'archivio "
-        "prima di trarne qualcosa."
+        f"({names}). Con {len(results)} test la probabilità che almeno uno scenda "
+        f"sotto il {ALPHA:.0%} per puro caso è del {by_chance:.0%}"
+    )
+
+    if not survivors:
+        return (
+            f"{head}, e infatti nessuno resta significativo dopo la correzione di "
+            "Holm-Bonferroni per test multipli. Su questa evidenza non c'è niente "
+            "da spiegare."
+        )
+
+    surviving = ", ".join(
+        f"{r.name} (p corretto {a:.4f})"
+        for r, a in zip(results, adjusted, strict=True)
+        if a < ALPHA
+    )
+    plural = "resta" if len(survivors) == 1 else "restano"
+    return (
+        f"{head}. Dopo la correzione di Holm-Bonferroni per test multipli "
+        f"{plural} {surviving}. Verifica comunque se il risultato si ripete su una "
+        "porzione diversa dell'archivio prima di trarne qualcosa: una correzione "
+        "governa la fortuna, non un archivio che sbaglia."
     )
 
 

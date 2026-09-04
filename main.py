@@ -15,6 +15,7 @@ scripting, and neither needs a window:
     python main.py --version
     python main.py --check              # the five independence tests
     python main.py --validate 500       # walk-forward backtest, baselines only
+    python main.py --power              # how small an edge the backtest can see
     python main.py --update             # refresh the archive (dry run)
     python main.py --update --yes       # ...and write it
     python main.py --import FILE --yes  # import a file you downloaded
@@ -57,6 +58,13 @@ def _parse_args():
     parser.add_argument(
         "--validate", type=int, metavar="N", default=None,
         help="backtest walk-forward sulle ultime N estrazioni (solo baseline) e esce",
+    )
+    parser.add_argument(
+        "--power", type=int, metavar="N", nargs="?", const=300, default=None,
+        help=(
+            "calibra la validazione su vantaggi noti (N estrazioni per prova, "
+            "300 se omesso) e esce"
+        ),
     )
     parser.add_argument(
         "--update", action="store_true",
@@ -152,7 +160,32 @@ def _run_validation(n_draws: int) -> int:
     )
     for r in report.results:
         print("  " + r.summary())
+    # The same run read on the whole ranking rather than the top six. It sees
+    # a different class of edge — see core/power.py — so it is printed beside
+    # the hit count and not instead of it.
+    print("\n  Sulla graduatoria completa dei novanta numeri:")
+    for r in report.results:
+        print("  " + r.rank_summary())
     print(f"\n{report.verdict()}")
+    return 0
+
+
+def _run_power(n_draws: int) -> int:
+    """Calibrate the harness against edges of a known size."""
+    from core.power import calibrate, report
+
+    draws = _load_archive_or_explain()
+    if not draws:
+        return 1
+
+    def progress(message: str, _fraction: float) -> None:
+        print(f"  {message}", flush=True)
+
+    print(
+        f"Calibrazione su {n_draws} estrazioni per prova. "
+        "Richiede qualche decina di secondi.\n"
+    )
+    print(report(calibrate(draws, n_draws=n_draws, progress=progress)))
     return 0
 
 
@@ -343,6 +376,8 @@ def main() -> int:
         return _run_check()
     if args.validate is not None:
         return _run_validation(args.validate)
+    if args.power is not None:
+        return _run_power(args.power)
     if args.update:
         return _run_update(args.yes)
     if args.import_path:

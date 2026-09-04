@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 133 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 151, GUI included
+python -m pytest tests/ -q                                   # 148 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 168, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `133 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `148 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -427,6 +427,92 @@ page for whatever the caller runs next.
   `useExchangeBalance` is `True` in one and `false` in the other — so a setting
   that reads as safe in the template is live in the running app. Do not
   reproduce that here; regenerate and commit instead.
+
+## How small an edge the harness can see, and the claim I set out to prove
+
+Added in 0.3.0, from an outside proposal to replace the hit count with
+"better metrics" — log loss, Brier, top-k recall, ranking metrics. Most of
+that proposal was already here, wrong for this data, or both. Two pieces were
+worth taking, and one of them did not do what I expected.
+
+**The hit count throws away 84 of the 90 numbers.** `walk_forward` scored a
+method on how many of its top six came out. A number placed 7th and a number
+placed 90th both contribute zero, so any edge that reorders the field without
+reaching the top six is invisible. That much is true by inspection.
+
+**What is not true is that a rank statistic is simply more sensitive.** That
+was the hypothesis this was built to confirm, and measuring it refuted it. On
+the real archive over 300 target draws, against forecasters with an edge of a
+known size:
+
+| edge shape | hit count sees it at | mean rank sees it at |
+|---|---|---|
+| `concentrato` — six numbers revealed outright | size ≥ 0.020 | never reaches 80% |
+| `diffuso` — all six nudged up a few places | size ≥ 0.020 | size ≥ 0.020 |
+| `nascosto` — nudged, capped below halfway | **never** | size ≥ 0.050 |
+
+So the hit count wins where the edge reaches the top, ties where it is
+diffuse, and is *identically blind* where it does not — on `nascosto` its
+z-score is the same number at every size, because the top six never change.
+The rank statistic reaches z = +11 on the same runs.
+
+**Both are reported and neither is dropped.** The rank statistic is not a
+better hit count, it is a second reading that covers one specific blind spot.
+A change that removes either one removes coverage.
+
+Three things about `core/power.py` worth not undoing:
+
+- **The leaked forecasters drive the real `walk_forward`**, through the same
+  `forecaster=` hook TimesFM uses, rather than a reimplementation of it. A
+  calibration of a copy of the harness measures the copy.
+- **The size-zero row is the control and it needs repetitions.** The first
+  version defaulted to 20 runs per row, where the standard error on a
+  percentage is 11 points. The control came out at 15% and looked like a
+  broken metric; at 400 runs the same control is 5.2%, which is the nominal
+  rate. Three out of twenty is noise. `DEFAULT_RUNS = 100` puts the error at 5
+  points and the report prints it.
+- **`nascosto`'s cap is load-bearing and its tests prove it.** Removing
+  `min(..., 0.499)` makes both
+  `test_the_hit_count_is_blind_to_an_edge_below_the_top_six` and
+  `test_the_hidden_edge_provably_never_reaches_the_top_six` fail — checked by
+  removing it. An earlier version of the first test passed either way, because
+  the sizes it used were too small for the cap to matter; the sizes were
+  raised until it was adversarial.
+
+**Mid-ranks, not positional ranks.** `frequenza` scores 90 numbers on 14
+distinct values with tie groups up to 17 wide, and `rank_numbers` breaks ties
+by the number itself. Positional ranks would hand number 3 a better rank than
+number 80 every time they were level, and the rank statistic would report that
+convention as a preference for low numbers. `core/scoring.mid_ranks` gives a
+tie group its mean rank, and the null variance is computed from the rank
+multiset actually produced rather than the untied formula — so a method that
+scores everything identically gets variance zero and cannot be credited with
+having failed to beat chance.
+
+**What was rejected from the same proposal, and why.** Worth recording so it
+is not re-proposed:
+
+- **Log loss and the Brier score.** They need calibrated probabilities and no
+  method here produces any. Converting a ranking needs a link function whose
+  temperature would decide the comparison — fitted on the test draws it is
+  leakage, fixed by hand it measures the choice. Rank metrics are invariant
+  under every monotone transform, so there is nothing to choose.
+- **A 90x90 Markov transition matrix.** 8,100 cells from 4,260 draws is half
+  an observation per cell. `serial_independence_test` is the aggregate version
+  of the same question and it is the statistically answerable one.
+- **Co-occurrence graph analysis with community detection.** Community
+  detection on a noise graph always finds communities — that is what the
+  algorithms do. It would produce a convincing picture of nothing.
+- **An ensemble with weights fitted on validation.** Averaging methods that
+  each score exactly chance gives chance, and fitting weights over a no-signal
+  problem is the overfitting the same proposal warns about two sections later.
+- **XGBoost as a control for TimesFM.** The argument for it is good — is the
+  model's output reducible to elementary statistical features? — but that
+  question is already answered above: TimesFM is a persistence forecaster here
+  and its ranking is the frequency baseline's. A third method that also scores
+  0.4 costs a dependency and settles nothing.
+- **DuckDB, Polars, a web UI.** The database question was answered with
+  measurements; see below. Four thousand rows is not a volume problem.
 
 ## What TimesFM actually does here
 

@@ -21,7 +21,10 @@ import customtkinter as ctk
 
 from core.forecaster import TimesFMForecaster
 from core.localise import it_date
+from core.power import calibrate
+from core.power import report as power_report
 from core.predictor import METHODS
+from core.scoring import MEAN_RANK
 from core.validation import walk_forward
 from gui.theme import BG_ROOT, GOOD, MUTED, WARN
 from gui.widgets import ReportBox, section
@@ -64,6 +67,23 @@ class ValidationPanel(ctk.CTkFrame):
         ctk.CTkLabel(
             row2,
             text="TimesFM costa una chiamata al modello per estrazione — parti basso.",
+            text_color=MUTED,
+        ).pack(side="left", padx=14)
+
+        # The calibration answers the question the table above cannot: whether
+        # a run that found nothing was capable of finding anything. Its own
+        # row, because it is a different experiment and not another method.
+        row3 = ctk.CTkFrame(controls.body, fg_color="transparent")
+        row3.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(
+            row3, text="Calibra", width=120, command=self._calibrate,
+        ).pack(side="left")
+        ctk.CTkLabel(
+            row3,
+            text=(
+                "Misura quanto piccolo dev'essere un vantaggio perché questa prova "
+                "lo veda, iniettandone uno noto. Qualche decina di secondi."
+            ),
             text_color=MUTED,
         ).pack(side="left", padx=14)
 
@@ -121,6 +141,36 @@ class ValidationPanel(ctk.CTkFrame):
 
         self.app.run_worker("Validation", work, self._show)
 
+    def _calibrate(self) -> None:
+        """Run the harness against edges of known size and print the floors."""
+        draws = self.app.draws
+        if not draws:
+            self.app.set_status("Ancora nessun archivio — scaricalo dalla scheda Archivio.")
+            return
+        try:
+            n_draws = int(self.n_draws.get())
+        except ValueError:
+            self.app.set_status("«Estrazioni da valutare» deve essere un numero intero.")
+            return
+
+        def work(report):
+            return calibrate(draws, n_draws=n_draws, progress=report)
+
+        self.app.run_worker("Calibration", work, self._show_calibration)
+
+    def _show_calibration(self, points) -> None:
+        self.box.set_text(power_report(points))
+        self.verdict.configure(
+            text=(
+                "Questa è la sensibilità dello strumento, non un risultato "
+                "sull'archivio. Dice quale vantaggio la prova qui sopra sarebbe "
+                "riuscita a vedere — e, sulla forma «nascosto», che il conteggio "
+                "dei centri da solo non ne vedrebbe nessuno."
+            ),
+            text_color=MUTED,
+        )
+        self.app.set_status("Calibrazione completata.")
+
     def _show(self, report) -> None:
         header = (
             f"{'metodo':<11} {'centri/estr':>12} {'caso':>7} {'totale':>7} "
@@ -155,6 +205,29 @@ class ValidationPanel(ctk.CTkFrame):
                 f"{'  χ² caso':<11}"
                 + f"  {r.chi2:.2f} su {r.chi2_dof} gdl, p = {r.chi2_p:.3f}"
             )
+
+        # The same run read on the whole ranking. The hit count above is blind
+        # to any edge that never reaches the top six — core/power.py measures
+        # exactly how blind — so this is printed beside it, never instead.
+        rank_header = (
+            f"{'metodo':<11} {'rango medio':>12} {'caso':>7} {'z':>8} {'p':>8} "
+            f"{'top-10':>8} {'atteso':>8} {'top-20':>8} {'atteso':>8}"
+        )
+        lines += [
+            "",
+            "Sulla graduatoria completa dei novanta numeri, non solo sui primi sei",
+            "",
+            rank_header,
+            "─" * len(rank_header),
+        ]
+        for r in report.results:
+            lines.append(
+                f"{r.method:<11} {r.mean_rank:>12.2f} {MEAN_RANK:>7.1f} "
+                f"{r.rank_z:>+8.2f} {r.rank_p:>8.3f} "
+                f"{r.top_hits.get(10, 0):>8} {r.expected_top_hits.get(10, 0):>8.0f} "
+                f"{r.top_hits.get(20, 0):>8} {r.expected_top_hits.get(20, 0):>8.0f}"
+            )
+
         self.box.set_text("\n".join(lines))
         beat = any(r.p_value < 0.05 and r.z > 0 for r in report.results)
         self.verdict.configure(text=report.verdict(), text_color=WARN if beat else GOOD)

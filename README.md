@@ -41,6 +41,7 @@ C'è anche una riga di comando, per le parti che vale la pena automatizzare:
 ```
 python main.py --check                  # i cinque test di indipendenza
 python main.py --validate 500           # backtest walk-forward
+python main.py --power                  # quanto piccolo un vantaggio deve essere
 python main.py --update                 # aggiorna da estrazioni.it — prova a vuoto
 python main.py --update --yes           # ...e scrive
 python main.py --import FILE --yes      # importa un file scaricato a mano
@@ -189,6 +190,48 @@ compreso.
 
 ---
 
+## «Non abbiamo trovato niente» oppure «non avremmo potuto trovarlo»
+
+Sono due frasi diverse e producono lo stesso tabellone. Un esperimento che non
+trova nulla vale qualcosa solo se sappiamo che cosa sarebbe riuscito a
+trovare, quindi Tyche lo misura invece di lasciarlo intendere.
+
+`python main.py --power` — oppure il pulsante **Calibra** nella scheda
+Validazione — rifà la stessa prova contro previsori il cui vantaggio è noto,
+perché ce l'ha messo il programma. Ognuno legge di nascosto l'estrazione che
+gli si chiede di prevedere e ne rivela una parte, in una quantità che si può
+girare come una manopola: a zero è la linea di base casuale, alzandola diventa
+un oracolo. La frazione di ripetizioni in cui la validazione se ne accorge è
+la sua sensibilità.
+
+Le forme del vantaggio sono tre, perché è la forma a decidere la risposta:
+
+| forma | che cosa fa | vista dai centri | vista dal rango |
+|---|---|---|---|
+| `concentrato` | rivela i sei numeri di netto, in cima | da 0,020 | mai all'80% |
+| `diffuso` | li fa salire di qualche posto | da 0,020 | da 0,020 |
+| `nascosto` | li fa salire, ma mai oltre la metà | **mai** | da 0,050 |
+
+La riga che conta è l'ultima. **Il conteggio dei centri guarda solo i primi
+sei numeri di una graduatoria di novanta**, quindi un vantaggio che esiste e
+non arriva fin lassù è invisibile per costruzione: il suo z resta lo stesso
+identico numero a ogni dimensione. La statistica sul rango medio lo vede a
+z = +11 sulle stesse prove.
+
+Non è che il rango sia una misura migliore — sulla forma `concentrato` è
+nettamente peggiore. Sono due letture della stessa prova, cieche in punti
+diversi, e Tyche stampa entrambe.
+
+La riga a dimensione zero è il controllo: non contiene alcun vantaggio, e
+segnala qualcosa nel 4% e nel 5% dei casi contro il 5% nominale. Se non fosse
+così, nessun'altra riga della stessa colonna vorrebbe dire niente.
+
+E anche questa misura ha un limite dichiarato: tre forme non sono tutte le
+forme, quindi le soglie qui sopra sono il caso migliore. Un vantaggio reale di
+forma diversa sarebbe più difficile da vedere, non più facile.
+
+---
+
 ## Le probabilità, che nessun metodo cambia
 
 Combinatoria esatta su una ruota da 90 numeri, sei estratti:
@@ -284,8 +327,8 @@ quello che fa `core/forecaster.py`.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 133 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 151, GUI compresa
+python -m pytest tests/ -q                                    # 148 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 168, GUI compresa
 python -m ruff check .
 ```
 

@@ -12,6 +12,51 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.3.0] — 2026-09-04
+
+Quanto piccolo dev'essere un vantaggio perché la validazione lo veda.
+
+### La sensibilità dell'esperimento
+
+- **`--power`, e il pulsante Calibra nella scheda Validazione.** Rifanno la
+  stessa prova contro previsori il cui vantaggio è noto perché ce l'ha messo
+  il programma, e riportano con quale frequenza la validazione se ne accorge.
+  «Non abbiamo trovato niente» e «non avremmo potuto trovarlo» producevano
+  finora lo stesso tabellone; adesso c'è un numero che li distingue.
+- La riga a dimensione zero è il controllo e non contiene alcun vantaggio:
+  segnala qualcosa nel 4% e nel 5% dei casi contro il 5% nominale. Le
+  ripetizioni per riga sono cento, perché con venti l'errore su ogni
+  percentuale è di undici punti e il controllo sembrava rotto quando non lo
+  era.
+
+### La graduatoria completa, non solo i primi sei
+
+- **Il backtest riporta ora anche il rango medio dei numeri usciti** sulla
+  graduatoria di tutti e novanta, accanto al conteggio dei centri. Il caso
+  vale 45,5.
+- Serve perché il conteggio dei centri guarda solo i primi sei numeri di
+  novanta: un vantaggio che esiste e non arriva fin lassù è invisibile per
+  costruzione. La calibrazione lo mostra su una delle tre forme di vantaggio
+  provate, dove lo z dei centri resta lo stesso identico numero a ogni
+  dimensione mentre il rango arriva a +11.
+- **Non è una misura migliore, è una seconda lettura.** Sulla forma dove il
+  vantaggio arriva in cima il conteggio dei centri è nettamente più sensibile.
+  Sono cieche in punti diversi e vengono stampate entrambe.
+- I pari merito usano il rango medio del gruppo. `frequenza` assegna a novanta
+  numeri solo quattordici punteggi distinti, con gruppi fino a diciassette, e
+  senza questo la statistica leggerebbe il criterio di spareggio — che ordina
+  per numero — come una preferenza per i numeri bassi.
+
+### Test multipli
+
+- Il riepilogo dei cinque test di indipendenza applica ora la **correzione di
+  Holm-Bonferroni** e stampa i valori p corretti, invece di lasciare al
+  lettore il conto a mente. Dichiara anche la probabilità che almeno uno dei
+  cinque scenda sotto il 5% per puro caso, che è il 23%.
+- Lo sbilanciamento nella somma dei sei numeri sopravvive alla correzione
+  (p corretto 0,0009). Resta quello che era: reale nei dati vecchi, assente
+  negli ultimi sei anni, e troppo piccolo per interessare a un giocatore.
+
 ## [0.2.0] — 2026-09-04
 
 Tyche parla italiano.
