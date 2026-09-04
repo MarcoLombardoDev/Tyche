@@ -808,6 +808,88 @@ def test_walk_forward_refuses_when_there_is_no_history_to_spare():
 
 
 # ─────────────────────────────────────────────────────────────
+# The command line
+# ─────────────────────────────────────────────────────────────
+
+def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeypatch):
+    """A fresh install must not leave 2020–today to a second invocation.
+
+    The bootstrap has run but has not been written yet, so reading the last
+    known year off the stored archive alone gives the current year and scrapes
+    one year instead of six.
+    """
+    import core.data_manager as dm
+    import core.sources as sources
+    import main as cli
+
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", tmp_path / "empty.csv")
+    requested: dict = {}
+
+    class FakeBulk:
+        def __init__(self, url):
+            pass
+
+        def fetch(self, progress=None):
+            return [
+                Draw(date=date(2020, 1, 21), contest=9,
+                     numbers=(6, 32, 46, 53, 70, 75), jolly=62),
+            ]
+
+    class FakeHtml:
+        def __init__(self, template, years, **kwargs):
+            requested["years"] = years
+
+        def fetch(self, progress=None):
+            raise sources.SourceError("blocked, as it is everywhere this was written")
+
+    monkeypatch.setattr(sources, "BulkArchiveSource", FakeBulk)
+    monkeypatch.setattr(sources, "HtmlTableSource", FakeHtml)
+
+    cli._run_update(write=False)
+    assert requested["years"][0] == 2020
+    assert requested["years"][-1] == date.today().year
+
+
+def test_update_writes_nothing_without_yes(tmp_path, monkeypatch):
+    import core.data_manager as dm
+    import main as cli
+
+    archive = tmp_path / "a.csv"
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
+    assert cli._apply(random_archive(20), write=False) == 0
+    assert not archive.exists()
+
+
+def test_apply_refuses_to_write_a_contradicting_import(tmp_path, monkeypatch, capsys):
+    """--yes is permission to write a clean import, not to overwrite good rows."""
+    import core.data_manager as dm
+    import main as cli
+
+    archive = tmp_path / "a.csv"
+    draws = random_archive(20)
+    save_archive(archive, draws)
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
+
+    bad = Draw(date=draws[3].date, contest=draws[3].contest,
+               numbers=(11, 22, 33, 44, 55, 66), jolly=1, year=draws[3].year)
+    assert cli._apply([bad], write=True) == 1
+    assert "Refusing to write" in capsys.readouterr().out
+    assert [d.to_row() for d in load_archive(archive)] == [d.to_row() for d in draws]
+
+
+def test_apply_writes_a_clean_import(tmp_path, monkeypatch):
+    import core.data_manager as dm
+    import main as cli
+
+    archive = tmp_path / "a.csv"
+    draws = random_archive(30)
+    save_archive(archive, draws[:20])
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
+    assert cli._apply(draws, write=True) == 0
+    assert len(load_archive(archive)) == 30
+
+
+# ─────────────────────────────────────────────────────────────
 # Settings
 # ─────────────────────────────────────────────────────────────
 

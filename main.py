@@ -192,7 +192,12 @@ def _run_update(write: bool) -> int:
         except SourceError as exc:
             print(f"  bulk archive failed: {exc}")
 
-    last_year = existing[-1].year if existing else date.today().year
+    # The year to scrape from is the last one *anything* covers, including the
+    # bootstrap that just ran and has not been written yet. Reading it from
+    # `existing` alone would scrape only the current year on a fresh install
+    # and leave everything between 2020 and now to a second invocation.
+    known = existing + incoming
+    last_year = max(d.year for d in known) if known else 1997
     years = list(range(last_year, date.today().year + 1))
     print(f"Scraping {years[0]}–{years[-1]}.")
     try:
