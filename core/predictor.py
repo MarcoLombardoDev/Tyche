@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 import random
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 
@@ -59,6 +60,12 @@ class Prediction:
     archive_size: int
     note: str = ""
     detail: dict = field(default_factory=dict)
+    # How many numbers each combination holds. Six is a plain column; more is
+    # a sistema integrale, and core.predictor.system_columns says what it costs.
+    size: int = NUMBERS_PER_DRAW
+    # The SuperStar pick, when one was asked for. None means the ticket does
+    # not play it, which is not the same as playing it and getting zero.
+    superstar: int | None = None
 
     def to_log_entry(self) -> dict:
         return {
@@ -69,6 +76,8 @@ class Prediction:
             ),
             "archive_size": self.archive_size,
             "combinations": [list(c) for c in self.combinations],
+            "size": self.size,
+            "superstar": self.superstar,
             "top_scores": {str(n): round(self.scores[n], 6) for n in self.ranked[:12]},
         }
 
@@ -115,6 +124,27 @@ def random_scores(seed: int | None = None) -> dict[int, float]:
     return {n: rng.random() for n in ALL_NUMBERS}
 
 
+def superstar_scores(draws: list[Draw], window: int = DEFAULT_WINDOW) -> dict[int, float]:
+    """How often each number came up *as the SuperStar* in the last ``window``.
+
+    The SuperStar comes out of its own drum, so it is a uniform draw from 90
+    that is independent of the six and may repeat one of them — on the real
+    archive it does so 247 times against 223 expected. That independence is
+    why it gets its own scoring function rather than reusing the main one: a
+    number can be cold on the wheel and hot on the SuperStar, and mixing the
+    two counts would be an error of fact rather than of taste.
+
+    Only draws that actually carry a SuperStar are counted. The game started
+    on 28 March 2006 and the 914 draws before it store 0, which is "not on
+    record"; treating those as a number would put a spike on nothing.
+    """
+    recorded = [d for d in draws if d.has_superstar]
+    recent = recorded[-window:] if window else recorded
+    total = max(len(recent), 1)
+    tally = Counter(d.superstar for d in recent)
+    return {n: tally[n] / total for n in ALL_NUMBERS}
+
+
 def rank_numbers(scores: dict[int, float], descending: bool = True) -> list[int]:
     """The ninety numbers ordered by score, ties broken by the number itself.
 
@@ -158,6 +188,7 @@ def predict(
     forecaster=None,
     window: int = DEFAULT_WINDOW,
     seed: int | None = None,
+    superstar: bool = False,
     progress=None,
 ) -> Prediction:
     """Produce a :class:`Prediction` with the named method.
@@ -165,7 +196,13 @@ def predict(
     ``forecaster`` is required for ``"timesfm"`` and ignored otherwise, so a
     caller with no model can still exercise every other path — including the
     whole validation harness.
+
+    ``size`` above six makes each combination a *sistema integrale*; ``size``
+    is validated here so a bad setting fails at the point it is used rather
+    than inside the combinatorics. ``superstar`` adds a SuperStar pick, scored
+    from its own drum's history.
     """
+    _check_system_size(size)
     if method not in METHODS:
         raise ValueError(
             f"metodo sconosciuto {method!r}; sono validi {', '.join(METHODS)}"
@@ -189,6 +226,17 @@ def predict(
         note = "Punteggi pseudo-casuali con seme fisso — la condizione di controllo."
 
     ranked = rank_numbers(scores)
+
+    # The SuperStar is ranked by its own history, never by the main scores:
+    # separate drum, separate question. The random baseline stays random here
+    # too, so the control condition is a control on the whole ticket.
+    star = None
+    if superstar:
+        if method == "casuale":
+            star = rank_numbers(random_scores(seed))[0]
+        else:
+            star = rank_numbers(superstar_scores(draws, window))[0]
+
     return Prediction(
         method=method,
         scores=scores,
@@ -198,6 +246,8 @@ def predict(
         archive_last_date=draws[-1].date if draws else None,
         archive_size=len(draws),
         note=note,
+        size=size,
+        superstar=star,
     )
 
 
@@ -234,6 +284,79 @@ def category_odds(size: int = NUMBERS_PER_DRAW) -> dict[str, int]:
         "2": math.comb(6, 2) * math.comb(NUMBER_MAX - NUMBERS_PER_DRAW, 4),
     }
     return {k: round(total / v) for k, v in ways.items()}
+
+
+# A system of more than twelve numbers is 924 columns and climbing fast —
+# C(14,6) is 3,003 — and the point of the cap is that the panel prints the
+# column count beside it, so the cost is visible rather than discovered later.
+SYSTEM_MIN = NUMBERS_PER_DRAW
+SYSTEM_MAX = 12
+
+# One in ninety, exactly, and independent of everything else on the ticket.
+SUPERSTAR_ODDS = NUMBER_MAX
+
+
+def system_columns(size: int = NUMBERS_PER_DRAW) -> int:
+    """How many six-number columns a system of ``size`` numbers covers.
+
+    C(size, 6): a *sistema integrale*, every combination of six from the
+    numbers played. This is also what it costs, in units of one column.
+    """
+    _check_system_size(size)
+    return math.comb(size, NUMBERS_PER_DRAW)
+
+
+def system_top_prize_odds(size: int = NUMBERS_PER_DRAW) -> int:
+    """One-in-N odds that a system of ``size`` numbers contains the six drawn.
+
+    **The single most important number in this module, and not for the reason
+    a player hopes.** Playing more numbers really does shorten these odds —
+    from 1 in 622,614,630 on six numbers to 1 in 2,964,832 on ten. It also
+    multiplies the cost by exactly the same factor, 210 columns instead of
+    one, because the probability is ``C(size,6) / C(90,6)`` and the price is
+    ``C(size,6)``. Divide one by the other at any size and the answer is
+    always 622,614,630.
+
+    A system buys probability strictly in proportion to money. It is a way of
+    spending more, not a way of getting more per euro, and there is a test
+    asserting that ratio stays constant across every size this module allows.
+    """
+    _check_system_size(size)
+    return round(math.comb(NUMBER_MAX, NUMBERS_PER_DRAW) / system_columns(size))
+
+
+def system_profile(size: int, matched: int) -> dict[int, int]:
+    """``{numbers matched: winning columns}`` when ``matched`` of the six drawn
+    fall inside a system of ``size`` numbers.
+
+    This is what a system actually buys, and it is not only the top prize. Hit
+    all six with a system of ten and the ticket does not hold one winning
+    column, it holds one "6", twenty-four "5"s and a hundred and twenty "4"s —
+    because every column that contains five of the six is also on the ticket.
+
+    Exact, not simulated: columns holding exactly *j* of the drawn numbers are
+    ``C(matched, j) · C(size - matched, 6 - j)``.
+
+    The 5+1 category is deliberately absent. Whether a five-match column also
+    takes the Jolly depends on the Jolly, which comes from the remaining 84
+    numbers and is not part of the system.
+    """
+    _check_system_size(size)
+    if not 0 <= matched <= NUMBERS_PER_DRAW:
+        raise ValueError(f"si possono indovinare da 0 a 6 numeri, non {matched}")
+    profile = {}
+    for j in range(2, NUMBERS_PER_DRAW + 1):
+        columns = math.comb(matched, j) * math.comb(size - matched, NUMBERS_PER_DRAW - j)
+        if columns:
+            profile[j] = columns
+    return profile
+
+
+def _check_system_size(size: int) -> None:
+    if not SYSTEM_MIN <= size <= SYSTEM_MAX:
+        raise ValueError(
+            f"un sistema va da {SYSTEM_MIN} a {SYSTEM_MAX} numeri, non {size}"
+        )
 
 
 def expected_hits(size: int = NUMBERS_PER_DRAW) -> float:

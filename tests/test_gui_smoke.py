@@ -66,6 +66,7 @@ if not os.environ.get("DISPLAY") and sys.platform.startswith("linux"):
     _unavailable("no DISPLAY; run under xvfb-run")
 
 from core.archive import Draw, save_archive  # noqa: E402
+from gui.prediction_panel import _METHOD_LABELS as _LABELS  # noqa: E402
 
 
 def _sample_archive(n: int = 600):
@@ -298,6 +299,44 @@ def test_the_calibration_button_reaches_a_table(app):
     text = panel.box.get("1.0", "end")
     assert "nascosto" in text
     assert "soglia al" in text
+
+
+def test_the_prediction_follows_the_system_size_and_superstar_settings(app):
+    """The two settings live on another tab, so this is the wire between them."""
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.settings["prediction_size"] = 9
+    app.settings["predict_superstar"] = True
+    panel.method.set(_LABELS["ritardo"])
+    panel._generate()
+    app.update()
+
+    prediction = app.last_prediction
+    assert prediction.size == 9
+    assert all(len(c) == 9 for c in prediction.combinations)
+    assert prediction.superstar is not None
+
+    text = panel.box.get("1.0", "end")
+    assert "Sistema integrale da 9 numeri" in text
+    assert "84 colonne" in text
+    # The honest sentence has to be on the screen, not only in the source.
+    assert "non di guadagnare di più" in text
+    assert "SuperStar" in text
+
+
+def test_a_plain_column_says_so_and_shows_no_system_table(app):
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.settings["prediction_size"] = 6
+    app.settings["predict_superstar"] = False
+    panel.method.set(_LABELS["ritardo"])
+    panel._generate()
+    app.update()
+
+    assert app.last_prediction.superstar is None
+    text = panel.box.get("1.0", "end")
+    assert "Colonna singola" in text
+    assert "Sistema integrale" not in text
 
 
 def test_validation_rejects_a_non_numeric_draw_count(app):

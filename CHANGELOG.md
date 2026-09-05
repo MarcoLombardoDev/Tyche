@@ -12,6 +12,42 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.5.0] — 2026-09-05
+
+Sistemi e SuperStar, con la matematica dichiarata.
+
+### Sistemi
+
+- **Nelle Impostazioni si sceglie quanti numeri per combinazione**, da sei a
+  dodici. Sei è una colonna singola; di più è un sistema integrale, e la
+  previsione produce sistemi invece di colonne.
+- La scheda Previsione stampa quante colonne copre il sistema, quanto costa
+  rispetto a una giocata singola e quali vincite minori accompagnerebbero
+  quella grande — con dieci numeri e sei indovinati: un 6, ventiquattro 5 e
+  novanta 4.
+- **Dice anche la cosa che di solito non viene detta:** giocare più numeri
+  accorcia le probabilità del 6 e moltiplica il costo esattamente dello stesso
+  fattore. La probabilità per euro giocato non cambia. Un test verifica che
+  quel rapporto resti costante a ogni dimensione, così nessuna modifica futura
+  può far sembrare un sistema un affare migliore di quello che è.
+- **La Validazione segue la dimensione scelta**: con nove numeri il caso vale
+  0,600 centri per estrazione invece di 0,400, perché è un'altra scommessa.
+  Misurarne sei mentre se ne giocano nove misurerebbe un gioco diverso da
+  quello che si sta facendo.
+
+### SuperStar
+
+- **Si può giocare anche il SuperStar**, con un interruttore nelle
+  Impostazioni. Era già letto, validato e archiviato da sempre, ma nessuna
+  previsione lo usava.
+- Viene scelto sulla storia della **sua** urna, non su quella dei sei: sono
+  estrazioni separate e indipendenti, tanto che il SuperStar ripete uno dei sei
+  247 volte sull'archivio reale, contro 223 attese. Indovinarlo è 1 su 90,
+  qualunque numero si scelga.
+- Contano solo le estrazioni che ne registrano uno. Il gioco è partito il 28
+  marzo 2006 e le 914 precedenti salvano 0, che vuol dire «non a registro»:
+  contarle avrebbe messo un picco su un numero mai uscito.
+
 ## [0.4.0] — 2026-09-05
 
 Un percorso, invece di sei schede senza un ordine.

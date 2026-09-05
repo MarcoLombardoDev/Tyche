@@ -249,6 +249,45 @@ forma diversa sarebbe più difficile da vedere, non più facile.
 
 ---
 
+## Sistemi e SuperStar
+
+Nelle Impostazioni si scelgono due cose che cambiano la giocata.
+
+**Quanti numeri per combinazione.** Sei è una colonna singola; da sette a
+dodici è un sistema integrale, che copre tutte le combinazioni di sei fra i
+numeri giocati. La previsione allora produce sistemi invece di colonne, e la
+Validazione misura quella stessa dimensione — nove numeri contro il caso a
+0,600 centri per estrazione invece di 0,400, perché è un'altra scommessa.
+
+| Numeri | Colonne coperte | Il 6 è 1 su | Per colonna |
+|---|---|---|---|
+| 6 | 1 | 622.614.630 | 622.614.630 |
+| 8 | 28 | 22.236.237 | 622.614.630 |
+| 10 | 210 | 2.964.832 | 622.614.630 |
+| 12 | 924 | 673.825 | 622.614.630 |
+
+**L'ultima colonna è il punto.** Giocare più numeri accorcia davvero le
+probabilità del 6, e moltiplica il costo esattamente dello stesso fattore. La
+probabilità per euro giocato non si muove di una virgola: un sistema è un modo
+di spendere di più, non di ottenere di più. C'è un test che verifica che quel
+rapporto resti costante a ogni dimensione, così nessuna modifica futura può
+far sembrare un sistema un affare migliore di quello che è.
+
+Quello che un sistema compra davvero sono le vincite minori che accompagnano
+quella grande: con dieci numeri, indovinandoli tutti e sei, la giocata non ha
+una colonna vincente ma un 6, ventiquattro 5 e novanta 4 — perché ogni colonna
+che contiene cinque dei sei è anch'essa sulla schedina. La scheda Previsione
+stampa quella tabella.
+
+**Il SuperStar.** Esce da un'urna separata, quindi è un numero da 1 a 90
+indipendente dai sei che può ripeterne uno — sull'archivio reale lo fa 247
+volte contro 223 attese. Tyche lo sceglie sulla storia della sua urna e non su
+quella dei sei, perché sono due domande diverse. Indovinarlo è 1 su 90,
+qualunque numero si giochi. L'archivio lo registra dal 28 marzo 2006, e le 914
+estrazioni precedenti non vengono contate come se fosse uscito lo zero.
+
+---
+
 ## Le probabilità, che nessun metodo cambia
 
 Combinatoria esatta su una ruota da 90 numeri, sei estratti:
@@ -344,8 +383,8 @@ quello che fa `core/forecaster.py`.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 174 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 200, GUI compresa
+python -m pytest tests/ -q                                    # 178 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 213, GUI compresa
 python -m ruff check .
 ```
 

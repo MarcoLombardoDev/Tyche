@@ -10,6 +10,8 @@
   "auto_repair_labels": true,
   "prediction_method": "timesfm",
   "combinations": 5,
+  "prediction_size": 6,
+  "predict_superstar": false,
   "validation_draws": 300,
   "validation_baselines": [
     "casuale",

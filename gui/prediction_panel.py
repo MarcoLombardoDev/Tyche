@@ -23,7 +23,16 @@ from core.data_manager import log_prediction
 from core.features import DEFAULT_WINDOW
 from core.forecaster import TimesFMForecaster
 from core.localise import it_date, it_number
-from core.predictor import METHODS, predict, value_note
+from core.predictor import (
+    METHODS,
+    SUPERSTAR_ODDS,
+    expected_hits,
+    predict,
+    system_columns,
+    system_profile,
+    system_top_prize_odds,
+    value_note,
+)
 from gui.theme import BG_ROOT, MUTED
 from gui.widgets import ReportBox, ball_row, section
 
@@ -33,6 +42,51 @@ _METHOD_LABELS = {
     "ritardo": "Ritardo (assenti da più tempo)",
     "casuale": "Casuale (la condizione di controllo)",
 }
+
+
+def _ticket_lines(prediction) -> list[str]:
+    """What the ticket on screen actually is, in columns and in odds.
+
+    Printed under every prediction because the two settings that shape it —
+    the system size and the SuperStar — live on another tab, and a user who
+    set them last week should not have to go back and check what they chose.
+    """
+    size = prediction.size
+    lines = []
+    if size == 6:
+        lines.append(
+            f"Colonna singola da sei numeri: 1 possibilità su "
+            f"{it_number(system_top_prize_odds(6))} di prendere il 6."
+        )
+    else:
+        columns = system_columns(size)
+        lines += [
+            f"Sistema integrale da {size} numeri: copre {it_number(columns)} colonne, "
+            f"quindi costa {it_number(columns)} volte una giocata singola.",
+            f"Con {size} numeri il 6 è 1 possibilità su "
+            f"{it_number(system_top_prize_odds(size))}, contro 1 su "
+            f"{it_number(system_top_prize_odds(6))} di una colonna sola.",
+            "",
+            "Le due cose crescono nella stessa identica proporzione: la probabilità "
+            "per euro giocato non cambia di una virgola.",
+            "Un sistema è un modo di spendere di più, non di guadagnare di più.",
+            "",
+            "Quello che un sistema compra davvero sono le vincite minori che "
+            "accompagnano quella grande. Indovinando tutti e sei i numeri:",
+            f"  {'indovinati':>10}  {'colonne vincenti':>17}",
+        ]
+        for matched, columns_won in sorted(
+            system_profile(size, 6).items(), reverse=True
+        ):
+            lines.append(f"  {matched:>10}  {it_number(columns_won):>17}")
+    if prediction.superstar is not None:
+        lines += [
+            "",
+            f"SuperStar giocato: {prediction.superstar}. Esce da un'urna separata, "
+            f"quindi indovinarlo è 1 su {SUPERSTAR_ODDS} qualunque numero si scelga "
+            "e qualunque cosa facciano i sei.",
+        ]
+    return lines
 
 
 class PredictionPanel(ctk.CTkFrame):
@@ -47,9 +101,11 @@ class PredictionPanel(ctk.CTkFrame):
             self, "Passo 4 di 4 · Genera le combinazioni",
             "Il punto di arrivo. Scegli un metodo, quante combinazioni vuoi, e premi "
             "«Genera».\n"
-            "Ogni metodo qui sotto ha lo stesso punteggio atteso — 0,4 numeri "
-            "indovinati su sei — perché l'estrazione da prevedere è indipendente da "
-            "tutto ciò che guardano. Il passo 3 lo misura sui dati veri.",
+            "Ogni metodo qui sotto ha lo stesso punteggio atteso, perché "
+            "l'estrazione da prevedere è indipendente da tutto ciò che guardano. "
+            "Il passo 3 lo misura sui dati veri.\n"
+            "Quanti numeri per combinazione e se giocare il SuperStar si scelgono "
+            "nelle Impostazioni.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
@@ -106,8 +162,12 @@ class PredictionPanel(ctk.CTkFrame):
         settings["combinations"] = count
         self.app.save_settings()
 
+        size = int(settings.get("prediction_size", 6))
+        star = bool(settings.get("predict_superstar", False))
+
         if method != "timesfm":
-            self._show(predict(draws, method=method, combinations=count,
+            self._show(predict(draws, method=method, combinations=count, size=size,
+                               superstar=star,
                                window=settings.get("frequency_window", DEFAULT_WINDOW)))
             return
 
@@ -127,8 +187,8 @@ class PredictionPanel(ctk.CTkFrame):
                     "ottengono tutti lo stesso punteggio."
                 )
             self.app.forecaster = forecaster
-            return predict(draws, method="timesfm", combinations=count,
-                           forecaster=forecaster, progress=report)
+            return predict(draws, method="timesfm", combinations=count, size=size,
+                           superstar=star, forecaster=forecaster, progress=report)
 
         self.app.run_worker("TimesFM forecast", work, self._show)
 
@@ -143,7 +203,23 @@ class PredictionPanel(ctk.CTkFrame):
             line.pack(fill="x", pady=3)
             ctk.CTkLabel(line, text=f"{i}.", width=24, text_color=MUTED).pack(side="left")
             ball_row(line, combination).pack(side="left")
-        self.note.configure(text=prediction.note)
+        if prediction.superstar is not None:
+            line = ctk.CTkFrame(self.balls, fg_color="transparent")
+            line.pack(fill="x", pady=(8, 3))
+            ctk.CTkLabel(
+                line, text="SuperStar", width=90, anchor="w", text_color=MUTED,
+            ).pack(side="left")
+            ball_row(line, (prediction.superstar,)).pack(side="left")
+        shape = f"{prediction.size} numeri per combinazione"
+        if prediction.size > 6:
+            shape += f" — sistema da {it_number(system_columns(prediction.size))} colonne"
+        if prediction.superstar is not None:
+            shape += ", SuperStar compreso"
+        self.note.configure(
+            text=f"{prediction.note}  ·  {shape}. "
+            f"Punteggio atteso dal caso: {expected_hits(prediction.size):.3f} "
+            "numeri indovinati per estrazione."
+        )
 
         ranked = prediction.ranked
         lines = [
@@ -170,8 +246,9 @@ class PredictionPanel(ctk.CTkFrame):
             "",
             f"Escursione dei punteggi sui novanta numeri: {spread:.6f}.",
             "",
-            value_note(),
         ]
+        lines += _ticket_lines(prediction)
+        lines += ["", value_note()]
         self.box.set_text("\n".join(lines))
         self.app.set_status(
             f"{len(prediction.combinations)} combinazioni dal metodo "

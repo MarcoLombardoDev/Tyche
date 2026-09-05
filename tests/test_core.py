@@ -1787,5 +1787,162 @@ def test_the_bulk_source_actually_skips_the_repair_when_told_to(monkeypatch):
     assert by_id["1998/1"].numbers == (1, 2, 3, 4, 5, 6)
 
 
+# ─────────────────────────────────────────────────────────────
+# Systems and the SuperStar
+# ─────────────────────────────────────────────────────────────
+
+def test_a_system_covers_every_combination_of_six():
+    from core.predictor import system_columns
+
+    assert system_columns(6) == 1
+    assert system_columns(7) == 7
+    assert system_columns(9) == 84
+    assert system_columns(10) == 210
+
+
+def test_a_system_buys_probability_strictly_in_proportion_to_cost():
+    """The one fact about systems that matters, asserted rather than asserted at.
+
+    Playing more numbers shortens the odds and multiplies the price by exactly
+    the same factor. Odds times columns is C(90,6) at every size, so the
+    probability per column — per euro — never moves. A change that made a
+    system look like better value would break this.
+    """
+    import math
+
+    from core.predictor import SYSTEM_MAX, SYSTEM_MIN, system_columns, system_top_prize_odds
+
+    total = math.comb(90, 6)
+    for size in range(SYSTEM_MIN, SYSTEM_MAX + 1):
+        product = system_top_prize_odds(size) * system_columns(size)
+        # The odds are rounded to a whole number for display, so compare
+        # against the exact figure with room for that rounding only.
+        assert abs(product - total) / total < 1e-5, size
+
+
+def test_a_system_is_refused_outside_its_range():
+    from core.predictor import SYSTEM_MAX, system_columns
+
+    with pytest.raises(ValueError, match="sistema"):
+        system_columns(5)
+    with pytest.raises(ValueError, match="sistema"):
+        system_columns(SYSTEM_MAX + 1)
+
+
+def test_the_system_profile_accounts_for_every_column():
+    """Columns winning something, plus those winning nothing, is the whole system."""
+    import math
+
+    from core.predictor import system_columns, system_profile
+
+    for size in (7, 9, 10, 12):
+        for matched in range(7):
+            profile = system_profile(size, matched)
+            won = sum(profile.values())
+            # Columns holding 0 or 1 of the drawn numbers win nothing and are
+            # deliberately absent from the profile.
+            nothing = sum(
+                math.comb(matched, j) * math.comb(size - matched, 6 - j)
+                for j in (0, 1)
+            )
+            assert won + nothing == system_columns(size), (size, matched)
+
+
+def test_hitting_all_six_with_a_system_wins_one_six_and_many_lesser_prizes():
+    """What a system actually buys, and the reason the profile is printed."""
+    from core.predictor import system_profile
+
+    profile = system_profile(10, 6)
+    assert profile[6] == 1
+    assert profile[5] == 24
+    assert profile[4] == 90
+    # A plain column wins exactly one thing and nothing else.
+    assert system_profile(6, 6) == {6: 1}
+
+
+def test_the_superstar_is_scored_from_its_own_drum():
+    """A separate drum is a separate question, not a column of the same table."""
+    from core.predictor import superstar_scores
+
+    draws = [
+        Draw(date=date(2010, 1, 1) + timedelta(days=3 * i), contest=i + 1,
+             numbers=(1, 2, 3, 4, 5, 6), jolly=7, superstar=42, year=2010)
+        for i in range(20)
+    ]
+    scores = superstar_scores(draws, window=20)
+    assert scores[42] == 1.0
+    # The six main numbers are drawn every time and score zero here, which is
+    # the whole point: they are not what this drum produced.
+    assert scores[1] == 0.0
+
+
+def test_draws_from_before_the_superstar_existed_are_not_counted_as_a_number():
+    """0 means "not on record" — the game began in 2006, not at number zero."""
+    from core.predictor import superstar_scores
+
+    old = [
+        Draw(date=date(2000, 1, 1) + timedelta(days=3 * i), contest=i + 1,
+             numbers=(1, 2, 3, 4, 5, 6), jolly=7, superstar=0, year=2000)
+        for i in range(50)
+    ]
+    recent = [
+        Draw(date=date(2010, 1, 1) + timedelta(days=3 * i), contest=i + 1,
+             numbers=(1, 2, 3, 4, 5, 6), jolly=7, superstar=11, year=2010)
+        for i in range(10)
+    ]
+    scores = superstar_scores([*old, *recent], window=60)
+    # Ten recorded draws, all showing 11 — not sixty draws mostly showing zero.
+    assert scores[11] == 1.0
+    assert sum(scores.values()) == 1.0
+
+
+def test_a_prediction_plays_the_superstar_only_when_asked():
+    from core.predictor import predict
+
+    draws = random_archive(400, seed=21)
+    assert predict(draws, "frequenza").superstar is None
+    star = predict(draws, "frequenza", superstar=True).superstar
+    assert star is not None
+    assert 1 <= star <= 90
+
+
+def test_the_random_baseline_stays_random_on_the_whole_ticket():
+    """The control condition has to control the SuperStar too, or it is not one."""
+    from core.predictor import predict
+
+    draws = random_archive(400, seed=22)
+    stars = {
+        predict(draws, "casuale", seed=s, superstar=True).superstar
+        for s in range(30)
+    }
+    assert len(stars) > 5, "the control picked the same SuperStar every time"
+
+
+def test_a_prediction_carries_the_size_it_was_asked_for():
+    from core.predictor import predict
+
+    draws = random_archive(400, seed=23)
+    prediction = predict(draws, "frequenza", combinations=3, size=9)
+    assert prediction.size == 9
+    assert all(len(c) == 9 for c in prediction.combinations)
+    with pytest.raises(ValueError, match="sistema"):
+        predict(draws, "frequenza", size=20)
+
+
+def test_chance_moves_with_the_number_of_picks():
+    """Nine numbers is a different bet, and the backtest has to say so.
+
+    Validating six while the ticket plays nine would compare against the wrong
+    baseline: chance is picks x 6 / 90, so 0.400 becomes 0.600.
+    """
+    from core.validation import walk_forward
+
+    draws = random_archive(600, seed=24)
+    six = walk_forward(draws, methods=["casuale"], n_draws=200, picks=6)
+    nine = walk_forward(draws, methods=["casuale"], n_draws=200, picks=9)
+    assert abs(six.results[0].expected_mean - 0.4) < 1e-9
+    assert abs(nine.results[0].expected_mean - 0.6) < 1e-9
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

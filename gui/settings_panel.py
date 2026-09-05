@@ -57,6 +57,15 @@ FIELDS = [
      "questa attiva vengono rimesse a posto durante l'import; disattivandola si "
      "importano i byte del mirror così come sono, che è il modo per confrontarli "
      "con un'altra fonte."),
+    ("prediction_size", "Numeri per combinazione", tuple(str(n) for n in range(6, 13)),
+     "Sei è una colonna singola. Di più è un sistema integrale: nove numeri "
+     "coprono 84 colonne e costano 84 volte tanto. La probabilità sale nella "
+     "stessa identica proporzione — un sistema è un modo di spendere di più, "
+     "non di ottenere di più per euro. La scheda Previsione stampa le colonne."),
+    ("predict_superstar", "Gioca anche il SuperStar", "bool",
+     "Il SuperStar esce da un'urna separata, quindi è un numero da 1 a 90 "
+     "indipendente dai sei e che può ripeterne uno. Indovinarlo è 1 su 90, "
+     "sempre, e viene scelto sulla storia della sua urna e non su quella dei sei."),
     ("validation_draws", "Estrazioni per la validazione", "text",
      "Quante estrazioni recenti valuta il backtest walk-forward."),
 ]

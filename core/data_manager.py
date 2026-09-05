@@ -74,6 +74,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # --- Prediction ---
     "prediction_method": "timesfm",   # "timesfm" | "frequenza" | "ritardo" | "casuale"
     "combinations": 5,
+    # Numbers per combination. Six is a plain column; more is a sistema
+    # integrale covering C(size, 6) columns, which is also what it costs.
+    # core.predictor caps it at 12 — 924 columns — because the cost climbs
+    # faster than it reads.
+    "prediction_size": 6,
+    # Whether the ticket plays the SuperStar too. Off by default: it is a
+    # separate drum and a separate stake, so it should be asked for.
+    "predict_superstar": False,
 
     # --- Validation ---
     # How many of the most recent draws the walk-forward backtest scores. 300

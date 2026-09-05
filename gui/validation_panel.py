@@ -143,6 +143,12 @@ class ValidationPanel(ctk.CTkFrame):
                 self.app.forecaster = forecaster
             return walk_forward(
                 draws, methods=methods, n_draws=n_draws,
+                # Scored on the number of picks the ticket actually plays. A
+                # system of nine is a different bet from a column of six, and
+                # chance moves with it — 0.600 expected hits instead of 0.400 —
+                # so validating six while playing nine would measure a game the
+                # user is not playing.
+                picks=int(settings.get("prediction_size", 6)),
                 forecaster=forecaster,
                 window=int(settings.get("frequency_window", 150)),
                 progress=report,

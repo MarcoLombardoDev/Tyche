@@ -150,8 +150,12 @@ def _run_validation(n_draws: int) -> int:
     draws = _load_archive_or_explain()
     if not draws:
         return 1
+    from core.data_manager import load_settings
+
+    settings = load_settings()
     report = walk_forward(
-        draws, methods=["casuale", "frequenza", "ritardo"], n_draws=n_draws
+        draws, methods=["casuale", "frequenza", "ritardo"], n_draws=n_draws,
+        picks=int(settings.get("prediction_size", 6)),
     )
     print(
         f"{report.draws_scored} estrazioni valutate, "
@@ -347,6 +351,8 @@ def _run_forecast(method: str) -> int:
 
     prediction = predict(
         draws, method=method, combinations=int(settings["combinations"]),
+        size=int(settings.get("prediction_size", 6)),
+        superstar=bool(settings.get("predict_superstar", False)),
         forecaster=forecaster, window=int(settings["frequency_window"]),
     )
     print(f"\n{prediction.method} — {prediction.note}")
@@ -357,6 +363,16 @@ def _run_forecast(method: str) -> int:
     )
     for i, combination in enumerate(prediction.combinations, 1):
         print(f"  {i}. " + "  ".join(f"{n:2d}" for n in combination))
+    if prediction.size > 6:
+        from core.predictor import system_columns, system_top_prize_odds
+
+        print(
+            f"\nsistema da {prediction.size} numeri: {it_number(system_columns(prediction.size))} "
+            f"colonne, 1 su {it_number(system_top_prize_odds(prediction.size))} per il 6 — "
+            f"e altrettante volte il costo di una giocata singola."
+        )
+    if prediction.superstar is not None:
+        print(f"\nSuperStar: {prediction.superstar} (1 su 90, sempre)")
     spread = prediction.scores[prediction.ranked[0]] - prediction.scores[prediction.ranked[-1]]
     print(f"\nescursione dei punteggi sui novanta numeri: {spread:.6f}")
     print(f"\n{value_note()}")

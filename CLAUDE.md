@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 174 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 200, GUI included
+python -m pytest tests/ -q                                   # 178 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 213, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `174 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `178 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -501,6 +501,50 @@ page for whatever the caller runs next.
   reads it at all, which is the cheap half and the half that was missing.
   `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
   mirror: declared, read, but unreachable from the interface.
+
+## Systems, the SuperStar, and the one ratio that must not move
+
+Added in 0.5.0, from the owner asking whether either was handled. Neither was:
+the SuperStar was parsed, validated, merged and exported and then never used,
+and `build_combinations` took a `size` argument that nothing could set.
+
+**The invariant.** A system of *n* numbers covers `C(n,6)` columns and wins the
+top prize with probability `C(n,6) / C(90,6)`. Divide the odds by the cost at
+any size and the answer is 622,614,630 — always. Playing more numbers buys
+probability in exact proportion to money and changes nothing per euro.
+`test_a_system_buys_probability_strictly_in_proportion_to_cost` asserts that
+across every size the module allows, and it exists so no later change can make
+a system look like better value than a single column. It is the same class of
+guard as the random baseline sitting in the method menu.
+
+What a system *does* buy is the lower-tier wins that come with a top-tier hit:
+hit six with a system of ten and the ticket holds one 6, twenty-four 5s and
+ninety 4s, because every column containing five of the six is also on it.
+`system_profile` computes that exactly — `C(matched,j)·C(size-matched,6-j)` —
+and the prediction panel prints it. The 5+1 is deliberately not modelled
+there: whether a five-match column takes the Jolly depends on the Jolly, which
+comes from the other 84 numbers.
+
+**The SuperStar has its own drum, so it has its own scoring function.** It is
+a uniform draw from 90 that is independent of the six and may repeat one of
+them — 247 times against 223 expected on the real archive, which is the check
+that it really is separate. `superstar_scores` counts only draws that carry
+one: the game began on 28 March 2006 and the 914 earlier draws store 0 for
+"not on record", so counting those would put a spike on a number that was
+never drawn. The random baseline randomises the SuperStar too, because a
+control that controls only part of the ticket is not one.
+
+**The backtest follows the setting.** `walk_forward(picks=...)` already
+existed; the panel and the CLI now pass `prediction_size` into it, so a nine
+number system is scored against chance at 0.600 rather than 0.400. Validating
+six while the ticket plays nine would compare against a game the user is not
+playing.
+
+One trap worth recording: the GUI smoke test needed `_METHOD_LABELS`, and
+importing it at module level put a `gui/` import *above* the tkinter skip. On
+a machine without Tk that turns a skip into a collection error — the failure
+mode this file exists to prevent, inverted. Deferred imports in that file go
+below the skip block, with the others.
 
 ## CTkFrame is 200 pixels tall until you tell it otherwise
 
