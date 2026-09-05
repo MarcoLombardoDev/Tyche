@@ -269,7 +269,10 @@ def _run_update(write: bool) -> int:
     if not existing:
         print("Nessun archivio — parto dal mirror storico.")
         try:
-            incoming += BulkArchiveSource(settings["bulk_archive_url"]).fetch(report)
+            incoming += BulkArchiveSource(
+                settings["bulk_archive_url"],
+                repair_labels=bool(settings.get("auto_repair_labels", True)),
+            ).fetch(report)
         except SourceError as exc:
             print(f"  mirror storico non disponibile: {exc}")
 

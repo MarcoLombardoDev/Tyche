@@ -12,6 +12,36 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.3.1] — 2026-09-05
+
+Quattro impostazioni che non facevano niente.
+
+### Corretto
+
+- **`auto_repair_labels` adesso funziona.** Era dichiarata come un
+  interruttore sulla correzione delle nove estrazioni che il mirror storico
+  etichetta 1998 invece di 1999, ma la correzione veniva applicata comunque.
+  Ora arriva davvero alla sorgente, e c'è un interruttore nelle Impostazioni.
+  Resta attiva per impostazione predefinita: quelle nove sono davvero
+  sbagliate. Disattivandola si importano i byte del mirror così come sono, che
+  è il modo per confrontarli con un'altra fonte.
+- **`validation_baselines` adesso funziona.** Decide quali metodi trovi già
+  spuntati nella scheda Validazione, e la scelta di una prova viene ricordata.
+  TimesFM resta fuori dal valore predefinito: una chiamata al modello per ogni
+  estrazione valutata non è quello che dovrebbe costare il primo clic.
+- **`numbers_per_combination` e `last_archive_update` sono state rimosse.**
+  Nessuna delle due veniva letta: la prima duplicava una costante — chi
+  l'avesse messa a 7 non avrebbe visto né un effetto né un errore — e la
+  seconda l'indicatore di freschezza, che legge l'archivio e quindi non può
+  disallinearsi da esso.
+- Due test impediscono che succeda di nuovo, in entrambe le direzioni: uno
+  fallisce se una chiave dei valori predefiniti non viene letta da nessuna
+  parte, l'altro se una chiave che un utente dovrebbe poter impostare non è
+  raggiungibile dal pannello.
+
+Un `config/settings.json` esistente continua a funzionare: le due chiavi
+rimosse restano nel file e vengono semplicemente ignorate.
+
 ## [0.3.0] — 2026-09-04
 
 Quanto piccolo dev'essere un vantaggio perché la validazione lo veda.

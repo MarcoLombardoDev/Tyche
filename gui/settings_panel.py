@@ -24,7 +24,10 @@ from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import BG_ROOT, MUTED
 from gui.widgets import section
 
-# (key, label, kind, help). kind is "text", "secret", or a tuple of choices.
+# (key, label, kind, help). kind is "text", "secret", "bool", or a tuple of
+# choices. Every key in DEFAULT_SETTINGS that a user can meaningfully set
+# belongs here; test_every_setting_is_read_somewhere catches the reverse
+# mistake, a key nothing reads.
 FIELDS = [
     ("timesfm_checkpoint", "Checkpoint TimesFM", "text",
      f"Identificativo del repository Hugging Face. Predefinito {DEFAULT_TIMESFM_CHECKPOINT}; "
@@ -49,6 +52,11 @@ FIELDS = [
     ("html_archive_url", "Indirizzo dell'archivio per anno", "text",
      "{year} viene sostituito. Modificabile perché la scansione non è mai stata "
      "provata sul sito reale e il percorso potrebbe essere sbagliato."),
+    ("auto_repair_labels", "Correggi le etichette del mirror", "bool",
+     "Il mirror storico etichetta 1998 le prime nove estrazioni del 1999. Con "
+     "questa attiva vengono rimesse a posto durante l'import; disattivandola si "
+     "importano i byte del mirror così come sono, che è il modo per confrontarli "
+     "con un'altra fonte."),
     ("validation_draws", "Estrazioni per la validazione", "text",
      "Quante estrazioni recenti valuta il backtest walk-forward."),
 ]
@@ -74,10 +82,19 @@ class SettingsPanel(ctk.CTkFrame):
             row = ctk.CTkFrame(scroll, fg_color="transparent")
             row.pack(fill="x", pady=(0, 12))
             ctk.CTkLabel(row, text=label, width=200, anchor="w").pack(side="left")
-            value = str(self.app.settings.get(key, ""))
+            raw = self.app.settings.get(key, "")
+            value = str(raw)
             if isinstance(kind, tuple):
                 widget = ctk.CTkOptionMenu(row, width=260, values=list(kind))
                 widget.set(value if value in kind else kind[0])
+            elif kind == "bool":
+                # get() returns 1 or 0, which _save reads through the same
+                # "1"/"true"/"yes" rule every other boolean field would use.
+                widget = ctk.CTkSwitch(row, text="")
+                if bool(raw):
+                    widget.select()
+                else:
+                    widget.deselect()
             else:
                 widget = ctk.CTkEntry(row, width=440, show="•" if kind == "secret" else "")
                 widget.insert(0, value)

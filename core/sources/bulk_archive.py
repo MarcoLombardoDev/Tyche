@@ -69,8 +69,15 @@ class BulkArchiveSource(DrawSource):
 
     name = "bulk-archive"
 
-    def __init__(self, url: str = DEFAULT_URL):
+    def __init__(self, url: str = DEFAULT_URL, repair_labels: bool = True):
         self.url = url
+        # ``auto_repair_labels`` in settings. On by default because the mirror
+        # really does label the first nine draws of 1999 as 1998, and the
+        # repair has been checked against an independent record of those same
+        # nine — see CLAUDE.md. The switch exists for the case where somebody
+        # wants the source's own bytes to compare against, which is exactly
+        # how that check was made.
+        self.repair_labels = repair_labels
 
     def describe(self) -> str:
         return (
@@ -88,14 +95,21 @@ class BulkArchiveSource(DrawSource):
         # Order matters twice over: the pre-1997 filter preserves file order,
         # which the repair needs, and the repair must not see the Enalotto
         # rows, whose contest numbering is a separate sequence.
-        kept, notes = repair_year_offset(kept)
+        notes: list[str] = []
+        if self.repair_labels:
+            kept, notes = repair_year_offset(kept)
         for note in notes:
             print(f"[BulkArchive] {note}")
+        repaired = (
+            f"{len(notes)} etichette corrette"
+            if self.repair_labels
+            else "correzione delle etichette disattivata"
+        )
         self._report(
             progress,
             f"{it_number(len(kept))} estrazioni SuperEnalotto "
             f"({it_number(len(draws) - len(kept))} righe pre-1997 scartate, "
-            f"{len(notes)} etichette corrette).",
+            f"{repaired}).",
             1.0,
         )
         return kept

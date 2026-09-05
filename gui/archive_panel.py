@@ -110,9 +110,10 @@ class ArchivePanel(ctk.CTkFrame):
 
     def _fetch_bulk(self) -> None:
         url = self.app.settings.get("bulk_archive_url", "")
+        repair = bool(self.app.settings.get("auto_repair_labels", True))
         self.app.run_worker(
             "Bulk archive",
-            lambda report: BulkArchiveSource(url).fetch(report),
+            lambda report: BulkArchiveSource(url, repair_labels=repair).fetch(report),
             self._merge_result,
         )
 

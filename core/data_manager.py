@@ -65,12 +65,15 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "html_archive_url": (
         "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}"
     ),
+    # Whether the bulk mirror's nine mislabelled 1999 draws are put back
+    # where they belong on import. On, because they really are mislabelled
+    # and the repair agrees with an independent record of the same nine.
+    # Off gives the mirror's own bytes, which is how that check was made.
     "auto_repair_labels": True,
 
     # --- Prediction ---
     "prediction_method": "timesfm",   # "timesfm" | "frequenza" | "ritardo" | "casuale"
     "combinations": 5,
-    "numbers_per_combination": 6,
 
     # --- Validation ---
     # How many of the most recent draws the walk-forward backtest scores. 300
@@ -78,9 +81,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # the statistics module needs a few hundred before its error bars mean
     # anything.
     "validation_draws": 300,
+    # Which methods the Validate tab starts with ticked, and where a run's
+    # selection is remembered. TimesFM stays out of the default: one model
+    # call per scored draw is not what a first click should cost.
     "validation_baselines": ["casuale", "frequenza", "ritardo"],
-
-    "last_archive_update": "",
 }
 
 

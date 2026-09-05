@@ -1040,7 +1040,7 @@ def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeyp
             raise sources.SourceError("blocked")
 
     class FakeBulk:
-        def __init__(self, url):
+        def __init__(self, url, repair_labels=True):
             pass
 
         def fetch(self, progress=None):
@@ -1458,6 +1458,72 @@ def test_holm_survives_the_sum_finding_on_a_planted_bias():
     adjusted = holm_adjust([0.0002, 0.33, 0.64, 0.55, 0.29])
     assert adjusted[0] < 0.05
     assert all(a > 0.05 for a in adjusted[1:])
+
+
+def test_every_setting_is_read_somewhere():
+    """A setting nothing reads is a promise the program does not keep.
+
+    Four of them had accumulated by 0.3.0. ``numbers_per_combination`` sat in
+    the template at 6 while build_combinations took its size from a constant,
+    so a user setting 7 would have seen no change and no error;
+    ``auto_repair_labels`` was declared as an on/off switch over a repair that
+    always ran; ``last_archive_update`` was never written; and
+    ``validation_baselines`` was carried through load_settings and then
+    ignored. Nothing failed, which is exactly the problem — the committed
+    template is documentation, and it was describing a program that did not
+    exist.
+
+    This is a static check on purpose. It cannot tell whether a key is read
+    *correctly*, only whether the name appears anywhere outside the module
+    that declares it, which is the cheap half and the half that was missing.
+    """
+    from core.data_manager import DEFAULT_SETTINGS
+
+    repo = Path(__file__).resolve().parent.parent
+    sources = [repo / "main.py"]
+    sources += sorted(repo.glob("core/**/*.py")) + sorted(repo.glob("gui/**/*.py"))
+    # The module that declares them does not count as a reader.
+    sources = [s for s in sources if s.name != "data_manager.py"]
+    text = "\n".join(s.read_text(encoding="utf-8") for s in sources)
+
+    unread = [
+        key for key in DEFAULT_SETTINGS
+        if f'"{key}"' not in text and f"'{key}'" not in text
+    ]
+    assert not unread, (
+        "declared in DEFAULT_SETTINGS and shipped in the template, but nothing "
+        f"outside core/data_manager.py reads: {', '.join(unread)}"
+    )
+
+
+def test_the_settings_panel_offers_every_setting_a_user_should_set():
+    """The mirror of the test above: declared, read, but not reachable.
+
+    Four keys are deliberately absent from the panel because their own tab
+    owns them — listing them twice would give a user two places to set one
+    thing and no rule about which wins.
+    """
+    from core.data_manager import DEFAULT_SETTINGS
+    from gui.settings_panel import FIELDS
+
+    # Set from the tab that uses them, and deliberately not repeated here:
+    # two places to set one thing needs a rule about which wins, and there is
+    # none. validation_draws is the exception — the panel and the Validate tab
+    # edit the same key and the tab reads it back, so they agree.
+    owned_elsewhere = {"prediction_method", "combinations", "validation_baselines"}
+    shown = {key for key, *_ in FIELDS}
+    assert shown | owned_elsewhere >= set(DEFAULT_SETTINGS)
+    assert not (shown & owned_elsewhere), "a setting with two homes"
+
+
+def test_the_bulk_source_can_be_told_not_to_repair():
+    """The switch has to reach the code, not just the settings file."""
+    from core.sources.bulk_archive import BulkArchiveSource
+
+    assert BulkArchiveSource("http://example.invalid").repair_labels is True
+    assert BulkArchiveSource(
+        "http://example.invalid", repair_labels=False
+    ).repair_labels is False
 
 
 if __name__ == "__main__":

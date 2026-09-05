@@ -10,12 +10,10 @@
   "auto_repair_labels": true,
   "prediction_method": "timesfm",
   "combinations": 5,
-  "numbers_per_combination": 6,
   "validation_draws": 300,
   "validation_baselines": [
     "casuale",
     "frequenza",
     "ritardo"
-  ],
-  "last_archive_update": ""
+  ]
 }

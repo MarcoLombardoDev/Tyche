@@ -48,9 +48,14 @@ class ValidationPanel(ctk.CTkFrame):
 
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
         row.pack(fill="x")
+        # ``validation_baselines`` in settings, which is where a run's
+        # selection is remembered. TimesFM is deliberately not in the default:
+        # it costs one model call per scored draw, and the argument the panel
+        # makes is that the cheap methods tie with chance first.
+        selected = set(self.app.settings.get("validation_baselines") or [])
         for method in METHODS:
             box = ctk.CTkCheckBox(row, text=method, width=90)
-            if method != "timesfm":
+            if method in selected:
                 box.select()
             box.pack(side="left", padx=(0, 14))
             self._checks[method] = box
@@ -113,6 +118,7 @@ class ValidationPanel(ctk.CTkFrame):
             return
         settings = self.app.settings
         settings["validation_draws"] = n_draws
+        settings["validation_baselines"] = methods
         self.app.save_settings()
 
         def work(report):

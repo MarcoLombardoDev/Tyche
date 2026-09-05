@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 148 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 168, GUI included
+python -m pytest tests/ -q                                   # 152 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 171, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `148 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `152 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -427,6 +427,26 @@ page for whatever the caller runs next.
   `useExchangeBalance` is `True` in one and `false` in the other — so a setting
   that reads as safe in the template is live in the running app. Do not
   reproduce that here; regenerate and commit instead.
+
+- **A setting nothing reads is the mirror of Argus's problem, and four had
+  accumulated.** `numbers_per_combination` sat in the committed template at 6
+  while `build_combinations` took its size from a constant, so a user setting
+  7 would have seen no change and no error. `auto_repair_labels` was declared
+  as a switch over a repair that always ran. `last_archive_update` was never
+  written. `validation_baselines` was carried through `load_settings` and then
+  ignored. Nothing failed, which is the whole difficulty: the template is
+  documentation, and it was describing a program that did not exist.
+
+  0.3.1 wired the two that meant something and deleted the two that duplicated
+  something the program already owned — `numbers_per_combination` a constant,
+  `last_archive_update` the freshness indicator, which reads the archive
+  itself and cannot go stale against it.
+  `test_every_setting_is_read_somewhere` is the guard. It is a static check
+  over `main.py`, `core/` and `gui/` excluding the module that declares them,
+  so it cannot tell whether a key is read *correctly* — only whether anything
+  reads it at all, which is the cheap half and the half that was missing.
+  `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
+  mirror: declared, read, but unreachable from the interface.
 
 ## How small an edge the harness can see, and the claim I set out to prove
 
