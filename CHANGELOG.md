@@ -12,6 +12,40 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.4.0] — 2026-09-05
+
+Un percorso, invece di sei schede senza un ordine.
+
+### La scheda Percorso
+
+- **Il programma si apre su una mappa.** Quattro passi numerati — porta i
+  dati, guarda se c'è qualcosa da prevedere, metti alla prova i metodi, genera
+  le combinazioni — ognuno con la domanda a cui risponde, quello che ha
+  prodotto finora e un pulsante che ci porta.
+- Il problema non erano le spiegazioni, che c'erano: era che **nessuna scheda
+  diceva l'ordine**. Sei schermate indipendenti, ognuna che descriveva sé
+  stessa e nessuna che dicesse da dove si parte, che cosa dipende da che cosa
+  e dove sia la previsione.
+- I passi portano uno stato vivo: al primo avvio il passo 1 dice che l'archivio
+  manca e gli altri tre che serve prima quello; dopo aver eseguito i test il
+  passo 2 riassume l'esito; dopo la validazione il passo 3 dice se qualche
+  metodo ha battuto il caso.
+- La scheda non esegue niente per conto suo. Ogni passo apre il pannello che
+  fa il lavoro: due posti per lanciare la stessa cosa richiederebbero una
+  regola su chi vince, e non ce n'è una.
+
+### Il resto dell'interfaccia
+
+- **Ogni pannello dice a che passo si trova e che cosa viene dopo**, così chi
+  ci arriva di lato non resta senza riferimenti. Statistiche e Impostazioni
+  sono marcate «fuori percorso», perché lo sono.
+- La Prova del nove non è stata retrocessa: è il passo 2 di 4 sulla strada per
+  le combinazioni, che è un posto migliore di una scheda che si può non aprire
+  mai.
+- Corretto un difetto di impaginazione della nuova scheda che teneva il passo
+  4 — la destinazione — sotto la piega: un frame con la propagazione
+  disattivata resta alto 200 px, che è l'altezza predefinita di `CTkFrame`.
+
 ## [0.3.3] — 2026-09-05
 
 Una sola release, tenuta dal workflow invece che a mano.

@@ -98,13 +98,16 @@ for _ in range(200):                      # let the validation worker finish
     time.sleep(0.05)
 app.update()
 
+# The path comes first, because it is what the application opens on and the
+# thing a reader of the README needs to see before any individual panel.
 SHOTS = [
-    ("reality", "01_prova_del_nove"),
-    ("archive", "02_archivio"),
-    ("statistics", "03_statistiche"),
-    ("prediction", "04_previsione"),
-    ("validation", "05_validazione"),
-    ("settings", "06_impostazioni"),
+    ("home", "01_percorso"),
+    ("reality", "02_prova_del_nove"),
+    ("archive", "03_archivio"),
+    ("statistics", "04_statistiche"),
+    ("prediction", "05_previsione"),
+    ("validation", "06_validazione"),
+    ("settings", "07_impostazioni"),
 ]
 state = {"i": 0}
 

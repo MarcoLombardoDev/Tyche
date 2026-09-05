@@ -28,7 +28,12 @@ class StatisticsPanel(ctk.CTkFrame):
         self._build()
 
     def _build(self) -> None:
-        head = section(self, "L'archivio in cifre")
+        head = section(
+            self, "Fuori percorso · L'archivio in cifre",
+            "Approfondimento, non un passo del percorso: l'archivio numero per "
+            "numero. Niente qui aiuta a prevedere — serve a vedere che cosa "
+            "produce davvero un gioco equo, che è raramente quello che ci si aspetta.",
+        )
         head.pack(fill="x", padx=16, pady=(16, 8))
         self.summary = ctk.CTkLabel(
             head.body, text="", anchor="w", justify="left", text_color=MUTED, wraplength=1000

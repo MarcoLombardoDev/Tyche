@@ -39,10 +39,13 @@ class ValidationPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         controls = section(
-            self, "Backtest walk-forward",
-            "Scorre le estrazioni più recenti. A ogni passo un metodo vede solo le "
-            "estrazioni precedenti, sceglie sei numeri e viene confrontato con quello "
-            "che è uscito. Il caso vale esattamente 0,4 centri per estrazione.",
+            self, "Passo 3 di 4 · I metodi battono il caso?",
+            "Backtest walk-forward: scorre le estrazioni più recenti e, a ogni passo, "
+            "mostra a un metodo solo le estrazioni precedenti, gli fa scegliere sei "
+            "numeri e li confronta con quelli usciti davvero. Nessun metodo può sbirciare "
+            "il futuro. Il caso vale esattamente 0,4 centri per estrazione: è il numero "
+            "contro cui si misura tutto.\n"
+            "Spunta i metodi, premi «Esegui». Poi vai al passo 4, Previsione.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
 
@@ -178,6 +181,7 @@ class ValidationPanel(ctk.CTkFrame):
         self.app.set_status("Calibrazione completata.")
 
     def _show(self, report) -> None:
+        self.app.last_validation = report              # step 3, for the path panel
         header = (
             f"{'metodo':<11} {'centri/estr':>12} {'caso':>7} {'totale':>7} "
             f"{'vs caso':>9} {'z':>7} {'p':>7} {'max':>4} {'>=3':>5} {'att.>=3':>8}"

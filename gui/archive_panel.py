@@ -50,7 +50,9 @@ class ArchivePanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         sources = section(
-            self, "Sorgenti",
+            self, "Passo 1 di 4 · Porta i dati",
+            "Senza archivio non c'è niente da analizzare. Il pulsante da premere la "
+            "prima volta è «estrazioni.it»: una richiesta e l'archivio è completo.\n"
             "L'esportazione di estrazioni.it è la sorgente principale: una richiesta, "
             "dal 1997 all'ultima estrazione. Il mirror storico non richiede "
             "configurazione ma si ferma a gennaio 2020, e la scansione delle pagine "
@@ -82,7 +84,10 @@ class ArchivePanel(ctk.CTkFrame):
         self.freshness.pack(fill="x", pady=(4, 0))
 
         health = section(
-            self, "Integrità", "Che cosa non va nell'archivio su disco."
+            self, "Integrità",
+            "Che cosa non va nell'archivio su disco: date doppie, numeri di concorso "
+            "ripetuti, buchi dentro un anno completo. Una lista vuota è il risultato "
+            "buono. Fatto questo, vai al passo 2, Prova del nove.",
         )
         health.pack(fill="both", expand=True, padx=16, pady=8)
         self.health_box = ReportBox(health.body, height=150)

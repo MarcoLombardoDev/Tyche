@@ -49,7 +49,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 174 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 194, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 200, GUI included
 python -m ruff check .
 ```
 
@@ -276,13 +276,31 @@ page for whatever the caller runs next.
 
 ## Things worth knowing before changing code
 
-- **The point of the program is the measurement, not the prediction.** The
-  Reality-check tab is first, the random baseline sits in the same menu as
-  TimesFM at the same size, and the validation report always prints every
-  method. That is the design; a change that quietly demotes the baselines or
-  leads with the combinations breaks it. The forecaster is built properly so
-  that "it might have worked with a better implementation" is not available as
-  an excuse.
+- **The point of the program is the measurement, and the prediction is what
+  the user came for.** Those are not in conflict, and 0.4.0 is where the
+  distinction got settled. Until then the Reality-check tab was first on the
+  argument that a program should open on its caveats rather than its output.
+  The argument was right; the execution was not. Six independent tabs, each
+  explaining itself and none explaining the order, and the owner's verdict on
+  the built application was that it was incomprehensible — he could not tell
+  what the sections were for or which to open first.
+
+  `gui/home_panel.py` is the answer: a path, archive → fairness → validation →
+  prediction, that reaches the combinations *through* the evidence. The
+  reality check was not demoted, it became step 2 of 4 on the way to the thing
+  the user wants, which is a better place for it than a tab that can be
+  skipped. **What must not happen is the other repair**: hiding the baselines,
+  dropping the random control, or letting the path skip to step 4. The random
+  baseline still sits in the same menu as TimesFM at the same size, the
+  validation report still prints every method, and the forecaster is still
+  built properly so that "it might have worked with a better implementation"
+  is not available as an excuse.
+
+  The path panel owns no analysis. Every step opens the panel that does the
+  work and reports what that panel last produced, through `app.last_reality`,
+  `app.last_validation` and `app.last_prediction`. Giving it its own "run"
+  buttons would create two places to run one thing and no rule about which
+  counts.
 
 - **The bulk mirror is wrong, and the way it is wrong is instructive.** Every
   one of its 3,076 SuperEnalotto rows validates individually, and nine of them
@@ -483,6 +501,25 @@ page for whatever the caller runs next.
   reads it at all, which is the cheap half and the half that was missing.
   `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
   mirror: declared, read, but unreachable from the interface.
+
+## CTkFrame is 200 pixels tall until you tell it otherwise
+
+`ctk.CTkFrame(parent)` defaults to `width=200, height=200`, and those defaults
+only bite once geometry propagation is switched off. The first version of the
+path panel wrapped each step's number in a frame with `pack_propagate(False)`
+— the obvious way to fix a column's width — which pinned that frame at 200px
+and made every step card 200px tall. Four cards did not fit an 840px window
+and step 4, the destination the whole panel exists to reach, sat below the
+fold. Exactly the defect 0.3.2 had just fixed in the tables, reintroduced by a
+different route.
+
+The number is now a label packed straight into the card with `width=42`. If a
+fixed-size frame is ever genuinely needed, pass `height=` explicitly rather
+than relying on the content to shrink it — with propagation off, it will not.
+
+**Look at the screenshot before believing a layout.** Both times this class of
+bug has been caught here, it was caught by rendering the panel and looking at
+it, not by a test and not by reading the code.
 
 ## Where the explanatory notes go, and why it is not a style question
 

@@ -44,9 +44,12 @@ class PredictionPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         controls = section(
-            self, "Genera combinazioni",
-            "Ogni metodo qui sotto ha lo stesso punteggio atteso: 0,4 dei sei numeri. "
-            "La scheda Validazione lo misura.",
+            self, "Passo 4 di 4 · Genera le combinazioni",
+            "Il punto di arrivo. Scegli un metodo, quante combinazioni vuoi, e premi "
+            "«Genera».\n"
+            "Ogni metodo qui sotto ha lo stesso punteggio atteso — 0,4 numeri "
+            "indovinati su sei — perché l'estrazione da prevedere è indipendente da "
+            "tutto ciò che guardano. Il passo 3 lo misura sui dati veri.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
@@ -131,6 +134,7 @@ class PredictionPanel(ctk.CTkFrame):
 
     def _show(self, prediction) -> None:
         self._prediction = prediction
+        self.app.last_prediction = prediction          # step 4, for the path panel
         log_prediction(prediction.to_log_entry())
         for child in self.balls.winfo_children():
             child.destroy()

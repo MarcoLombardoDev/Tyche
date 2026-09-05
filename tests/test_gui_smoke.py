@@ -181,6 +181,71 @@ def test_timesfm_without_the_model_reports_instead_of_crashing(app):
     assert app._status.cget("text")
 
 
+def test_the_app_opens_on_the_path(app):
+    """A user who opens Tyche must land on the map, not on a panel.
+
+    The complaint this whole panel answers was that the sections had no
+    visible order; opening on any one of them is what produced that.
+    """
+    assert app._active == "home"
+
+
+def test_the_path_lists_the_four_steps_in_order():
+    """Archive, fairness, validation, prediction — the order is the argument."""
+    from gui.home_panel import STEPS
+
+    assert [key for key, *_ in STEPS] == [
+        "archive", "reality", "validation", "prediction",
+    ]
+
+
+def test_every_step_opens_a_panel_that_exists(app):
+    """A step pointing at a missing panel would fail only when clicked."""
+    from gui.home_panel import STEPS
+
+    for key, *_ in STEPS:
+        assert key in app._panels
+        app.show(key)
+        app.update()
+        assert app._active == key
+
+
+def test_the_path_tells_a_first_time_user_to_fetch_the_archive(app, monkeypatch):
+    """Every step is blocked on step 1, and step 1 says so."""
+    monkeypatch.setattr(app, "draws", [])
+    home = app._panels["home"]
+    home.refresh()
+    states = home._states()
+    assert "Nessun archivio" in states["archive"][0]
+    for key in ("reality", "validation", "prediction"):
+        assert "Serve prima l'archivio" in states[key][0]
+
+
+def test_the_path_reports_what_each_step_produced(app):
+    """The steps carry live state, not a static checklist.
+
+    Running the reality check has to change what the path says about step 2,
+    or the panel is decoration.
+    """
+    home = app._panels["home"]
+    home.refresh()
+    assert "Non ancora eseguito" in home._states()["reality"][0]
+
+    app._panels["reality"].run_tests()
+    home.refresh()
+    after = home._states()["reality"][0]
+    assert "Non ancora eseguito" not in after
+    assert "Eseguito" in after
+
+
+def test_a_step_that_has_run_is_marked_done(app):
+    """The tick is what a user scans for; it must follow the state."""
+    home = app._panels["home"]
+    app._panels["reality"].run_tests()
+    home.refresh()
+    assert home._states()["reality"][2] == "✓"
+
+
 def test_validation_runs_the_baselines_to_a_verdict(app):
     import time
 

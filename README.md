@@ -15,22 +15,39 @@ non per affermarlo.
 
 ---
 
-![Prova del nove](docs/screenshots/01_prova_del_nove.png)
+![Percorso](docs/screenshots/01_percorso.png)
+
+*La scheda Percorso, che è quella su cui il programma si apre: quattro passi
+dall'archivio vuoto alle sei cifre, ognuno con accanto quello che ha prodotto.*
 
 ---
 
 ## Che cosa fa
 
-| Scheda | A che serve |
-|---|---|
-| **Prova del nove** | Cinque test dell'ipotesi che l'archivio sia fatto di estrazioni indipendenti e uniformi. È la prima scheda perché è il risultato. |
-| **Archivio** | Scarica, importa e ispeziona lo storico — e mostra che cosa non va. |
-| **Statistiche** | Frequenze, ritardi, decine e coppie: ogni tabella con accanto il valore che produrrebbe il caso. |
-| **Previsione** | Sei numeri, da TimesFM 3.0 o da tre metodi di riferimento, incluso quello casuale. |
-| **Validazione** | Backtest walk-forward di ogni metodo sulle ultime *N* estrazioni. |
-| **Impostazioni** | Checkpoint, dispositivo, lunghezza del contesto, indirizzi delle sorgenti. |
+Il programma si apre sulla scheda **Percorso**, che è una mappa: quattro passi
+nell'ordine in cui vanno fatti, ognuno con la domanda a cui risponde e con
+quello che ha prodotto finora. Nessun passo fa lavoro suo — ognuno apre la
+scheda che lo fa.
 
-![Validazione](docs/screenshots/05_validazione.png)
+| | Passo | La domanda a cui risponde |
+|---|---|---|
+| 1 | **Archivio** | Ci sono i dati? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
+| 2 | **Prova del nove** | C'è qualcosa da prevedere? Cinque test dell'ipotesi che le estrazioni siano indipendenti e uniformi. |
+| 3 | **Validazione** | I metodi battono il caso? Backtest walk-forward, senza che nessuno possa sbirciare il futuro. |
+| 4 | **Previsione** | Il punto di arrivo: sei numeri, da TimesFM 3.0 o da tre metodi di riferimento, quello casuale incluso. |
+
+Fuori percorso ci sono **Statistiche** — frequenze, ritardi, decine e coppie,
+ogni tabella con accanto il valore che produrrebbe il caso — e
+**Impostazioni**, con checkpoint, dispositivo, token e indirizzi delle
+sorgenti.
+
+L'ordine dei passi è l'argomento del programma. Il passo 2 dice che le
+estrazioni sono indipendenti, il passo 3 che nessun metodo batte il caso, e il
+passo 4 consegna comunque sei numeri — perché è quello a cui serve. Chi
+percorre la strada arriva alle combinazioni avendo già letto quanto valgono,
+che è un posto migliore per dirlo di una scheda che si può non aprire mai.
+
+![Validazione](docs/screenshots/06_validazione.png)
 
 *La scheda Validazione. Tre metodi, 400 estrazioni, il caso vale 0,4000 — e le
 palline viola della scheda Previsione hanno lo stesso aspetto sicuro
@@ -131,7 +148,7 @@ ma non verificata:
   indietro, misurate sulla cadenza dell'archivio stesso e non su un calendario
   scritto nel codice.
 
-![Archivio](docs/screenshots/02_archivio.png)
+![Archivio](docs/screenshots/03_archivio.png)
 
 ---
 
@@ -328,7 +345,7 @@ quello che fa `core/forecaster.py`.
 
 ```
 python -m pytest tests/ -q                                    # 174 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 194, GUI compresa
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 200, GUI compresa
 python -m ruff check .
 ```
 

@@ -31,12 +31,14 @@ class RealityPanel(ctk.CTkFrame):
 
     def _build(self) -> None:
         head = section(
-            self, "C'è qualcosa da prevedere?",
+            self, "Passo 2 di 4 · C'è qualcosa da prevedere?",
             "Cinque test dell'ipotesi che l'archivio sia fatto di estrazioni indipendenti "
             "e uniformi. Un p-value piccolo direbbe che il meccanismo di estrazione è "
             "sbilanciato e che qui c'è qualcosa di sfruttabile. Uno grande dice che il "
             "gioco è equo, e che nessuna previsione può battere il caso — compresa "
-            "quella che fa questo programma.",
+            "quella che fa questo programma.\n"
+            "Premi «Esegui i test». Poi vai al passo 3, Validazione, che mette alla "
+            "prova i metodi uno per uno.",
         )
         head.pack(fill="x", padx=16, pady=(16, 8))
         ctk.CTkButton(head.body, text="Esegui i test", width=180,
@@ -72,6 +74,8 @@ class RealityPanel(ctk.CTkFrame):
         text = summarise(results)
         flagged = any(r.significant for r in results)
         self.verdict.configure(text=text, text_color=WARN if flagged else GOOD)
+        # The path panel reports what each step produced; this is step 2's.
+        self.app.last_reality = results
 
     def refresh(self) -> None:
         # Deliberately not automatic: the tests take a second on a full archive

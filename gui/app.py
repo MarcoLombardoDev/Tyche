@@ -10,18 +10,25 @@ app.py — Tyche
 The main window: a top bar, five panels, and the worker-thread plumbing.
 
     ┌──────────────────────────────────────────────────────────────┐
-    │ TYCHE   · status                [Reality] [Archive] [Stats]   │
-    │                                 [Predict] [Validate] [⚙]      │
+    │ TYCHE   · status       [Percorso] [Prova] [Archivio] [Stats]  │
+    │                        [Previsione] [Validazione] [⚙]         │
     │──────────────────────────────────────────────────────────────│
     │                                                              │
     │  the selected panel                                          │
     │                                                              │
     └──────────────────────────────────────────────────────────────┘
 
-**Reality check is the first tab, not the last.** The obvious ordering puts
-the prediction screen first and the caveats behind a tab nobody opens. This
-one opens on the evidence that the game is fair, because that is the finding
-and the combinations are the demonstration of it.
+**The path is the first tab.** Before 0.4.0 it was the reality check, on the
+argument that a program opening on its caveats is more honest than one
+opening on its output. The argument was right and the execution was not: six
+independent tabs, each explaining itself and none explaining the order, and
+the owner's verdict on the built application was that it was incomprehensible.
+
+:mod:`gui.home_panel` replaces that with a route — archive, fairness,
+validation, prediction — which reaches the combinations *through* the
+evidence rather than instead of it. The reality check has not been demoted;
+it is step 2 of 4 on the way to the thing the user came for, which is a
+better place for it than a tab that can be skipped.
 
 Threading follows the one rule Tk imposes: widgets are touched from the main
 thread only. Workers put callables on a queue and :meth:`TycheApp._poll_queue`
@@ -43,6 +50,7 @@ from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
 from core.localise import it_date, it_number
 from core.version import APP_NAME, APP_TITLE, __version__
 from gui.archive_panel import ArchivePanel
+from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
 from gui.reality_panel import RealityPanel
 from gui.settings_panel import SettingsPanel
@@ -55,6 +63,7 @@ ctk.set_default_color_theme("blue")
 apply_theme()
 
 VIEWS = [
+    ("home", "Percorso", HomePanel),
     ("reality", "Prova del nove", RealityPanel),
     ("archive", "Archivio", ArchivePanel),
     ("statistics", "Statistiche", StatisticsPanel),
@@ -72,9 +81,15 @@ class TycheApp(ctk.CTk):
         self.settings = load_settings()
         self.draws = load_archive(ARCHIVE_PATH)
         self.forecaster = None
+        # What each step has produced this session. The path panel reads
+        # these to say where the user is; nothing else depends on them, so
+        # a panel that never runs simply leaves its entry None.
+        self.last_reality = None
+        self.last_validation = None
+        self.last_prediction = None
         self._queue: queue.Queue = queue.Queue()
         self._panels: dict[str, ctk.CTkFrame] = {}
-        self._active = "reality"
+        self._active = "home"
         self._busy = False
 
         self.title(f"{APP_TITLE}  ·  v{__version__}")
