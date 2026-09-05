@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 169 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 189, GUI included
+python -m pytest tests/ -q                                   # 174 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 194, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `169 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `174 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -148,6 +148,29 @@ Three things that are load-bearing and easy to undo by accident:
 - **CI and release must run the same test command.** There is a test asserting
   the two `run:` lines are byte-identical, because two ways of running the
   suite is two ways for one of them to rot.
+
+**The repository keeps exactly one release, and the workflow enforces it.**
+The owner wants only the latest published: this is a private single-user tool
+where an older build is never the one to download, and the previous release
+and its tag were being deleted by hand after every publish. 0.3.3 automated
+that as the final step of the `windows` job.
+
+Everything about where that step sits is a safety property, and every one of
+them has a test:
+
+- **It is the last step of the last job, and not `if: always()`.** A failure
+  anywhere earlier leaves the *old* release standing rather than replacing it
+  with a broken new one. `test_the_cleanup_does_not_run_when_something_failed`
+  and `test_the_cleanup_runs_after_the_archive_is_uploaded` both fail if that
+  changes — checked by moving the step before the upload and by adding
+  `if: always()`.
+- **It refuses to delete anything unless the release it is keeping carries an
+  asset.** An upload that failed quietly would otherwise cost every
+  downloadable version at once.
+- **It matches the release to keep by tag**, never by position or date.
+- `--cleanup-tag` removes the git tag with the release, which is what was
+  being done by hand. `CHANGELOG.md` keeps every version's section, so the
+  project's record does not depend on those pages surviving.
 
 **One binary, for Windows**, built by the `windows` job after the tests pass.
 Argus builds three; Tyche builds one because running from source is a normal

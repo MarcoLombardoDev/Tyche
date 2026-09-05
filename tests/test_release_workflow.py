@@ -398,6 +398,63 @@ def test_the_release_body_keeps_the_disclaimer():
 
 
 # ─────────────────────────────────────────────────────────────
+# Only one release survives, and the order is the safety
+# ─────────────────────────────────────────────────────────────
+
+def _windows_steps():
+    return load(WORKFLOW)["jobs"]["windows"]["steps"]
+
+
+def _cleanup_step():
+    for step in _windows_steps():
+        if "gh release delete" in step.get("run", ""):
+            return step
+    raise AssertionError("no step deletes the older releases")
+
+
+def test_only_the_current_release_is_kept():
+    """The repository holds exactly one release, and this is what enforces it."""
+    run = _cleanup_step()["run"]
+    assert "--cleanup-tag" in run, "the tag has to go with the release"
+
+
+def test_the_cleanup_runs_after_the_archive_is_uploaded():
+    """Deleting the old release before the new one is complete is the disaster.
+
+    A failure between the two would leave the repository with nothing to
+    download, which is worse than any number of stale releases.
+    """
+    runs = [s.get("run", "") for s in _windows_steps()]
+    uploaded = next(i for i, r in enumerate(runs) if "gh release upload" in r)
+    notes = next(i for i, r in enumerate(runs) if "--notes-file body.md" in r)
+    deleted = next(i for i, r in enumerate(runs) if "gh release delete" in r)
+    assert uploaded < deleted, "the cleanup runs before the upload"
+    assert notes < deleted, "the cleanup runs before the notes are written"
+    assert deleted == len(runs) - 1, "the cleanup is not the final step"
+
+
+def test_the_cleanup_does_not_run_when_something_failed():
+    """`if: always()` on a destructive step turns a bad build into data loss."""
+    step = _cleanup_step()
+    condition = str(step.get("if", ""))
+    assert "always()" not in condition
+    assert "failure()" not in condition
+
+
+def test_the_cleanup_refuses_to_run_against_a_release_with_no_asset():
+    """An upload that failed quietly must not cost every version at once."""
+    run = _cleanup_step()["run"]
+    assert "--json assets" in run
+    assert "refusing to delete" in run
+
+
+def test_the_cleanup_never_deletes_the_release_it_just_published():
+    """Matched by tag, never by position or date."""
+    run = _cleanup_step()["run"]
+    assert '[ "$old" = "$TAG" ] && continue' in run
+
+
+# ─────────────────────────────────────────────────────────────
 # CI and release must not drift apart
 # ─────────────────────────────────────────────────────────────
 

@@ -12,6 +12,26 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.3.3] — 2026-09-05
+
+Una sola release, tenuta dal workflow invece che a mano.
+
+### Release
+
+- **Il repository conserva ora esattamente una release: l'ultima.** Finita la
+  pubblicazione, il workflow cancella le release precedenti e i loro tag. È
+  quello che si stava facendo a mano dopo ogni pubblicazione.
+- Il passo è l'ultimo dell'ultimo job e **non** gira in caso di errore: se
+  qualcosa fallisce prima, resta in piedi la release vecchia invece di essere
+  sostituita da una nuova rotta. Si rifiuta inoltre di cancellare alcunché se
+  la release che sta tenendo non ha un archivio allegato — un caricamento
+  fallito in silenzio costerebbe altrimenti tutte le versioni scaricabili in
+  una volta sola.
+- Cinque test tengono ferme quelle proprietà, e falliscono davvero: verificato
+  spostando il passo prima del caricamento e aggiungendoci `if: always()`.
+- Il `CHANGELOG.md` conserva la sezione di ogni versione, quindi la storia del
+  progetto non dipende dalla sopravvivenza di quelle pagine.
+
 ## [0.3.2] — 2026-09-05
 
 Le tabelle spiegate dove si leggono, e la riga di comando finalmente coperta.

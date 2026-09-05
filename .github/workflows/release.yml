@@ -416,3 +416,45 @@ jobs:
           print(f"wrote {len(body)} characters to {path}")
           PY
           gh release edit "$TAG" --notes-file body.md
+
+      # Deliberately the last step of the last job, and deliberately not
+      # `if: always()`. This repository keeps exactly one release — the
+      # current one — because it is a private single-user tool where an older
+      # build is never the one to download, and the owner had been deleting
+      # the previous release and its tag by hand after every publish.
+      #
+      # Everything about the ordering here is a safety property:
+      #
+      # - it runs after the archive is uploaded and the notes are rewritten,
+      #   so a failure anywhere earlier leaves the *old* release standing
+      #   rather than deleting it in favour of a broken new one;
+      # - it refuses to delete anything unless the release it is keeping
+      #   actually carries an asset, because an upload that failed quietly
+      #   would otherwise cost every downloadable version at once;
+      # - it matches the release to keep by tag, never by position or date.
+      #
+      # --cleanup-tag removes the git tag with the release, which is what the
+      # owner was doing by hand. The CHANGELOG keeps the full history, so
+      # nothing about the project's record depends on these pages surviving.
+      - name: Keep only this release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          assets=$(gh release view "$TAG" --json assets --jq '.assets | length')
+          if [ "$assets" -lt 1 ]; then
+            echo "::error::$TAG carries no asset; refusing to delete the older releases"
+            exit 1
+          fi
+          echo "$TAG has $assets asset(s); removing every other release."
+
+          gh release list --limit 100 --json tagName --jq '.[].tagName' > tags.txt
+          while read -r old; do
+            [ -n "$old" ] || continue
+            [ "$old" = "$TAG" ] && continue
+            echo "deleting release and tag $old"
+            gh release delete "$old" --yes --cleanup-tag
+          done < tags.txt
+          echo "remaining:"
+          gh release list --limit 100
