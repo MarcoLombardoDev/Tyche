@@ -12,6 +12,41 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.3.2] — 2026-09-05
+
+Le tabelle spiegate dove si leggono, e la riga di comando finalmente coperta.
+
+### Interfaccia
+
+- **Le note che spiegano le tabelle stanno ora sopra le tabelle** quando queste
+  non ci stanno nel riquadro. La tabella delle frequenze è di novanta righe in
+  uno spazio che ne mostra ventidue, quindi la nota che spiega il segno `<`
+  usato su quelle righe era irraggiungibile senza scorrere oltre tutto ciò che
+  descriveva. Stessa cosa per le venticinque coppie. La tabella delle decine,
+  che di righe ne ha nove, tiene la sua nota sotto: lì ci arrivi, e si legge
+  come una conclusione.
+- **La tabella della validazione ha una legenda.** `vs caso`, `z`, `p`, `max`,
+  `>=3`, `att.>=3` e `rango medio` non erano spiegati da nessuna parte: erano
+  sette statistiche che ti si chiedeva di credere sulla parola, che è
+  l'opposto di quello a cui serve quella scheda.
+- **La colonna `σ` delle statistiche si chiama ora `z`.** Indica di quanti
+  scarti tipo le uscite di un numero distano dall'attesa, e chiamarla con il
+  simbolo dello scarto tipo invitava a leggerla come se lo fosse.
+
+### Test
+
+- **La riga di comando era il file meno coperto del progetto**, al 34%. Non era
+  un problema teorico: la traduzione in italiano di 0.2.0 aveva lasciato la CI
+  a cercare nell'uscita di `--check` un inglese che il programma non stampava
+  più, e la build è andata rossa su un passo che non verificava più niente.
+  Adesso è al 90% — tutte le modalità, la regola della prova a vuoto, il codice
+  di uscita su un metodo sconosciuto, il file che non c'è.
+- Coperti anche `core/paths.py`, che decide dove un pacchetto Windows scrive i
+  dati dell'utente, e il percorso della sorgente in blocco che onora davvero
+  l'interruttore sulla correzione delle etichette — il test precedente
+  controllava un attributo, che non dimostra niente.
+- La suite passa da 171 a 189 test e la copertura complessiva dall'84% al 90%.
+
 ## [0.3.1] — 2026-09-05
 
 Quattro impostazioni che non facevano niente.

@@ -1526,5 +1526,266 @@ def test_the_bulk_source_can_be_told_not_to_repair():
     ).repair_labels is False
 
 
+# ─────────────────────────────────────────────────────────────
+# The command line
+# ─────────────────────────────────────────────────────────────
+#
+# main.py was the least tested file in the repository at 34%, and the gap was
+# not theoretical: the translation to Italian left ci.yml grepping `--check`
+# output for English the program no longer printed, and the build went red on
+# a step that had stopped testing anything. Nothing here covered the CLI, so
+# nothing caught it. These do.
+
+@pytest.fixture
+def cli(tmp_path, monkeypatch):
+    """The CLI pointed at a throwaway archive of genuinely fair draws.
+
+    Fair by construction, so a test that asserted a method beat chance would
+    be asserting the harness is broken.
+    """
+    import core.data_manager as dm
+    import main as cli_module
+
+    archive = tmp_path / "archive.csv"
+    save_archive(archive, random_archive(500, seed=3))
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
+    monkeypatch.setattr(dm, "SETTINGS_PATH", tmp_path / "settings.json")
+    return cli_module
+
+
+def _run(cli_module, argv, capsys):
+    """Drive main() the way a shell does, and hand back (code, output)."""
+    import sys as _sys
+
+    argv_backup = _sys.argv
+    _sys.argv = ["main.py", *argv]
+    try:
+        code = cli_module.main()
+    finally:
+        _sys.argv = argv_backup
+    return code, capsys.readouterr().out
+
+
+def test_cli_version_needs_no_archive_and_no_gui(cli, capsys):
+    from core.version import __version__
+
+    code, out = _run(cli, ["--version"], capsys)
+    assert code == 0
+    assert __version__ in out
+
+
+def test_cli_check_runs_the_five_tests(cli, capsys):
+    code, out = _run(cli, ["--check"], capsys)
+    assert code == 0
+    for name in ("Uniformità", "ritardi", "Indipendenza seriale",
+                 "Ripetizioni", "Somma"):
+        assert name in out, f"{name} missing from --check"
+    # On a fair archive the summary must say so rather than flag anything.
+    assert "compatibili" in out
+
+
+def test_cli_check_without_an_archive_explains_and_fails(
+    cli, capsys, tmp_path, monkeypatch
+):
+    """The contract ci.yml greps. Exit 1 and a sentence, never a traceback."""
+    import core.data_manager as dm
+
+    monkeypatch.setattr(dm, "ARCHIVE_PATH", tmp_path / "gone.csv")
+    code, out = _run(cli, ["--check"], capsys)
+    assert code == 1
+    assert cli.NO_ARCHIVE in out
+
+
+def test_cli_validate_prints_both_readings(cli, capsys):
+    """The hit count and the rank statistic, because each is blind alone."""
+    code, out = _run(cli, ["--validate", "120"], capsys)
+    assert code == 0
+    assert "centri/estrazione" in out
+    assert "rango medio dei numeri usciti" in out
+    assert "casuale" in out and "frequenza" in out and "ritardo" in out
+
+
+def test_cli_power_reports_a_detection_floor(cli, capsys, monkeypatch):
+    """Two repetitions is not a calibration, but it does drive every path.
+
+    The real calibrate, the real power_at, the real walk_forward — only the
+    repetitions are cut. At the shipped hundred this one test cost 10.8s of a
+    12.9s suite, and a suite people stop running is a suite that catches
+    nothing.
+    """
+    import functools
+
+    import core.power as power
+
+    monkeypatch.setattr(power, "calibrate", functools.partial(power.calibrate, runs=2))
+    code, out = _run(cli, ["--power", "60"], capsys)
+    assert code == 0
+    for shape in power.SHAPES:
+        assert shape in out
+    assert "soglia al" in out
+
+
+@pytest.mark.parametrize("method", ["frequenza", "ritardo", "casuale"])
+def test_cli_forecast_prints_combinations(cli, capsys, method):
+    code, out = _run(cli, ["--forecast", method], capsys)
+    assert code == 0
+    assert "escursione dei punteggi" in out
+    # Six numbers on each numbered line.
+    combinations = [ln for ln in out.splitlines() if ln.strip().startswith("1. ")]
+    assert combinations, "no combination printed"
+    assert len(combinations[0].split()) == 7          # "1." plus six numbers
+
+
+def test_cli_forecast_refuses_an_unknown_method(cli, capsys):
+    from core.predictor import METHODS
+
+    code, out = _run(cli, ["--forecast", "frequency"], capsys)
+    assert code == 2
+    assert "sconosciuto" in out
+    # And it says what would have worked.
+    for method in METHODS:
+        assert method in out
+
+
+def test_cli_forecast_with_timesfm_missing_says_so_rather_than_raising(cli, capsys):
+    """torch is not installed in the test environment, and that is the point."""
+    code, out = _run(cli, ["--forecast", "timesfm"], capsys)
+    assert code == 1
+    assert "timesfm" in out.lower()
+
+
+def test_cli_export_sqlite_writes_a_readable_database(cli, capsys, tmp_path):
+    import sqlite3
+
+    target = tmp_path / "out.db"
+    code, out = _run(cli, ["--export-sqlite", str(target)], capsys)
+    assert code == 0
+    assert target.exists()
+    with sqlite3.connect(target) as db:
+        tables = {r[0] for r in db.execute(
+            "select name from sqlite_master where type='table'"
+        )}
+    assert {"draws", "picks", "number_stats"} <= tables
+
+
+def test_cli_import_is_a_dry_run_without_yes(cli, capsys, tmp_path):
+    """--import and --update must not write unless told to. Twice over."""
+    import core.data_manager as dm
+
+    incoming = tmp_path / "incoming.csv"
+    save_archive(incoming, random_archive(20, seed=99))
+    before = dm.ARCHIVE_PATH.read_bytes()
+
+    code, out = _run(cli, ["--import", str(incoming)], capsys)
+    assert code == 0
+    assert dm.ARCHIVE_PATH.read_bytes() == before, "a dry run wrote to the archive"
+    assert "--yes" in out
+
+
+def test_cli_import_writes_when_told_to(cli, capsys, tmp_path):
+    import core.data_manager as dm
+
+    incoming = tmp_path / "incoming.csv"
+    # Dated well after the fixture archive so the merge is unambiguous.
+    extra = [
+        Draw(date=date(2030, 1, 1) + timedelta(days=3 * i), contest=i + 1,
+             numbers=(1, 2, 3, 4, 5, 6), jolly=7, year=2030)
+        for i in range(5)
+    ]
+    save_archive(incoming, extra)
+    before = len(load_archive(dm.ARCHIVE_PATH))
+
+    code, _ = _run(cli, ["--import", str(incoming), "--yes"], capsys)
+    assert code == 0
+    assert len(load_archive(dm.ARCHIVE_PATH)) == before + 5
+
+
+def test_cli_import_of_a_missing_file_says_so_rather_than_raising(cli, capsys, tmp_path):
+    """A named file that is not there is a typo, not a crash."""
+    code, out = _run(cli, ["--import", str(tmp_path / "nope.csv")], capsys)
+    assert "Import fallito" in out
+    assert "file inesistente" in out
+    # Exit 1, so a script driving --import notices. Not a traceback, and not
+    # a silent success.
+    assert code == 1
+
+
+# ─────────────────────────────────────────────────────────────
+# Where a frozen build puts things
+# ─────────────────────────────────────────────────────────────
+
+def test_a_frozen_build_writes_beside_the_executable(monkeypatch, tmp_path):
+    """Argus lost settings to this exact mistake and its notes describe it.
+
+    A onefile build unpacks into a temp directory and deletes it on exit, so
+    ``Path(__file__).parent.parent`` inside a frozen module resolves into
+    something that will not exist next run. Data has to go beside the .exe.
+    """
+    import core.paths as paths
+
+    exe = tmp_path / "bundle" / "Tyche.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    monkeypatch.setattr(paths.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(paths.sys, "executable", str(exe))
+    assert paths.writable_base_dir() == exe.parent
+
+
+def test_a_frozen_build_reads_bundled_files_from_the_unpacked_payload(
+    monkeypatch, tmp_path
+):
+    """The mirror image, and deliberately a different answer.
+
+    Read-only resources live in _MEIPASS; writable data must not. A change
+    that made these two agree would break one of them.
+    """
+    import core.paths as paths
+
+    monkeypatch.setattr(paths.sys, "_MEIPASS", str(tmp_path), raising=False)
+    assert paths.bundled_dir() == tmp_path
+
+
+def test_running_from_source_puts_both_at_the_repository_root():
+    import core.paths as paths
+
+    repo = Path(__file__).resolve().parent.parent
+    assert paths.writable_base_dir() == repo
+    assert paths.bundled_dir() == repo
+
+
+def test_the_bulk_source_actually_skips_the_repair_when_told_to(monkeypatch):
+    """The earlier version of this checked an attribute, which proves nothing.
+
+    A constructor flag that never reaches the code is exactly the defect this
+    round was about, so the test drives fetch() over the mirror's real defect:
+    the block of draws whose dates carry the wrong year, serialised back into
+    the twelve-column format the source parses.
+    """
+    import core.sources.bulk_archive as bulk
+
+    rows = "\n".join(
+        ",".join(str(v) for v in (
+            *d.numbers, d.jolly, d.superstar, d.contest,
+            d.date.day, d.date.month, d.date.year,
+        ))
+        for d in _mislabelled_block()
+    )
+    monkeypatch.setattr(bulk, "http_get", lambda url, **kw: rows.encode("utf-8"))
+
+    without = bulk.BulkArchiveSource("http://x", repair_labels=False).fetch()
+    with_repair = bulk.BulkArchiveSource("http://x", repair_labels=True).fetch()
+
+    # The repair relabels; it never drops or adds a row.
+    assert len(without) == len(with_repair) == len(_mislabelled_block())
+
+    # Unrepaired, two pairs share a contest id — which is the defect.
+    assert len({d.draw_id for d in without}) < len(without)
+    # Repaired, every id is distinct and the moved draws carry their numbers.
+    assert len({d.draw_id for d in with_repair}) == len(with_repair)
+    by_id = {d.draw_id: d for d in with_repair}
+    assert by_id["1999/1"].numbers == (20, 21, 22, 23, 24, 25)
+    assert by_id["1998/1"].numbers == (1, 2, 3, 4, 5, 6)
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

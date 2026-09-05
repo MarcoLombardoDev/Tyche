@@ -182,11 +182,21 @@ class ValidationPanel(ctk.CTkFrame):
             f"{'metodo':<11} {'centri/estr':>12} {'caso':>7} {'totale':>7} "
             f"{'vs caso':>9} {'z':>7} {'p':>7} {'max':>4} {'>=3':>5} {'att.>=3':>8}"
         )
+        picks = report.picks_per_draw
         lines = [
             f"{report.draws_scored} estrazioni valutate, dal "
             f"{it_date(report.first_target.date)} al "
-            f"{it_date(report.last_target.date)}, {report.picks_per_draw} numeri "
+            f"{it_date(report.last_target.date)}, {picks} numeri "
             f"ciascuna.",
+            "",
+            # Every column named. Without this the table is six statistics a
+            # reader is asked to trust and cannot check, which is the opposite
+            # of what this tab is for.
+            "vs caso = centri in più o in meno rispetto al caso, sull'intera prova.",
+            "z = di quanti scarti tipo quello scarto dista da zero; p è la probabilità",
+            "che il caso da solo ne produca uno altrettanto grande, in un senso o",
+            f"nell'altro. max = il miglior risultato di una singola estrazione; >={3}",
+            f"quante estrazioni ne hanno dati almeno tre, contro le att.>={3} attese.",
             "",
             header,
             "─" * len(header),
@@ -203,7 +213,6 @@ class ValidationPanel(ctk.CTkFrame):
             "Distribuzione dei centri per estrazione, contro quella del caso",
             "",
         ]
-        picks = report.picks_per_draw
         lines.append("  " + " ".join(f"{k:>7}" for k in range(picks + 1)))
         for r in report.results:
             lines.append(f"{r.method:<11}" + " ".join(f"{h:>7}" for h in r.histogram))
@@ -222,6 +231,11 @@ class ValidationPanel(ctk.CTkFrame):
         lines += [
             "",
             "Sulla graduatoria completa dei novanta numeri, non solo sui primi sei",
+            "",
+            "rango medio = la posizione media dei sei numeri usciti nella graduatoria",
+            "che il metodo aveva stilato. Il caso vale 45,5. Serve perché il conteggio",
+            "dei centri qui sopra guarda solo i primi sei di novanta, e un vantaggio",
+            "che non arriva fin lassù è invisibile: il pulsante Calibra lo misura.",
             "",
             rank_header,
             "─" * len(rank_header),

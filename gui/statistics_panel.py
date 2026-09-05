@@ -55,25 +55,34 @@ class StatisticsPanel(ctk.CTkFrame):
             return
 
         rows = number_table(draws)
+        flagged = sum(1 for r in rows if r.unusual)
         header = (
-            f"{'n':>3} {'uscite':>7} {'attese':>7} {'σ':>7}  "
+            # "z", not "σ". The column is how many standard deviations the
+            # count sits from its expectation; labelling it with the symbol
+            # for the standard deviation itself invites reading it as one.
+            f"{'n':>3} {'uscite':>7} {'attese':>7} {'z':>7}  "
             f"{'rit.':>5} {'rit.atteso':>11}  {'ultima':<12}"
         )
-        lines = [header, "─" * len(header)]
+        # Above the table, not below it. Ninety rows do not fit the box, so a
+        # note printed after them is a note nobody reaches — which is what
+        # happened to this one until the screenshots showed it off-screen.
+        lines = [
+            "z = di quanti scarti tipo le uscite di un numero distano dall'attesa.",
+            "rit. = estrazioni dall'ultima uscita.",
+            f"'<' segna i {flagged} numeri su 90 che distano più di due scarti tipo.",
+            "Fra quattro e cinque è quanto producono estrazioni indipendenti — il 5%",
+            "di novanta fa 4,5 — quindi una tabella senza nessun segno sarebbe",
+            "quella sorprendente.",
+            "",
+            header,
+            "─" * len(header),
+        ]
         for r in rows:
             flag = "  <" if r.unusual else ""
             lines.append(
                 f"{r.number:>3} {r.count:>7} {r.expected:>7.1f} {r.sigma:>+7.2f}  "
                 f"{r.gap:>5} {r.expected_gap:>11.1f}  {r.last_seen:<12}{flag}"
             )
-        flagged = sum(1 for r in rows if r.unusual)
-        lines += [
-            "",
-            f"{flagged} numeri su 90 distano più di due scarti tipo dalla loro uscita",
-            "attesa, segnati con '<'. Fra quattro e cinque è quanto producono estrazioni",
-            "indipendenti: il 5% di novanta numeri fa 4,5. Una tabella senza nessun",
-            "segno sarebbe quella sorprendente.",
-        ]
         self.freq_box.set_text("\n".join(lines))
 
         header = f"{'decina':<8} {'osservate':>10} {'attese':>9} {'rapporto':>9}"
@@ -91,15 +100,19 @@ class StatisticsPanel(ctk.CTkFrame):
 
         pairs = top_pairs(draws, 25)
         header = f"{'coppia':<9} {'insieme':>9} {'attese':>9}"
-        lines = [header, "─" * len(header)]
-        for a, b, observed, expected in pairs:
-            lines.append(f"{a:>2}–{b:<6} {observed:>9} {expected:>9.1f}")
-        lines += [
-            "",
+        # Twenty-five rows do not fit the box either, so this note goes first
+        # for the same reason. The decade table above keeps its note below,
+        # because nine rows and a heading do fit and it reads as a conclusion.
+        lines = [
             "Sono 4.005 le coppie in gara per questa lista, quindi la cima è il massimo",
             "di quattromila conteggi grosso modo poissoniani e sta per costruzione a",
             "diversi scarti tipo sopra la media. Questa tabella non ha contenuto",
             "predittivo: è qui perché ometterla farebbe nascere la domanda su che cosa",
             "avrebbe mostrato.",
+            "",
+            header,
+            "─" * len(header),
         ]
+        for a, b, observed, expected in pairs:
+            lines.append(f"{a:>2}–{b:<6} {observed:>9} {expected:>9.1f}")
         self.pairs_box.set_text("\n".join(lines))

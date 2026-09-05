@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 152 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 171, GUI included
+python -m pytest tests/ -q                                   # 169 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 189, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `152 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `169 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -428,6 +428,19 @@ page for whatever the caller runs next.
   that reads as safe in the template is live in the running app. Do not
   reproduce that here; regenerate and commit instead.
 
+- **`main.py` was the least tested file in the repository**, at 34% when it was
+  first measured, and the gap was not theoretical: the 0.2.0 translation left
+  `ci.yml` grepping `--check` output for English the program no longer printed,
+  and the build went red on a step that had stopped testing anything. Nothing
+  covered the CLI, so nothing caught it. 0.3.2 took it to 90% — every mode, the
+  dry-run rule, the unknown-method exit code, the missing-file path — and the
+  suite as a whole from 84% to 90%.
+
+  One caution carried over from writing them: `--power` at the shipped hundred
+  repetitions cost 10.8s of a 12.9s suite. The test now monkeypatches `runs=2`
+  onto the real `calibrate`, so it still drives the real `power_at` and the
+  real `walk_forward`. A suite people stop running catches nothing.
+
 - **A setting nothing reads is the mirror of Argus's problem, and four had
   accumulated.** `numbers_per_combination` sat in the committed template at 6
   while `build_combinations` took its size from a constant, so a user setting
@@ -447,6 +460,30 @@ page for whatever the caller runs next.
   reads it at all, which is the cheap half and the half that was missing.
   `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
   mirror: declared, read, but unreachable from the interface.
+
+## Where the explanatory notes go, and why it is not a style question
+
+Every table in `gui/statistics_panel.py` and `gui/validation_panel.py` carries
+a note saying what its columns mean. Until 0.3.2 those notes were printed
+*after* the rows, and the screenshots are what showed the problem: the
+frequency table is ninety rows in a box that holds about twenty-two, so its
+note — the one explaining the `<` marker used on every flagged row — was
+unreachable without scrolling past the entire table it explained. Same for the
+twenty-five-row pairs table.
+
+**The rule is the table's height against the box, not consistency.** A note
+goes above a table that does not fit and below one that does: the decade table
+is nine rows and keeps its note underneath, where it reads as a conclusion.
+Moving that one up too would cost the better reading for no gain.
+
+The `σ` column in the frequency table is now `z`. It is how many standard
+deviations a number's count sits from its expectation, and labelling it with
+the symbol for the standard deviation itself invites reading it as one.
+
+**Info buttons were considered and rejected.** The settings panel already
+prints its help under every field, always visible; putting that behind a click
+would hide text that is currently free. The gap was never availability, it was
+placement and the validation table having no legend at all.
 
 ## How small an edge the harness can see, and the claim I set out to prove
 
