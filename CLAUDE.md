@@ -50,18 +50,34 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 309, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 344, GUI included
+python -m pytest tests/ -q                                   # 311, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 346, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`309 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`311 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
+
+**With one exception, and it is the runner's fault rather than the switch's.**
+The CI suite runs on Windows as well as Linux since 0.8.0 — it matters more now
+that a Windows binary is published — and `actions/setup-python`'s interpreter
+there imports `tkinter` perfectly well and then cannot read its own
+`tcl/tcl8.6/init.tcl`: *"couldn't read file ...: No error"*. Tk never comes up.
+Requiring the GUI unconditionally on that leg reports somebody else's packaging
+as a Tyche regression, which is what the first Windows run did.
+
+So the Windows leg **probes** — it tries to build a `Tk()` and sets the switch
+from the result — rather than assuming either way. Skipping the GUI suite
+quietly instead, which is what Argus does by having no switch at all, would be
+the other way to be wrong: a leg that tests no interface and does not say so.
+The probe emits a `::warning::` when Tk will not start, and if a future runner
+image fixes Tcl the leg starts requiring the GUI on its own. Two tests in
+`tests/test_release_workflow.py` hold that shape.
 
 **The two counts above are maintained by hand and they drift.** By 0.6.2 they
 said 187 where the suite ran 194, because several sessions incremented them

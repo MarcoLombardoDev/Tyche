@@ -99,10 +99,46 @@ jobs:
           TYCHE_REQUIRE_GUI: "1"
         run: xvfb-run -a python -m pytest tests/ -q
 
+      # Whether this runner can actually start Tk, decided by trying rather
+      # than assumed.
+      #
+      # The Linux leg always can: xvfb-run gives it a real display. The Windows
+      # image is another matter. actions/setup-python's interpreter imports
+      # tkinter perfectly well and then cannot read its own
+      # tcl/tcl8.6/init.tcl — "couldn't read file ...: No error" — so Tk never
+      # comes up. That is a property of the runner image and not of Tyche, and
+      # failing the build on it would be reporting somebody else's packaging as
+      # a Tyche regression.
+      #
+      # Setting `TYCHE_REQUIRE_GUI: "1"` unconditionally is what this replaced,
+      # and it turned the first Windows run red on exactly that. Skipping the
+      # GUI suite quietly instead — which is what Argus does, having no such
+      # switch — is the other way to be wrong: a leg that tests no interface
+      # and does not say so. The probe does neither. It says out loud what this
+      # runner can do, and if a future image fixes Tcl this leg starts
+      # requiring the GUI on its own, with nobody having to remember to come
+      # back and turn it on.
+      - name: Can this runner start Tk?
+        id: tk
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if python -c "import tkinter; tkinter.Tk().destroy()" 2> tk-probe.log; then
+            echo "Tk starts here; the GUI suite is required."
+            echo "require=1" >> "$GITHUB_OUTPUT"
+          else
+            cat tk-probe.log
+            echo "::warning::Tk cannot start on this runner, so the GUI suite \
+                  will skip. The Linux leg is what tests the interface."
+            echo "require=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Tests, GUI included (Windows)
         if: runner.os == 'Windows'
         env:
-          TYCHE_REQUIRE_GUI: "1"
+          # Empty means "not required" — tests/test_gui_smoke.py reads the
+          # variable as set unless it is empty, "0" or "false".
+          TYCHE_REQUIRE_GUI: ${{ steps.tk.outputs.require }}
         run: python -m pytest tests/ -q
 
       - name: Version reports without importing the GUI

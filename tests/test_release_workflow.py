@@ -694,6 +694,41 @@ def test_ci_greps_for_what_the_program_actually_says_with_no_archive():
     assert f'grep -q "{NO_ARCHIVE}"' in text
 
 
+def test_the_linux_leg_hard_requires_the_gui():
+    """It is the one that can. xvfb-run gives it a real display."""
+    step = next(
+        s for s in load(CI_WORKFLOW)["jobs"]["test"]["steps"]
+        if s.get("name") == "Tests, GUI included"
+    )
+    assert step["env"]["TYCHE_REQUIRE_GUI"] == "1"
+    assert "xvfb-run" in step["run"]
+
+
+def test_the_windows_leg_decides_by_trying_and_says_which_way_it_went():
+    """Two ways to be wrong here, and this rules out both.
+
+    Requiring the GUI unconditionally turned the first Windows run red on the
+    runner image rather than on Tyche: actions/setup-python's interpreter
+    imports tkinter and then cannot read its own tcl8.6/init.tcl. Skipping the
+    suite quietly is the other way — a leg that tests no interface and does
+    not say so, which is precisely the failure TYCHE_REQUIRE_GUI exists to
+    prevent on Linux.
+    """
+    steps = load(CI_WORKFLOW)["jobs"]["test"]["steps"]
+    probe = next(s for s in steps if s.get("id") == "tk")
+    assert "tkinter.Tk()" in probe["run"], "the probe does not actually start Tk"
+    assert "::warning::" in probe["run"], (
+        "a runner that cannot start Tk has to say so in the log"
+    )
+
+    windows = next(
+        s for s in steps if s.get("name") == "Tests, GUI included (Windows)"
+    )
+    assert windows["env"]["TYCHE_REQUIRE_GUI"] == "${{ steps.tk.outputs.require }}", (
+        "the Windows leg must take the switch from the probe, not hardcode it"
+    )
+
+
 def test_ci_and_release_run_the_same_test_command():
     """Two ways of running the suite is two ways for one of them to rot."""
     ci = suite_step(load(CI_WORKFLOW)["jobs"]["test"]["steps"])
