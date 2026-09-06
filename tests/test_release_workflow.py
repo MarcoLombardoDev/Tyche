@@ -244,14 +244,18 @@ def test_the_static_notes_do_not_hardcode_an_archive_name():
 def test_the_notes_do_not_promise_platforms_nobody_builds():
     """A release page listing archives nobody built is the worst kind.
 
-    Only Windows is built, so only Windows may be mentioned as a download.
+    Tyche shipped Windows alone until 0.8.0 and this test read the other way
+    round then, forbidding any mention of the other two. Now that all three
+    are built it forbids the opposite mistake: a preamble that still tells a
+    macOS reader to run from source while an archive for them sits below it.
     """
-    workflow = load(WORKFLOW)
-    runners = {job["runs-on"] for job in workflow["jobs"].values()}
-    assert "macos-latest" not in runners
+    runners = {
+        entry["os"]
+        for entry in load(WORKFLOW)["jobs"]["build"]["strategy"]["matrix"]["include"]
+    }
+    assert runners == {"windows-latest", "macos-latest", "ubuntu-latest"}
     body = BODY.read_text(encoding="utf-8")
-    assert "Non esiste un pacchetto per macOS o Linux" in WORKFLOW.read_text(encoding="utf-8")
-    assert "allegato un pacchetto per Windows" in body
+    assert "i pacchetti per Windows, macOS e Linux" in body
 
 
 # ─────────────────────────────────────────────────────────────
@@ -260,7 +264,9 @@ def test_the_notes_do_not_promise_platforms_nobody_builds():
 
 def test_the_build_files_exist():
     for path in (REPO / "Tyche.spec", REPO / "build.py",
-                 REPO / "requirements-build.txt", REPO / "packaging" / "start.cmd"):
+                 REPO / "requirements-build.txt",
+                 REPO / "packaging" / "start.cmd",
+                 REPO / "packaging" / "start.sh"):
         assert path.exists(), f"{path.relative_to(REPO)} is missing"
 
 
@@ -277,19 +283,34 @@ def test_the_launcher_stays_pure_ascii():
     assert not offending, f"start.cmd has {len(offending)} non-ASCII byte(s)"
 
 
-def test_the_windows_job_builds_on_windows():
-    """PyInstaller does not cross-compile: a .exe needs a Windows runner."""
-    job = load(WORKFLOW)["jobs"]["windows"]
-    assert job["runs-on"] == "windows-latest"
+def test_each_platform_is_built_on_its_own_runner():
+    """PyInstaller does not cross-compile: nothing here is a cross-build.
+
+    The job runs on ``${{ matrix.os }}``, so the only place the three runners
+    are named is the matrix, and this is the only test that can see them.
+    """
+    job = load(WORKFLOW)["jobs"]["build"]
+    assert job["runs-on"] == "${{ matrix.os }}"
+    by_os = {e["os"]: e["asset"] for e in job["strategy"]["matrix"]["include"]}
+    assert by_os == {
+        "windows-latest": "windows-x64",
+        "macos-latest": "macos-arm64",
+        "ubuntu-latest": "linux-x64",
+    }
 
 
-def test_the_windows_job_waits_for_the_tests():
+def test_one_platform_failing_does_not_cancel_the_others():
+    """Two archives and a named failure beat none and a cancelled run."""
+    assert load(WORKFLOW)["jobs"]["build"]["strategy"]["fail-fast"] is False
+
+
+def test_the_build_job_waits_for_the_tests():
     """Nothing is built from a commit that failed them."""
-    assert load(WORKFLOW)["jobs"]["windows"]["needs"] == "release"
+    assert load(WORKFLOW)["jobs"]["build"]["needs"] == "release"
 
 
 def test_the_bundle_is_smoke_tested_before_it_is_uploaded():
-    steps = load(WORKFLOW)["jobs"]["windows"]["steps"]
+    steps = load(WORKFLOW)["jobs"]["build"]["steps"]
     runs = [s.get("run", "") for s in steps]
     checked = next(i for i, r in enumerate(runs) if "--self-check" in r)
     uploaded = next(i for i, r in enumerate(runs) if "gh release upload" in r)
@@ -298,69 +319,232 @@ def test_the_bundle_is_smoke_tested_before_it_is_uploaded():
 
 def test_the_smoke_test_is_more_than_version():
     """--version exits before the toolkit is imported and proves almost nothing."""
-    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"])
     assert "autodiagnosi: SUPERATA" in text
     assert "sistema grafico" in text
+    # Each bundle has to come up on its own platform's backend. A macOS build
+    # reporting x11 would mean Tk found an X server instead of Aqua, which is
+    # a bundle nobody who downloads it can run.
+    assert "Linux:x11|macOS:aqua|Windows:win32" in text
     # A bundle that silently lost TimesFM would pass everything else.
     assert "timesfm: nel pacchetto" in text
 
 
 def test_the_bundle_version_must_match_the_tag_too():
-    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"])
     assert "the bundle reports" in text
 
 
 def test_the_launcher_is_checked_both_ways():
     """It has to start the program, and refuse a binary that fails its digest."""
-    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
-    assert "the launcher did not start Tyche" in text
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"])
+    assert "the launcher did not start $APP_NAME" in text
     assert "started a binary that failed its checksum" in text
 
 
 def test_the_archive_checksum_reaches_the_notes():
-    """A digest that travels inside the archive can only prove it is undamaged."""
-    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["windows"]["steps"])
+    """A digest that travels inside the archive can only prove it is undamaged.
+
+    The one that answers "is this the file the build produced" has to arrive
+    by a route the archive did not, and the release page is that route. Each
+    build hands its digest up as a workflow artifact; the notes job collects
+    the three and writes them in.
+    """
+    workflow = load(WORKFLOW)
+    handed = next(
+        s for s in workflow["jobs"]["build"]["steps"]
+        if s.get("uses", "").startswith("actions/upload-artifact")
+    )
+    assert handed["with"]["if-no-files-found"] == "error", (
+        "a missing digest has to fail the build, not publish a page short one"
+    )
+    text = "\n".join(s.get("run", "") for s in workflow["jobs"]["notes"]["steps"])
     assert "gh release edit" in text
     assert "<!-- download -->" in text
+    assert "no checksums were handed up by the build jobs" in text
 
 
-def test_the_notes_step_forces_utf8_on_windows():
-    """The failure this exists for, from the first real release.
+def test_the_notes_are_written_from_one_place_and_not_three():
+    """Three runners rewriting one release body would race to overwrite it.
+
+    Each build job used to write its own download section. With three of them
+    the last to finish wins and the other two archives vanish from the page,
+    so the section is written once, after all three have uploaded.
+    """
+    workflow = load(WORKFLOW)
+    assert workflow["jobs"]["notes"]["needs"] == ["release", "build"]
+    for step in workflow["jobs"]["build"]["steps"]:
+        assert "<!-- download -->" not in step.get("run", ""), (
+            f"the build job writes the download section in {step.get('name')!r}; "
+            "three runners doing that overwrite each other"
+        )
+
+
+def test_the_notes_are_written_on_linux():
+    """The failure this exists for, from Tyche's first real release.
 
     Windows defaults Python's stdout to cp1252 and the notes carry an em dash
     and a warning sign. body.md was written correctly and then `print(body)`
     raised UnicodeEncodeError, `bash -e` failed the step, and `gh release edit`
     never ran — so the archive was attached and the download section was not.
-    Writing the file was already explicitly UTF-8; echoing it to the log was
-    the part that was not.
+    A `PYTHONIOENCODING: utf-8` was the fix at the time; moving the step off
+    Windows entirely is the fix that cannot be forgotten.
+    """
+    assert load(WORKFLOW)["jobs"]["notes"]["runs-on"] == "ubuntu-latest"
+
+
+def test_a_re_run_rewrites_the_download_section_rather_than_stacking_one():
+    """The markers are what make the step idempotent.
+
+    Re-running a release with the same tag is normal — a build that failed on
+    one platform, a tag moved onto a fixed commit. Without the paired markers
+    each run appends another download section under the last.
     """
     step = next(
-        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
-        if "download section" in s.get("name", "")
+        s for s in load(WORKFLOW)["jobs"]["notes"]["steps"]
+        if "<!-- download -->" in s.get("run", "")
     )
-    assert step["env"]["PYTHONIOENCODING"] == "utf-8"
+    assert '"<!-- download -->"' in step["run"]
+    assert '"<!-- /download -->"' in step["run"]
 
 
-def test_the_notes_step_does_not_echo_the_whole_body():
-    """Printing it is what crashed. A length is enough for a log."""
-    step = next(
-        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
-        if "download section" in s.get("name", "")
+def test_the_posix_launcher_is_used_on_both_platforms_that_need_it():
+    """One script, two names: Finder runs .command on a double-click.
+
+    start.sh renamed to start.command is the whole macOS story; a second file
+    would be a second thing to keep in step with the first.
+    """
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"])
+    assert "packaging/start.sh" in text
+    assert "start.command" in text
+    assert "packaging/start.cmd" in text
+
+
+def test_the_posix_launcher_verifies_before_it_starts():
+    """The same two halves start.cmd has, in the shell the other two run."""
+    text = (REPO / "packaging" / "start.sh").read_text(encoding="utf-8")
+    assert "TYCHE_SKIP_VERIFY" in text, "no way to run a deliberately patched binary"
+    assert "sha256sum" in text and "shasum" in text and "openssl" in text, (
+        "no single hashing tool is on every system; the launcher needs all three"
     )
-    assert "print(body)" not in step["run"]
+    assert 'exec "$exe" "$@"' in text, "the launcher must hand over, not wrap"
 
 
-def test_the_notes_block_is_a_raw_string():
-    r"""It contains a PowerShell `.\` path, and `\{` is an invalid escape.
+# ─────────────────────────────────────────────────────────────
+# The licence texts travel inside the archive
+# ─────────────────────────────────────────────────────────────
 
-    Ruff caught this same mistake in this very docstring, which is a fair
-    demonstration that the rule earns its place.
+def test_the_licence_texts_are_collected_and_packaged():
+    """Every archive up to 0.3.3 shipped no licence file at all.
+
+    Not even Tyche's own. PyTorch and NumPy require their notices be
+    reproduced in a binary distribution, the LGPL system libraries collected
+    on Linux require a copy of their licence to accompany the object code, and
+    the AGPL requires the same of Tyche. A file in the repository does not
+    satisfy any of them: somebody who downloads a zip never sees it.
+    """
+    steps = load(WORKFLOW)["jobs"]["build"]["steps"]
+    text = "\n".join(s.get("run", "") for s in steps)
+    assert "tools/collect_licences.py build/licenses" in text
+    assert 'cp -R build/licenses "$staged/licenses"' in text, (
+        "the tree is built and then not put in the archive"
+    )
+
+
+def test_the_licences_are_collected_before_the_archive_is_assembled():
+    runs = [s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"]]
+    collected = next(i for i, r in enumerate(runs) if "collect_licences.py" in r)
+    staged = next(i for i, r in enumerate(runs) if 'cp -R build/licenses' in r)
+    packaged = next(i for i, r in enumerate(runs) if "7z a -tzip" in r)
+    assert collected < staged < packaged
+
+
+def test_the_inventory_is_generated_on_the_machine_that_built_the_bundle():
+    """PyInstaller collects whatever this runner's linker resolved.
+
+    An inventory written anywhere else describes a different build of the same
+    source, which is exactly the claim it must not make.
+    """
+    text = "\n".join(s.get("run", "") for s in load(WORKFLOW)["jobs"]["build"]["steps"])
+    assert "tools/licence_inventory.py" in text
+    assert "--markdown" in text and "THIRD-PARTY-LICENSES-" in text
+    assert "--licences build/licenses" in text, (
+        "without this the inventory never checks that each distribution's "
+        "notice actually reached the archive"
+    )
+
+
+def test_a_crashing_inventory_is_not_downgraded_to_a_warning():
+    """Argus's first release run swallowed exactly that.
+
+    The script raised on every machine without dpkg, `|| echo ::warning::`
+    turned the crash into a warning, and two platforms published with no
+    inventory in them at all. Exit 2 means "written, some rows need a human";
+    anything else has to fail the job.
     """
     step = next(
-        s for s in load(WORKFLOW)["jobs"]["windows"]["steps"]
-        if "download section" in s.get("name", "")
+        s for s in load(WORKFLOW)["jobs"]["build"]["steps"]
+        if "licence_inventory.py" in s.get("run", "")
     )
-    assert 'block = rf"""' in step["run"]
+    # Comments only, stripped: this step's own comment quotes the mistake it
+    # exists to prevent, and matching that would fail on the explanation
+    # rather than on the code.
+    run = "\n".join(
+        line for line in step["run"].splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    assert "|| echo" not in run, "a crash is being turned into a warning"
+    assert "2) echo \"::warning::" in run
+    assert 'exit "$status"' in run
+
+
+# ─────────────────────────────────────────────────────────────
+# The spec
+# ─────────────────────────────────────────────────────────────
+
+def test_the_spec_picks_the_icon_format_each_platform_accepts():
+    """The bug that killed XIP's first macOS release.
+
+    PyInstaller's normalize_icon_type accepts .icns and nothing else on macOS,
+    converting anything else only if Pillow happens to be installed — which
+    Tyche does not require. A hardcoded .ico published Windows and Linux and
+    failed the macOS job on the spec's last line.
+    """
+    spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")
+    assert '"darwin": "assets/app_icon.icns"' in spec
+    assert '"win32": "assets/app_icon.ico"' in spec
+    assert (REPO / "assets" / "app_icon.icns").exists()
+    # And EXE has to actually receive it. Leaving the mapping in place while
+    # hardcoding the .ico again passes every assertion above, which is how
+    # this test read until a mutation run walked straight through it.
+    assert "icon=_ICON_FOR_EXE," in spec
+    assert 'icon="assets/app_icon.ico"' not in spec
+
+
+def test_the_committed_icns_is_a_real_icns():
+    """A file with the right name and the wrong bytes fails only on a runner.
+
+    The container declares its own total length and each entry declares its
+    own; both are checked here, so a truncated or hand-edited file is caught
+    in the suite rather than by a macOS build job.
+    """
+    import struct
+
+    blob = (REPO / "assets" / "app_icon.icns").read_bytes()
+    assert blob[:4] == b"icns"
+    assert struct.unpack(">I", blob[4:8])[0] == len(blob), "declared length is wrong"
+
+    offset, seen = 8, []
+    while offset < len(blob):
+        kind = blob[offset:offset + 4]
+        length = struct.unpack(">I", blob[offset + 4:offset + 8])[0]
+        assert length >= 8 and offset + length <= len(blob), f"{kind!r} overruns"
+        # Every payload here is a PNG, whatever the entry type says.
+        assert blob[offset + 8:offset + 12] == b"\x89PNG", f"{kind!r} is not a PNG"
+        seen.append(kind)
+        offset += length
+    # The retina pair Finder and the Dock actually read.
+    assert b"ic11" in seen and b"ic12" in seen
 
 
 def test_the_spec_builds_a_folder_and_not_one_file():
@@ -401,13 +585,13 @@ def test_the_release_body_keeps_the_disclaimer():
 # Only one release survives, and the order is the safety
 # ─────────────────────────────────────────────────────────────
 
-def _windows_steps():
-    return load(WORKFLOW)["jobs"]["windows"]["steps"]
+def _notes_steps():
+    return load(WORKFLOW)["jobs"]["notes"]["steps"]
 
 
 def _cleanup_step():
-    for step in _windows_steps():
-        if "gh release delete" in step.get("run", ""):
+    for step in _notes_steps():
+        if "gh release delete " in step.get("run", ""):
             return step
     raise AssertionError("no step deletes the older releases")
 
@@ -418,17 +602,25 @@ def test_only_the_current_release_is_kept():
     assert "--cleanup-tag" in run, "the tag has to go with the release"
 
 
-def test_the_cleanup_runs_after_the_archive_is_uploaded():
+def test_the_cleanup_runs_after_every_archive_is_uploaded():
     """Deleting the old release before the new one is complete is the disaster.
 
     A failure between the two would leave the repository with nothing to
-    download, which is worse than any number of stale releases.
+    download, which is worse than any number of stale releases. With three
+    build jobs "after the upload" is a job dependency and not a step order:
+    the cleanup sits in the job that waits for all three.
     """
-    runs = [s.get("run", "") for s in _windows_steps()]
-    uploaded = next(i for i, r in enumerate(runs) if "gh release upload" in r)
+    workflow = load(WORKFLOW)
+    assert workflow["jobs"]["notes"]["needs"] == ["release", "build"], (
+        "the cleanup's job must wait for every build, or it can delete the "
+        "old release while an archive is still being uploaded"
+    )
+    build_runs = [s.get("run", "") for s in workflow["jobs"]["build"]["steps"]]
+    assert any("gh release upload" in r for r in build_runs)
+
+    runs = [s.get("run", "") for s in _notes_steps()]
     notes = next(i for i, r in enumerate(runs) if "--notes-file body.md" in r)
-    deleted = next(i for i, r in enumerate(runs) if "gh release delete" in r)
-    assert uploaded < deleted, "the cleanup runs before the upload"
+    deleted = next(i for i, r in enumerate(runs) if "gh release delete " in r)
     assert notes < deleted, "the cleanup runs before the notes are written"
     assert deleted == len(runs) - 1, "the cleanup is not the final step"
 

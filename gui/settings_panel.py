@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from core.fonts import ui_font_family
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import BG_ROOT, MUTED
 from gui.widgets import section
@@ -118,7 +119,8 @@ class SettingsPanel(ctk.CTkFrame):
             self._widgets[key] = widget
             ctk.CTkLabel(
                 scroll, text=helptext, anchor="w", justify="left",
-                text_color=MUTED, wraplength=900, font=ctk.CTkFont(size=11),
+                text_color=MUTED, wraplength=900,
+                font=ctk.CTkFont(family=ui_font_family(), size=11),
             ).pack(fill="x", padx=(200, 0), pady=(0, 10))
 
         ctk.CTkButton(block.body, text="Salva", width=120, command=self._save).pack(

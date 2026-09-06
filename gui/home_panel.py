@@ -46,6 +46,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from core.archive import describe_archive, freshness
+from core.fonts import ui_font_family
 from core.localise import it_date, it_number
 from gui.theme import (
     ACCENT,
@@ -90,7 +91,7 @@ class HomePanel(ctk.CTkFrame):
         head.pack(fill="x", padx=16, pady=(16, 8))
         ctk.CTkLabel(
             head, text="Che cosa fa Tyche", anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=16, weight="bold"),
         ).pack(fill="x", padx=16, pady=(14, 2))
         ctk.CTkLabel(
             head,
@@ -102,7 +103,7 @@ class HomePanel(ctk.CTkFrame):
                 "domanda e prepara il successivo."
             ),
             anchor="w", justify="left", text_color=MUTED, wraplength=1080,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(fill="x", padx=16, pady=(0, 14))
 
         for key, number, title, description in STEPS:
@@ -112,7 +113,7 @@ class HomePanel(ctk.CTkFrame):
         extra.pack(fill="x", padx=16, pady=(8, 16))
         ctk.CTkLabel(
             extra, text="Fuori percorso", anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(size=13, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=13, weight="bold"),
         ).pack(fill="x", padx=16, pady=(12, 2))
         row = ctk.CTkFrame(extra, fg_color="transparent")
         row.pack(fill="x", padx=16, pady=(4, 14))
@@ -123,7 +124,7 @@ class HomePanel(ctk.CTkFrame):
                 "Impostazioni — modello, token e sorgenti."
             ),
             anchor="w", justify="left", text_color=MUTED, wraplength=760,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(side="left")
         ctk.CTkButton(
             row, text="Statistiche", width=120, fg_color=BG_ROW, text_color=TEXT,
@@ -144,23 +145,23 @@ class HomePanel(ctk.CTkFrame):
         # tall and pushed step 4, the destination, below the fold.
         ctk.CTkLabel(
             card, text=number, width=42, text_color=ACCENT,
-            font=ctk.CTkFont(size=22, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=22, weight="bold"),
         ).pack(side="left", padx=(16, 0), pady=(10, 0), anchor="n")
 
         middle = ctk.CTkFrame(card, fg_color="transparent")
         middle.pack(side="left", fill="both", expand=True, pady=10)
         ctk.CTkLabel(
             middle, text=title, anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
         ).pack(fill="x")
         ctk.CTkLabel(
             middle, text=description, anchor="w", justify="left",
-            text_color=MUTED, wraplength=780, font=ctk.CTkFont(size=12),
+            text_color=MUTED, wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(fill="x", pady=(1, 0))
         # What this step has actually produced, filled in by refresh().
         state = ctk.CTkLabel(
             middle, text="", anchor="w", justify="left", text_color=MUTED,
-            wraplength=780, font=ctk.CTkFont(size=12),
+            wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
         )
         state.pack(fill="x", pady=(4, 0))
         self._state_labels[key] = state
@@ -168,7 +169,8 @@ class HomePanel(ctk.CTkFrame):
         right = ctk.CTkFrame(card, fg_color="transparent")
         right.pack(side="right", padx=16, pady=10)
         mark = ctk.CTkLabel(
-            right, text="", text_color=MUTED, font=ctk.CTkFont(size=18, weight="bold")
+            right, text="", text_color=MUTED,
+            font=ctk.CTkFont(family=ui_font_family(), size=18, weight="bold"),
         )
         mark.pack(anchor="e", pady=(0, 2))
         self._marks[key] = mark

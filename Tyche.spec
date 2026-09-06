@@ -6,8 +6,9 @@
 
 # Tyche.spec — PyInstaller build specification
 #
-# `python build.py` is the way to run this. It produces a Windows folder build
-# under dist/Tyche/, which the release workflow zips.
+# `python build.py` is the way to run this. It produces a folder build under
+# dist/Tyche/, which the release workflow packages — one per platform, each
+# built on its own runner, because PyInstaller does not cross-compile.
 #
 # **A folder, not a single file, and that is the one real divergence from
 # Argus's spec.** Argus freezes to --onefile, which is tidier: one executable,
@@ -45,8 +46,10 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 # raises, and the failure looks nothing like a missing data file.
 datas = collect_data_files("customtkinter")
 
-# Both files: Windows takes the .ico through iconbitmap, and Tk
-# everywhere else needs the PNG, which iconphoto reads.
+# Both files: Windows takes the .ico through iconbitmap, and Tk everywhere
+# else needs the PNG, which iconphoto reads. The .icns is not in here — it is
+# the executable's own resource on macOS, handed to EXE below, and nothing at
+# run time reads it.
 datas += [("assets/app_icon.ico", "assets"), ("assets/app_icon.png", "assets")]
 binaries = []
 hiddenimports = []
@@ -66,6 +69,13 @@ for package in ("timesfm3", "timesfm"):
     datas += package_datas
     binaries += package_binaries
     hiddenimports += package_hidden
+
+# .icns on macOS, .ico on Windows, nothing on Linux — see the note beside
+# `icon=` below for why this cannot be one file.
+_ICON_FOR_EXE = {
+    "win32": "assets/app_icon.ico",
+    "darwin": "assets/app_icon.icns",
+}.get(sys.platform)
 
 a = Analysis(
     ["main.py"],
@@ -109,10 +119,19 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # The executable's own resource, which is what Explorer draws before the
-    # program ever runs. The window icon is set separately in gui/app.py:
-    # this one and that one are different mechanisms and both are needed.
-    icon="assets/app_icon.ico",
+    # The executable's own resource, which is what a file manager draws
+    # before the program ever runs. The window icon is set separately in
+    # gui/app.py: this one and that one are different mechanisms and both are
+    # needed.
+    #
+    # Chosen per platform because PyInstaller will not convert between the
+    # formats on its own. `normalize_icon_type` accepts only .icns on macOS
+    # and only .ico on Windows, and converts anything else *if Pillow happens
+    # to be installed* — which Tyche does not require. XIP died on exactly
+    # that: Windows and Linux published and the macOS job failed on the last
+    # line of the spec. Linux gets None: PyInstaller ignores the icon there
+    # and says so in a warning on every build.
+    icon=_ICON_FOR_EXE,
 )
 
 coll = COLLECT(

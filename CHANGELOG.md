@@ -10,7 +10,50 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 ## [Non rilasciato]
 
-Niente, per ora.
+Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
+
+### Aggiunto
+
+- **Pacchetti per macOS e Linux**, oltre a quello per Windows. Ognuno è
+  compilato sul proprio runner — PyInstaller non compila per altre
+  piattaforme — e nessuno viene caricato prima di aver avviato Tk davvero,
+  essersi presentato sul backend giusto per il suo sistema, aver dimostrato di
+  contenere TimesFM ed essere stato avviato dal proprio launcher.
+- **`packaging/start.sh`**, il launcher per macOS e Linux: verifica l'impronta
+  dell'eseguibile prima di avviarlo, come già faceva `start.cmd` su Windows.
+  Su macOS viaggia come `start.command`, così il Finder lo esegue con un
+  doppio clic invece di aprirlo in un editor.
+- **I testi di licenza dentro ogni archivio**, in `licenses/`, insieme
+  all'inventario di quale binario appartiene a quale progetto, generato dalla
+  macchina che ha costruito l'archivio. Fino alla 0.3.3 un archivio non
+  conteneva nessun testo di licenza, nemmeno quello di Tyche — e non è una
+  formalità: PyTorch, NumPy e le altre librerie BSD e MIT chiedono che la loro
+  nota accompagni il binario. Lo assemblano `tools/collect_licences.py` e
+  `tools/licence_inventory.py`.
+- **Il font dell'interfaccia scelto invece che ereditato** (`core/fonts.py`),
+  la stessa lista di preferenze degli altri prodotti. Prima ogni etichetta
+  prendeva il predefinito di CustomTkinter, che è Roboto su Linux e il font di
+  sistema altrove: la stessa finestra sembrava tre programmi diversi sulle tre
+  piattaforme a cui adesso Tyche arriva.
+- **La finestra si apre massimizzata**, con `1280x840` come misura di ripiego.
+- Modelli per issue e pull request, e `.gitattributes` che fissa i fine riga
+  dei due launcher: CRLF per `start.cmd`, LF per `start.sh`, perché una
+  `autocrlf` locale può rompere l'uno o l'altro.
+- `tests/test_docs.py`, `tests/test_packaging.py` e
+  `tests/test_third_party_licences.py`, che erano gli unici tre guardiani
+  condivisi che Tyche non aveva.
+- La CI esegue la suite anche su Windows, e i guardiani sui documenti in un
+  job a parte che risponde in venti secondi.
+
+### Modificato
+
+- `THIRD-PARTY-LICENSES.md` riscritto secondo lo scheletro condiviso, e dice
+  esplicitamente che l'inventario che conta è quello dentro l'archivio
+  scaricato, non questo.
+- `Tyche.spec` sceglie l'icona in base alla piattaforma: `.icns` su macOS,
+  `.ico` su Windows, niente su Linux. Un `.ico` fisso è ciò che ha fatto
+  fallire la prima release macOS di XIP, perché PyInstaller accetta solo
+  `.icns` lì e converte soltanto se Pillow è installato.
 
 ## [0.7.0] — 2026-09-06
 

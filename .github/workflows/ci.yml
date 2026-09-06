@@ -26,8 +26,30 @@ jobs:
       # none of the runtime dependencies and finishes in seconds.
       - run: ruff check .
 
-  test:
+  # The documentation and workflow guards, on their own and first. They read
+  # the repository's own files and import nothing from Tyche, so they need
+  # pytest and a YAML parser and nothing else — which makes them the checks
+  # that answer in twenty seconds instead of five minutes, and the ones that
+  # keep the six products aligned.
+  docs:
+    name: Documentation guards
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install pytest pyyaml
+      - run: python -m pytest tests/test_docs.py tests/test_release_workflow.py -q
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,7 +63,12 @@ jobs:
       # links against the runner's libtcl/libtk at load time, and python3-tk
       # is what pulls those in. Installing it is therefore right here and is
       # *not* how the module itself gets found.
+      #
+      # Windows needs none of this: its Python ships Tcl/Tk in the installer
+      # and the runner has a real desktop, so there is nothing to install and
+      # no virtual display to start.
       - name: Install Xvfb and the Tk runtime libraries
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb python3-tk
 
       - name: Confirm tkinter is importable by the interpreter under test
@@ -62,9 +89,21 @@ jobs:
       - name: Tests, GUI included
         # The whole point of the switch: without it a machine with no display
         # reports "70 passed, 1 skipped" and has tested no interface at all.
+        #
+        # Two `run:` lines for one command, because Windows has no xvfb-run
+        # and needs none. tests/test_release_workflow.py asserts the Linux one
+        # is byte-identical to the release workflow's, so the suite that gates
+        # a release and the suite that gates a commit stay the same suite.
+        if: runner.os == 'Linux'
         env:
           TYCHE_REQUIRE_GUI: "1"
         run: xvfb-run -a python -m pytest tests/ -q
+
+      - name: Tests, GUI included (Windows)
+        if: runner.os == 'Windows'
+        env:
+          TYCHE_REQUIRE_GUI: "1"
+        run: python -m pytest tests/ -q
 
       - name: Version reports without importing the GUI
         run: python main.py --version
@@ -72,6 +111,10 @@ jobs:
       - name: --check explains itself when there is no archive
         # data/ is git-ignored, so a fresh checkout has none. Exit code 1 with
         # an explanation is the contract; a traceback or a silent 0 is not.
+        #
+        # Linux only: this is a POSIX shell script, and what it checks is a
+        # property of the program rather than of the platform.
+        if: runner.os == 'Linux'
         run: |
           set +e
           output=$(python main.py --check); code=$?

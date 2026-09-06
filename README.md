@@ -424,6 +424,10 @@ Tutto il resto del programma — archivio, statistiche, test di indipendenza,
 validazione e i tre metodi che non sono TimesFM — funziona senza scaricare
 alcun peso.
 
+Per qualsiasi cosa riguardi la licenza, o il programma in generale:
+marco.lombardo@gmail.com. È lo stesso indirizzo che `core/version.py` tiene
+come unica fonte, e che `--version` stampa.
+
 ---
 
 ## Eseguire i test
@@ -457,16 +461,24 @@ la versione riportata dal programma corrisponda al tag, e solo allora crea la
 release — con le note composte a partire da `CHANGELOG.md` e non dal registro
 dei commit.
 
-Poi produce il **pacchetto Windows** su un runner Windows e lo allega. Prima di
-caricarlo deve avviare Tk davvero, presentarsi sul backend `win32`, eseguire
-l'analisi, superare un ciclo di scrittura e rilettura dell'archivio, dimostrare
-che TimesFM è realmente al suo interno, ed essere avviato dal proprio launcher
-— che viene a sua volta provato nel rifiutare un eseguibile il cui digest non
-corrisponde. Lo SHA-256 dell'archivio finisce nelle note e non accanto al file,
-così arriva per una strada diversa da quella del download.
+Poi produce **tre pacchetti** — Windows, macOS e Linux — ognuno sul proprio
+runner, perché PyInstaller non compila per altre piattaforme. Prima che uno
+venga caricato deve avviare Tk davvero, presentarsi sul backend giusto per il
+suo sistema (`win32`, `aqua`, `x11`), eseguire l'analisi, superare un ciclo di
+scrittura e rilettura dell'archivio, dimostrare che TimesFM è realmente al suo
+interno, ed essere avviato dal proprio launcher — che viene a sua volta provato
+nel rifiutare un eseguibile il cui digest non corrisponde. Lo SHA-256 di ogni
+archivio finisce nelle note e non accanto al file, così arriva per una strada
+diversa da quella del download.
 
-Per macOS e Linux non c'è pacchetto: l'esecuzione dal sorgente funziona su
-entrambi ed è descritta sopra.
+Dentro ogni archivio, in `licenses/`, viaggiano i testi di licenza di tutto
+quello che il pacchetto contiene, più l'inventario di quale binario appartiene
+a quale progetto, generato dalla macchina che lo ha costruito. Fino alla 0.3.3
+gli archivi non contenevano nessun testo di licenza, nemmeno quello di Tyche;
+`THIRD-PARTY-LICENSES.md` racconta perché non era una formalità.
+
+Resta una sola release online: finita la build, il workflow cancella la
+precedente e il suo tag. `CHANGELOG.md` conserva la storia di ogni versione.
 
 ---
 

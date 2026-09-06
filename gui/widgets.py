@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
+from core.fonts import ui_font_family
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, TEXT
 
 
@@ -28,13 +29,13 @@ def section(parent, title: str, subtitle: str = "") -> ctk.CTkFrame:
     wrapper = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=8)
     header = ctk.CTkLabel(
         wrapper, text=title, anchor="w", text_color=TEXT,
-        font=ctk.CTkFont(size=15, weight="bold"),
+        font=ctk.CTkFont(family=ui_font_family(), size=15, weight="bold"),
     )
     header.pack(fill="x", padx=14, pady=(12, 0))
     if subtitle:
         ctk.CTkLabel(
             wrapper, text=subtitle, anchor="w", justify="left", text_color=MUTED,
-            font=ctk.CTkFont(size=12), wraplength=900,
+            font=ctk.CTkFont(family=ui_font_family(), size=12), wraplength=900,
         ).pack(fill="x", padx=14, pady=(2, 0))
     body = ctk.CTkFrame(wrapper, fg_color="transparent")
     body.pack(fill="both", expand=True, padx=14, pady=12)
@@ -73,6 +74,6 @@ def ball_row(parent, numbers, size: int = 38) -> ctk.CTkFrame:
         ctk.CTkLabel(
             row, text=f"{n:02d}", width=size, height=size, corner_radius=size // 2,
             fg_color=ACCENT, text_color="#ffffff",
-            font=ctk.CTkFont(size=14, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
         ).pack(side="left", padx=3)
     return row

@@ -1,27 +1,32 @@
 name: Release
 
-# Tag a version, get a release. One job, because the steps have to happen in
-# order and the last one must not happen if any earlier one fails: the release
-# is created *after* the tests pass, on the tagged commit, or not at all.
+# One workflow, three real platforms.
+#
+# PyInstaller does not cross-compile: the only way to produce a genuine
+# Windows executable, a macOS build and a Linux one is to build each on its
+# own machine. GitHub hands out all three on demand, so the matrix below does
+# exactly that — nothing here is a cross-build, and nothing is claimed for a
+# platform that was not actually built.
 #
 # Two ways in, converging on the same result:
 #
-#   * a "v*" tag appears — this runs and creates the release. Pushing the tag
-#     with git does it, and so does publishing a release through GitHub's own
-#     UI, which creates the tag and fires the same push event.
+#   * a "v*" tag appears — creates the release, then attaches the archives.
+#     Pushing the tag with git does it, and so does publishing a release
+#     through GitHub's own UI, which creates the tag and fires the same push
+#     event.
 #   * run it by hand — pass the tag; it attaches to that release.
 #
 # Deliberately NOT also triggered by "release: published". That event and the
 # tag's push both fire when a release is published from the UI, and two runs
-# would then race to write the same notes.
+# would then race to upload the same three asset names.
 #
-# One binary, for Windows. PyInstaller does not cross-compile: a genuine .exe
-# can only be produced on Windows, and GitHub hands out a windows-latest
-# runner on demand, which is the only way to get one without owning the
-# machine. macOS and Linux are deliberately not built — running from source is
-# a normal thing to do on both, and each extra platform is another unsigned
-# several-hundred-megabyte archive to smoke-test and keep honest. Argus builds
-# all three; its release.yml is the worked example if that ever changes here.
+# Tyche built Windows alone until 0.8.0, for a reason worth recording now that
+# it no longer holds: each archive is around 160 MB because PyTorch is in it,
+# and running from source is a normal thing to do on macOS and Linux. What
+# changed is that the other five products in this family all publish three,
+# and one of them — Argus — carries the same torch and timesfm dependencies
+# and builds all three without trouble. Uniformity across the six is worth
+# more than the runner minutes.
 
 on:
   push:
@@ -36,15 +41,19 @@ on:
 permissions:
   contents: write
 
-# Two runs on the same tag would overwrite each other's notes.
+# Two runs on the same tag would overwrite each other's notes and assets.
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
+  APP_NAME: Tyche
   PYTHON_VERSION: "3.12"
 
 jobs:
+  # Everything that decides whether this tag deserves a release at all, in
+  # order, with the release created last: it must not exist if anything before
+  # it failed.
   release:
     name: Verify and publish
     runs-on: ubuntu-latest
@@ -138,7 +147,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          title="Tyche $TAG"
+          title="$APP_NAME $TAG"
           # `gh release create` fails outright when a release already exists
           # for the tag — the normal case when the tag was created by
           # publishing a release through GitHub's own UI, and when a tag is
@@ -148,13 +157,52 @@ jobs:
           gh release create "$TAG" --title "$title" --notes-file release-notes.md \
             || gh release edit "$TAG" --title "$title" --notes-file release-notes.md --draft=false
 
-  windows:
-    name: Windows (x64)
+      # A release the tag was moved onto still carries the assets of whatever
+      # was published there before. They are not overwritten by name — the
+      # archives below are named after the platform and the version, and an
+      # older scheme's file simply sits alongside them, offering a download
+      # that no longer matches the notes above it.
+      - name: Remove assets left by a previous build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          keep=""
+          for asset in "windows-x64.zip" "macos-arm64.zip" "linux-x64.tar.gz"; do
+            keep="$keep $APP_NAME-$VERSION-$asset"
+          done
+          for name in $(gh release view "$TAG" --json assets --jq '.assets[].name'); do
+            case " $keep " in
+              *" $name "*) ;;
+              *)
+                echo "removing stale asset: $name"
+                gh release delete-asset "$TAG" "$name" --yes
+                ;;
+            esac
+          done
+
+  build:
+    name: ${{ matrix.label }}
     # After the release exists, so there is somewhere to upload to, and after
     # the tests, so nothing is built from a commit that failed them.
     needs: release
-    runs-on: windows-latest
-    timeout-minutes: 60
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows (x64)
+            asset: windows-x64
+          - os: macos-latest
+            label: macOS (arm64)
+            asset: macos-arm64
+          - os: ubuntu-latest
+            label: Linux (x64)
+            asset: linux-x64
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,20 +211,107 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install the platform's system libraries
+        if: runner.os == 'Linux'
+        run: |
+          # tkinter is a separate OS package on Debian/Ubuntu. The interpreter
+          # actions/setup-python installs ships _tkinter.so, but it is linked
+          # against libtcl/libtk, which arrive with python3-tk.
+          #
+          # xvfb is for the smoke test: starting Tk needs a display, and a
+          # build runner has none.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-tk xvfb
 
       - name: Install dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          # Torch decides how big the bundle gets, and it is installed first
-          # and from the CPU-only index so pip finds it already satisfied and
-          # does not pull the CUDA build from PyPI — several extra gigabytes
-          # of NVIDIA runtime that only pays off on a matching GPU.
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          # Torch decides how big this bundle gets. Installed first, and from
+          # the CPU-only index where one exists, so pip finds it already
+          # satisfied and does not pull the much larger CUDA build from PyPI.
+          # macOS wheels are CPU-only anyway and live on PyPI, not that index.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            pip install torch
+          else
+            pip install torch --index-url https://download.pytorch.org/whl/cpu
+          fi
           pip install -r requirements.txt -r requirements-build.txt
 
       - name: Build
         run: python build.py
+
+      # Every archive Tyche published up to 0.3.3 carried the program and no
+      # licence file at all — not even Tyche's own. That is not a formality:
+      # PyTorch, NumPy and the rest of the BSD and MIT libraries in the bundle
+      # require their notices be reproduced in a binary distribution, the
+      # LGPL-2.1 system libraries PyInstaller collects on Linux require a copy
+      # of their licence to accompany the object code, and the AGPL requires
+      # the same of Tyche. THIRD-PARTY-LICENSES.md in the repository does not
+      # fix it: somebody who downloads a zip never sees it.
+      #
+      # Run after the build, not from the .spec file, because what to collect
+      # is read out of PyInstaller's own record of what it collected and that
+      # record does not exist until Analysis has run.
+      - name: Collect the licence texts
+        shell: bash
+        run: python tools/collect_licences.py build/licenses
+
+      # What the archive actually contains, attributed binary by binary,
+      # written on the machine that built it — the only one whose answer is
+      # this download's own, since PyInstaller collects whatever this image's
+      # linker resolved.
+      - name: Inventory what the bundle ships
+        shell: bash
+        run: |
+          set +e
+          python tools/licence_inventory.py \
+            --bundle "${{ matrix.asset }}=build/$APP_NAME" \
+            --licences build/licenses \
+            --markdown "build/licenses/THIRD-PARTY-LICENSES-${{ matrix.asset }}.md"
+          status=$?
+          set -e
+
+          # 2 means the report was written and some rows in it need a human.
+          # Anything else means the script did not finish, and the archive
+          # would ship without the inventory it is supposed to carry. Argus's
+          # first release run swallowed exactly that: the script raised on
+          # every machine without dpkg, `|| echo ::warning::` turned the crash
+          # into a warning, and two platforms published without it.
+          case "$status" in
+            0) ;;
+            2) echo "::warning::some binaries could not be attributed, or a "\
+                    "distribution shipped no notice; see the report" ;;
+            *) echo "::error::the inventory script exited $status without writing a report"
+               exit "$status" ;;
+          esac
+
+      # Where the build put its output, and which file inside it is the
+      # program. Decided once, here, so the smoke test and the packaging step
+      # cannot end up disagreeing about what ships.
+      #
+      # A folder build on all three, and no macOS .app: core/paths.py writes
+      # data/ and config/ beside sys.executable, which inside an .app bundle
+      # would be inside the bundle itself. Argus reaches the same conclusion
+      # for the same reason.
+      - name: Locate what was built
+        id: built
+        shell: bash
+        run: |
+          suffix=""
+          [ "$RUNNER_OS" = "Windows" ] && suffix=".exe"
+          payload="dist/$APP_NAME"
+          bin="dist/$APP_NAME/$APP_NAME$suffix"
+
+          if [ ! -e "$bin" ]; then
+            echo "::error::the build produced nothing at $bin"
+            ls -la dist || true
+            exit 1
+          fi
+          echo "payload=$payload" >> "$GITHUB_OUTPUT"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
 
       # A bundle that cannot start is worse than no bundle, so it is run
       # before it is offered for download.
@@ -188,86 +323,200 @@ jobs:
       # tests and round-trips a file through the program's own code.
       #
       # The report is read from a file rather than from stdout because the
-      # bundle is built windowed: on Windows the process has no stdout at all,
-      # so parsing it would check nothing.
+      # Windows bundle is built windowed: that process has no stdout at all,
+      # so parsing it would check nothing on the one platform least like the
+      # machine that built it.
       - name: Smoke-test the bundle
         shell: bash
         env:
+          BIN: ${{ steps.built.outputs.bin }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
-          exe="dist/Tyche/Tyche.exe"
+          chmod +x "$BIN" 2>/dev/null || true
+
           # tr -d because a Windows build prints CRLF and the comparison would
           # fail on the carriage return alone.
-          reported=$("$exe" --version | tr -d '\r' | awk '{print $NF}')
+          reported=$("$BIN" --version | tr -d '\r' | awk '{print $NF}')
           echo "tag says $VERSION, the bundle says $reported"
           if [ "$reported" != "$VERSION" ]; then
             echo "::error::the bundle reports $reported but the tag says $VERSION"
             exit 1
           fi
 
-          "$exe" --self-check --self-check-report self-check.txt || true
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Under a virtual X server, so Tk loads the real x11 backend.
+            xvfb-run -a "$BIN" --self-check --self-check-report self-check.txt || true
+          else
+            "$BIN" --self-check --self-check-report self-check.txt || true
+          fi
           cat self-check.txt
+
           # The report is Italian, like everything else the program prints.
-          # These two greps are the contract between it and this job: change
-          # the wording in core/selfcheck.py and this has to change with it,
-          # which is what tests/test_release_workflow.py asserts.
+          # These greps are the contract between it and this job: change the
+          # wording in core/selfcheck.py and this has to change with it, which
+          # is what tests/test_release_workflow.py asserts.
           grep -q "^autodiagnosi: SUPERATA" self-check.txt || {
             echo "::error::the bundle failed its own self-check"; exit 1; }
 
           backend=$(sed -n 's/^sistema grafico: //p' self-check.txt | tr -d '\r')
-          if [ "$backend" != "win32" ]; then
-            echo "::error::the Windows bundle came up on windowing system '$backend'"
-            exit 1
-          fi
+          case "$RUNNER_OS:$backend" in
+            Linux:x11|macOS:aqua|Windows:win32) ;;
+            *)
+              echo "::error::the $RUNNER_OS bundle came up on windowing system '$backend'"
+              exit 1
+              ;;
+          esac
 
-          # The whole point of building on Windows with torch installed. A
-          # bundle that silently lost TimesFM would pass everything above.
+          # The whole point of building with torch installed. A bundle that
+          # silently lost TimesFM would pass everything above.
           grep -q "^timesfm: nel pacchetto" self-check.txt || {
             echo "::error::TimesFM is not in the bundle"; exit 1; }
 
-      # The digest travels inside the archive, so it catches a truncated
-      # download or a half-finished unpack — the failure that actually happens
-      # to people — and not tampering. The checksum in the release notes is the
-      # one that answers that, because it arrives by a route the archive did
-      # not.
-      - name: Record the executable's digest beside it
+      # The licence texts and the launcher have to travel with the binary, and
+      # the folder that gets zipped is the only place a person who unpacks the
+      # download will see them.
+      - name: Assemble what goes in the archive
+        id: staged
         shell: bash
+        env:
+          PAYLOAD: ${{ steps.built.outputs.payload }}
         run: |
-          python - <<'PY'
+          # Named after the tool and nothing else. A name carrying the version
+          # and the platform repeats what the file it came out of already
+          # says, and leaves three different folder names on one person's disk
+          # for the same program.
+          staged="staging/$APP_NAME"
+          rm -rf staging
+          mkdir -p staging
+          cp -R "$PAYLOAD" "$staged"
+          cp -R build/licenses "$staged/licenses"
+
+          # The start script, and the digest it checks the executable against.
+          #
+          # That digest travels in the same archive as the executable, so it
+          # catches a truncated download or a half-finished unpack — the
+          # failure that actually happens to people — and not tampering, since
+          # whoever could replace the one could replace the other. The
+          # checksums in the release notes are the ones that answer that,
+          # because they arrive by a route the archive did not.
+          case "$RUNNER_OS" in
+            Windows)
+              cp packaging/start.cmd "$staged/start.cmd"
+              named="$APP_NAME.exe"
+              ;;
+            macOS)
+              # .command rather than .sh, so Finder will run it on a
+              # double-click instead of opening it in an editor.
+              cp packaging/start.sh "$staged/start.command"
+              chmod +x "$staged/start.command"
+              named="$APP_NAME"
+              ;;
+            *)
+              cp packaging/start.sh "$staged/start.sh"
+              chmod +x "$staged/start.sh"
+              named="$APP_NAME"
+              ;;
+          esac
+          sums="$staged/$named.sha256"
+
+          # Written in the format `sha256sum -c` reads, with the name relative
+          # to the file itself, so the archive can be checked with a tool and
+          # not only by the launcher.
+          python - "$staged/$named" "$sums" "$named" <<'PY'
           import hashlib
           import pathlib
+          import sys
 
-          exe = pathlib.Path("dist/Tyche/Tyche.exe")
-          with exe.open("rb") as handle:
+          target, out, name = sys.argv[1:4]
+          with open(target, "rb") as handle:
               digest = hashlib.file_digest(handle, "sha256").hexdigest()
-          # The format sha256sum -c reads, with the name relative to the file,
-          # so start.cmd is not the only thing that can check it.
-          exe.with_suffix(".exe.sha256").write_text(f"{digest}  {exe.name}\n", encoding="utf-8")
-          print(f"{digest}  {exe.name}")
+          pathlib.Path(out).write_text(f"{digest}  {name}\n", encoding="utf-8")
+          print(f"{digest}  {name}")
           PY
 
+          ls -la "$staged"
+          echo "dir=$staged" >> "$GITHUB_OUTPUT"
+
       # A launcher that refuses to launch is worse than no launcher, and one
-      # that launches whatever it finds is decoration. Both halves are checked,
-      # on a copy — some programs create folders next to themselves on first
-      # run, and a check that leaves its droppings inside the archive has
+      # that launches whatever it finds is decoration. Both halves are checked
+      # here, on a copy — some programs create folders next to themselves on
+      # first run, and a check that leaves its droppings inside the archive has
       # broken the thing it was protecting.
-      - name: The launcher starts it, and refuses a bad checksum
+      - name: Start the bundle through the launcher
         shell: bash
+        env:
+          ROOT: ${{ steps.staged.outputs.dir }}
         run: |
           rm -rf "$RUNNER_TEMP/launchcheck"
-          cp -R dist/Tyche "$RUNNER_TEMP/launchcheck"
-          check="$RUNNER_TEMP/launchcheck"
+          cp -R "$ROOT" "$RUNNER_TEMP/launchcheck"
+          CHECK="$RUNNER_TEMP/launchcheck"
 
-          ( cd "$check" && cmd //c start.cmd --self-check --self-check-report launcher.txt )
-          if [ ! -s "$check/launcher.txt" ]; then
-            echo "::error::the launcher did not start Tyche"
+          case "$RUNNER_OS" in
+            # `cmd //c` and not `cmd /c`: Git Bash rewrites a lone leading
+            # slash into a Windows path, and the doubled one survives that as
+            # the /c cmd expects.
+            Windows) launch="cmd //c start.cmd"; sums="$CHECK/$APP_NAME.exe.sha256" ;;
+            macOS)   launch="./start.command";   sums="$CHECK/$APP_NAME.sha256" ;;
+            *)       launch="./start.sh";        sums="$CHECK/$APP_NAME.sha256" ;;
+          esac
+
+          # --- it starts the program -------------------------------------------
+          #
+          # Checked by the report the program writes, not by what it prints:
+          # the Windows bundle is windowed and has no stdout, and a file on
+          # disk is proof it really ran without having to reason about that.
+          report=launcher-check.txt
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            ( cd "$CHECK" && xvfb-run -a $launch --self-check --self-check-report "$report" ) || true
+          else
+            ( cd "$CHECK" && $launch --self-check --self-check-report "$report" ) || true
+          fi
+          if [ ! -s "$CHECK/$report" ]; then
+            echo "::error::the launcher did not start $APP_NAME"
             exit 1
           fi
-          grep -q "^autodiagnosi: SUPERATA" "$check/launcher.txt"
+          cat "$CHECK/$report"
+          grep -q "^autodiagnosi: SUPERATA" "$CHECK/$report" || {
+            echo "::error::the launcher started a bundle that failed its self-check"; exit 1; }
 
-          # A digest of the right shape and the wrong value: the launcher has
-          # to reject it on the comparison, not on failing to parse it.
-          python - "$check/Tyche.exe.sha256" <<'PY'
+          # --- it waits for the window, and stops waiting when there is one ----
+          #
+          # The path a double-click takes, which nothing used to run. Reported
+          # from Proteus: the launcher sat out its whole timeout and then
+          # announced that the program had not opened a window, while the
+          # program was on screen. Only start.cmd waits; start.sh execs.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ( cd "$CHECK" && TYCHE_LAUNCH_TIMEOUT=90 cmd //c start.cmd ) > launcher.log 2>&1
+            status=$?
+            cat launcher.log || true
+
+            running=$(tasklist //FI "IMAGENAME eq $APP_NAME.exe" //NH 2>/dev/null \
+                        | grep -c "$APP_NAME" || true)
+            taskkill //F //IM "$APP_NAME.exe" > /dev/null 2>&1 || true
+
+            if [ "$running" -gt 0 ] && [ "$status" -ne 0 ]; then
+              echo "::error::the launcher gave up (exit $status) while $APP_NAME was running"
+              exit 1
+            fi
+            if [ "$status" -eq 0 ]; then
+              echo "the launcher waited for the window and closed on its own"
+            else
+              # Not a failure of the launcher: if the program never came up at
+              # all, there was no wait to exercise. Said out loud rather than
+              # passed over, because a check that quietly tests nothing is
+              # worse than no check.
+              echo "::warning::$APP_NAME opened no window on this runner (launcher exit $status)"
+            fi
+          fi
+
+          # --- it refuses a mismatched checksum --------------------------------
+          #
+          # A launcher that verifies nothing passes everything above on its
+          # own. The recorded digest is corrupted rather than the executable,
+          # and this is the copy, so nothing that ships is written to either
+          # way. A digest of the right shape and the wrong value: the launcher
+          # has to reject it on the comparison, not on failing to parse it.
+          python - "$sums" <<'PY'
           import pathlib
           import sys
 
@@ -276,28 +525,58 @@ jobs:
           path.write_text(f"{'f' * len(digest)}  {rest}", encoding="utf-8")
           PY
 
-          if ( cd "$check" && cmd //c start.cmd --version ) > /dev/null 2>&1; then
+          if ( cd "$CHECK" && $launch --version ) > /dev/null 2>&1; then
             echo "::error::the launcher started a binary that failed its checksum"
             exit 1
           fi
           echo "the launcher refuses a mismatched checksum"
-          rm -rf "$check"
+
+          rm -rf "$CHECK"
 
       - name: Package
         id: package
         shell: bash
         env:
+          STAGED: ${{ steps.staged.outputs.dir }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
-          name="Tyche-$VERSION-windows-x64.zip"
-          # 7z ships on the Windows runner and, unlike Compress-Archive, keeps
-          # the top-level folder. Run from inside dist/ so the archive unpacks
-          # to Tyche/ and not to dist/Tyche/.
-          ( cd dist && 7z a -tzip "../$name" Tyche > /dev/null )
-          ls -l "$name"
+          base="$APP_NAME-$VERSION-${{ matrix.asset }}"
+          case "$RUNNER_OS" in
+            Windows)
+              name="$base.zip"
+              # 7z ships on the Windows runner image and, unlike
+              # Compress-Archive, keeps the top-level folder. It keeps the
+              # *whole path* it is given, though, so run it from inside the
+              # staging directory: all three archives then unpack the same way.
+              ( cd "$(dirname "$STAGED")" \
+                  && 7z a -tzip "../$name" "$(basename "$STAGED")" > /dev/null )
+              ;;
+            macOS)
+              name="$base.zip"
+              # ditto keeps the symlinks and permission bits a Python
+              # framework build puts in the folder; zip flattens them.
+              ditto -c -k --keepParent "$STAGED" "$name"
+              ;;
+            *)
+              name="$base.tar.gz"
+              tar -czf "$name" -C "$(dirname "$STAGED")" "$(basename "$STAGED")"
+              ;;
+          esac
           echo "name=$name" >> "$GITHUB_OUTPUT"
+          ls -la "$name"
 
-      - name: Checksum the archive
+      # These builds are unsigned, so Windows tells whoever downloads one that
+      # the publisher is unknown and offers to not run it. Nothing here can
+      # remove that — only a code-signing certificate can — but a published
+      # checksum is what lets a cautious person answer the question the
+      # warning actually raises: is this the file the build produced, or
+      # something that replaced it on the way here.
+      #
+      # Computed with Python rather than sha256sum or certutil: setup-python
+      # has already run on all three runners, so one line means the same thing
+      # everywhere, and file_digest reads in chunks rather than pulling a
+      # large archive into memory.
+      - name: Record the checksum
         id: checksum
         shell: bash
         env:
@@ -305,17 +584,16 @@ jobs:
         run: |
           python - "$ASSET" <<'PY'
           import hashlib
-          import os
           import pathlib
           import sys
 
           archive = pathlib.Path(sys.argv[1])
           with archive.open("rb") as handle:
               digest = hashlib.file_digest(handle, "sha256").hexdigest()
-          line = f"{digest}  {archive.name}"
-          print(line)
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"line={line}\n")
+          pathlib.Path(f"{archive.name}.sha256").write_text(
+              f"{digest}  {archive.name}\n", encoding="utf-8"
+          )
+          print(f"{digest}  {archive.name}")
           PY
 
       - name: Upload to the release
@@ -326,85 +604,123 @@ jobs:
           ASSET: ${{ steps.package.outputs.name }}
         run: gh release upload "$TAG" "$ASSET" --clobber
 
-      # Into the notes rather than up as another asset. A checksum is worth
-      # something only if it arrives by a route the archive did not, and the
-      # notes GitHub renders on the release page are exactly such a route —
-      # it is the archive that gets copied around, not the page.
-      - name: Write the download section into the notes
-        shell: bash
+      # The digest goes up as a workflow artifact rather than a release asset.
+      # It still has to reach the release page — a checksum is only worth
+      # anything if it arrives by a route the archive did not — but three more
+      # files in the download list is not the way. The job below collects the
+      # three and writes them into the notes.
+      - name: Hand the checksum to the notes job
+        uses: actions/upload-artifact@v4
+        with:
+          name: checksum-${{ matrix.asset }}
+          path: ${{ steps.package.outputs.name }}.sha256
+          if-no-files-found: error
+          retention-days: 1
+
+  # Where the downloads and their checksums end up on the page.
+  #
+  # This runs after all three builds, because a partial list is worse than
+  # none: a reader who finds two of three has no way to tell whether the third
+  # is missing or merely unlisted.
+  notes:
+    name: Write the downloads into the notes
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: checksum-*
+          path: checksums
+          merge-multiple: true
+
+      - name: Write them into the release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.release.outputs.tag }}
-          ASSET: ${{ steps.package.outputs.name }}
-          LINE: ${{ steps.checksum.outputs.line }}
-          # Windows defaults Python's stdout to cp1252, and the notes contain
-          # an em dash and a warning sign. The first real run of this job wrote
-          # body.md correctly and then died on `print(body)` with a
-          # UnicodeEncodeError, so `gh release edit` never ran: the archive was
-          # attached and the download section was not. Everything the file
-          # itself does was already explicitly UTF-8; it was echoing it to the
-          # log that was not.
-          PYTHONIOENCODING: utf-8
-          PYTHONUTF8: "1"
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
           gh release view "$TAG" --json body --jq .body > body.md
-          python - body.md <<'PY'
+          python3 - body.md checksums <<'PY'
           import os
           import pathlib
+          import sys
 
-          asset = os.environ["ASSET"]
-          line = os.environ["LINE"]
-          # A *raw* f-string. The PowerShell line below contains `.\`, and in
-          # a normal string literal `\{` is an invalid escape sequence —
-          # Python warns and leaves the backslash, which happens to be what
-          # was wanted, but relying on a deprecation is not a plan.
-          block = rf"""<!-- download -->
+          body_path, digests = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          version = os.environ["VERSION"]
+
+          # Ordered by the archive's name, not by the digest, so the lines read
+          # in the same order as the table above them.
+          lines = sorted(
+              (path.read_text(encoding="utf-8").strip()
+               for path in digests.glob("*.sha256")),
+              key=lambda line: line.split("  ", 1)[-1],
+          )
+          if not lines:
+              raise SystemExit("no checksums were handed up by the build jobs")
+
+          rows = "\n".join(
+              f"| {label} | `Tyche-{version}-{asset}` |"
+              for label, asset in (
+                  ("Windows (x64)", "windows-x64.zip"),
+                  ("macOS (arm64)", "macos-arm64.zip"),
+                  ("Linux (x64)", "linux-x64.tar.gz"),
+              )
+          )
+          listing = "\n".join(lines)
+          block = f"""<!-- download -->
           ## Download
 
           | Piattaforma | File |
           |---|---|
-          | Windows (x64) | `{asset}` |
+          {rows}
 
-          Compilato su un runner Windows — niente cross-compilazione. Si
-          scompatta e si esegue: nessuna installazione e nessun Python
+          Ogni archivio è compilato sul suo sistema — niente cross-compilazione.
+          Si scompatta e si esegue: nessuna installazione e nessun Python
           necessario. Si estrae in un'unica cartella `Tyche/`; si avvia con
-          `start.cmd`, accanto al programma, che confronta l'eseguibile con
+          `start.cmd` su Windows, `start.command` su macOS e `start.sh` su
+          Linux, accanto al programma, che confronta l'eseguibile con
           l'impronta registrata quando l'archivio è stato costruito e si ferma
           invece di avviarlo se le due non coincidono. Il programma parte anche
           da solo.
 
-          Non esiste un pacchetto per macOS o Linux. Su entrambi l'esecuzione
-          dai sorgenti funziona benissimo, ed è descritta sopra.
+          Dentro ogni archivio, in `licenses/`, ci sono i testi di licenza di
+          tutto ciò che il pacchetto contiene, più l'inventario di quale
+          binario appartiene a quale progetto, generato dalla macchina che lo
+          ha costruito.
 
-          ### Windows dirà che l'editore è sconosciuto
+          ### Il sistema dirà che l'editore è sconosciuto
 
-          Ed è giusto così. Questo pacchetto non ha **alcun certificato di firma
-          del codice**, quindi SmartScreen mostra *"Windows ha protetto il PC"* e
-          offre solo **Non eseguire**. Cliccare su **Ulteriori informazioni** e
-          poi su **Esegui comunque**. Non c'è niente che non va nel download:
-          SmartScreen sta segnalando di non aver mai visto questo editore, il che
-          è vero.
+          Ed è giusto così. Questi pacchetti non hanno **alcun certificato di
+          firma del codice**, quindi Windows mostra *"Windows ha protetto il
+          PC"* (**Ulteriori informazioni** → **Esegui comunque**) e macOS
+          rifiuta il primo avvio (Ctrl-clic sull'eseguibile → **Apri**). Non
+          c'è niente che non va nel download: il sistema sta segnalando di non
+          aver mai visto questo editore, il che è vero.
 
           Siccome quell'avviso chiede di fidarsi di un file che non si può
-          controllare guardandolo, ecco lo SHA-256 dell'archivio così come lo ha
-          prodotto la macchina che lo ha costruito. In PowerShell:
-
-          ```powershell
-          Get-FileHash .\{asset} -Algorithm SHA256
-          ```
+          controllare guardandolo, ecco lo SHA-256 di ogni archivio così come
+          lo ha prodotto la macchina che lo ha costruito. L'impronta sta qui e
+          non dentro l'archivio di proposito: una che viaggia insieme al file
+          che descrive può solo dire che il file è integro.
 
           ```
-          {line}
+          {listing}
           ```
 
-          L'impronta sta qui e non dentro l'archivio di proposito: una che viaggia
-          insieme al file che descrive può solo dire che il file è integro.
+          In PowerShell: `Get-FileHash <file> -Algorithm SHA256`. Su macOS e
+          Linux: `shasum -a 256 <file>`.
           <!-- /download -->"""
-          block = "\n".join(l[10:] if l.startswith(" " * 10) else l for l in block.splitlines())
+          block = "\n".join(
+              line[10:] if line.startswith(" " * 10) else line
+              for line in block.splitlines()
+          )
 
-          path = pathlib.Path("body.md")
-          body = path.read_text(encoding="utf-8")
+          body = body_path.read_text(encoding="utf-8")
           head, marker, rest = body.partition("<!-- download -->")
           if marker:
               # A re-run rewrites its own block rather than stacking another.
@@ -412,22 +728,23 @@ jobs:
               body = head + block + tail
           else:
               body = body.rstrip("\n") + "\n\n" + block + "\n"
-          path.write_text(body, encoding="utf-8")
-          print(f"wrote {len(body)} characters to {path}")
+
+          body_path.write_text(body, encoding="utf-8")
+          print(body)
           PY
           gh release edit "$TAG" --notes-file body.md
 
       # Deliberately the last step of the last job, and deliberately not
-      # `if: always()`. This repository keeps exactly one release — the
-      # current one — because it is a private single-user tool where an older
-      # build is never the one to download, and the owner had been deleting
-      # the previous release and its tag by hand after every publish.
+      # `if: always()`. This repository keeps exactly one release — the current
+      # one — because it is a private single-user tool where an older build is
+      # never the one to download, and the owner had been deleting the previous
+      # release and its tag by hand after every publish.
       #
       # Everything about the ordering here is a safety property:
       #
-      # - it runs after the archive is uploaded and the notes are rewritten,
-      #   so a failure anywhere earlier leaves the *old* release standing
-      #   rather than deleting it in favour of a broken new one;
+      # - it runs after all three archives are uploaded and the notes are
+      #   rewritten, so a failure anywhere earlier leaves the *old* release
+      #   standing rather than deleting it in favour of a broken new one;
       # - it refuses to delete anything unless the release it is keeping
       #   actually carries an asset, because an upload that failed quietly
       #   would otherwise cost every downloadable version at once;

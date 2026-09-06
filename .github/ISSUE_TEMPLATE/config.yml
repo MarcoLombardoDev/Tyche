@@ -1,0 +1,25 @@
+# Routes non-bug traffic away from public Issues.
+#
+# Some traffic does not belong in a public thread, and above all a security
+# report does not. The new-issue chooser offers those as email links.
+#
+# There is no CLA entry here, deliberately: Tyche has no CLA, because it has no
+# commercial tier to relicense a contribution into. A chooser offering to
+# answer questions about a document that does not exist would be the first
+# thing a contributor read.
+blank_issues_enabled: true
+contact_links:
+  - name: ⚖️ Domande sulla licenza
+    url: mailto:marco.lombardo@gmail.com?subject=Tyche
+    about: >-
+      Tyche è AGPL-3.0-or-later e non è offerto ad altre condizioni: nessuna
+      licenza commerciale, nessun CLA. I pesi di TimesFM sono un'altra cosa —
+      sono di Google, sotto una licenza non commerciale che Tyche non può
+      cambiare. Vedi THIRD-PARTY-LICENSES.md prima di chiedere di un uso in
+      produzione.
+  - name: 🔐 Vulnerabilità di sicurezza
+    url: mailto:marco.lombardo@gmail.com?subject=Tyche%20security%20report
+    about: >-
+      Segnalala in privato. Tyche scrive e legge un archivio sul disco di chi
+      lo esegue e scarica dati dalla rete: per un problema di sicurezza non
+      aprire una issue pubblica.

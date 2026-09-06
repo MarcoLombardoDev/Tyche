@@ -48,6 +48,7 @@ import customtkinter as ctk
 
 from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
+from core.fonts import ui_font_family
 from core.localise import it_date, it_number
 from core.version import APP_NAME, APP_TITLE, __version__
 from gui.archive_panel import ArchivePanel
@@ -94,14 +95,57 @@ class TycheApp(ctk.CTk):
         self._busy = False
 
         self.title(f"{APP_TITLE}  ·  v{__version__}")
+        # The size the window falls back to: what it gets if maximising is
+        # refused, and what it returns to when the user un-maximises it.
         self.geometry("1280x840")
         self.minsize(1040, 680)
         self.configure(fg_color=BG_ROOT)
 
         self._build()
         self._set_window_icon()
+        # After the first idle pass, not here: on X11 the window has no real
+        # size until it has been mapped, so a maximise attempted now measures
+        # 1x1 and concludes it failed. Every product in this family does it
+        # the same way and for the same reason.
+        self.after(250, self._maximize)
         self._poll_queue()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _maximize(self) -> None:
+        """Maximises the window in a cross-platform way.
+
+        Each attempt is measured rather than trusted. Argus's first version
+        stopped at the first call that did not raise, and not raising is not
+        the same as having worked: with no window manager running, both of the
+        first two are accepted in silence and change nothing, and the chain
+        then never reaches the one that would have worked.
+        """
+        def filled() -> bool:
+            try:
+                self.update_idletasks()
+                return (
+                    self.winfo_width() >= self.winfo_screenwidth() * 0.9
+                    and self.winfo_height() >= self.winfo_screenheight() * 0.8
+                )
+            except Exception:  # noqa: BLE001 — a wrong size must not stop start-up
+                return False
+
+        with contextlib.suppress(Exception):
+            self.update_idletasks()
+
+        for attempt in (
+            lambda: self.state("zoomed"),
+            lambda: self.attributes("-zoomed", True),
+            lambda: self.geometry(
+                f"{self.winfo_screenwidth()}x{self.winfo_screenheight()}+0+0"
+            ),
+        ):
+            try:
+                attempt()
+            except Exception:  # noqa: BLE001
+                continue
+            if filled():
+                return
 
     def _set_window_icon(self) -> None:
         """Give the window the application icon.
@@ -148,11 +192,11 @@ class TycheApp(ctk.CTk):
 
         ctk.CTkLabel(
             bar, text=APP_NAME.upper(), text_color=ACCENT,
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=20, weight="bold"),
         ).pack(side="left", padx=(18, 6))
         ctk.CTkLabel(
             bar, text="Analisi dell'archivio SuperEnalotto", text_color=MUTED,
-            font=ctk.CTkFont(size=12),
+            font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(side="left", padx=(0, 20))
 
         self._nav: dict[str, ctk.CTkButton] = {}

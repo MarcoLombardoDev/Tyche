@@ -56,8 +56,9 @@ metodo al posto della sesta.
 
 ## Eseguirlo dai sorgenti
 
-Sotto è allegato un pacchetto per Windows; su tutto il resto si esegue dai
-sorgenti.
+Sotto sono allegati i pacchetti per Windows, macOS e Linux, ognuno compilato
+sul proprio sistema. Da qui si esegue dai sorgenti, che su qualunque
+piattaforma resta il modo più leggero.
 
 ```
 git clone https://github.com/MarcoLombardoDev/Tyche.git
@@ -100,16 +101,20 @@ Sul commit taggato, prima che la release fosse creata:
 - un controllo che la versione dichiarata dal programma coincida con il tag di
   questa pagina.
 
-E sul pacchetto Windows, prima che venisse allegato:
+E su ognuno dei tre pacchetti, prima che venisse allegato:
 
-- avvia Tk per davvero e si presenta sul backend `win32`, costruisce le matrici
+- avvia Tk per davvero e si presenta sul backend giusto per il suo sistema
+  (`win32`, `aqua`, `x11`), costruisce le matrici
   delle caratteristiche, esegue i cinque test di indipendenza e fa un giro
   completo di scrittura e rilettura di un archivio con il proprio codice di
   persistenza — questo è `--self-check`, e `--version` da solo non dimostrerebbe
   niente di tutto ciò;
 - TimesFM è davvero dentro il pacchetto, non silenziosamente perduto;
 - l'avviatore fa partire il programma, e si rifiuta di farlo quando l'impronta
-  registrata non corrisponde.
+  registrata non corrisponde;
+- i testi di licenza di tutto ciò che il pacchetto contiene sono dentro
+  l'archivio, in `licenses/`, insieme all'inventario di quale binario
+  appartiene a quale progetto, generato dalla macchina che lo ha costruito.
 
 Questa pagina è l'unica release pubblicata: finita la build, il workflow
 cancella la precedente e il suo tag. `CHANGELOG.md` nel repository conserva la

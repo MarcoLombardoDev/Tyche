@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 199 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 233, GUI included
+python -m pytest tests/ -q                                   # 309, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 344, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `199 passed,
-1 skipped` and has tested no interface at all. The difference from Argus is
+or no `tkinter` — a bare `pytest tests/` on a headless box reports
+`309 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -67,7 +67,8 @@ verified. Argus should probably grow the same switch.
 said 187 where the suite ran 194, because several sessions incremented them
 with a `sed` instead of running the suite and reading the number. Measure them
 when you touch them. The load-bearing part of that line is not the count
-anyway, it is the `1 skipped`: that is the whole GUI suite, and it is what
+anyway, it is what gets skipped: the whole GUI suite, plus one font check in
+`tests/test_packaging.py` that also needs a display. That is what
 `TYCHE_REQUIRE_GUI=1` exists to turn into a failure.
 
 `tkinter` is an OS package and it must match the interpreter actually running
@@ -162,17 +163,20 @@ Three things that are load-bearing and easy to undo by accident:
 The owner wants only the latest published: this is a private single-user tool
 where an older build is never the one to download, and the previous release
 and its tag were being deleted by hand after every publish. 0.3.3 automated
-that as the final step of the `windows` job.
+that as the final step of the release run.
 
 Everything about where that step sits is a safety property, and every one of
 them has a test:
 
 - **It is the last step of the last job, and not `if: always()`.** A failure
   anywhere earlier leaves the *old* release standing rather than replacing it
-  with a broken new one. `test_the_cleanup_does_not_run_when_something_failed`
-  and `test_the_cleanup_runs_after_the_archive_is_uploaded` both fail if that
-  changes — checked by moving the step before the upload and by adding
-  `if: always()`.
+  with a broken new one. Since 0.8.0 "the last job" is `notes`, which waits on
+  all three builds: with a matrix, "after the upload" is a job dependency and
+  not a step order, and putting the cleanup in a build job would let the first
+  runner to finish delete the old release while the other two were still
+  uploading. `test_the_cleanup_does_not_run_when_something_failed` and
+  `test_the_cleanup_runs_after_every_archive_is_uploaded` both fail if that
+  changes.
 - **It refuses to delete anything unless the release it is keeping carries an
   asset.** An upload that failed quietly would otherwise cost every
   downloadable version at once.
@@ -181,11 +185,29 @@ them has a test:
   being done by hand. `CHANGELOG.md` keeps every version's section, so the
   project's record does not depend on those pages surviving.
 
-**One binary, for Windows**, built by the `windows` job after the tests pass.
-Argus builds three; Tyche builds one because running from source is a normal
-thing to do on macOS and Linux and each extra platform is another unsigned
-160 MB archive to smoke-test and keep honest. Argus's `release.yml` is the
-worked example if that changes.
+**Three archives**, built by the `build` matrix after the tests pass — Windows,
+macOS and Linux, each on its own runner, because PyInstaller does not
+cross-compile.
+
+Tyche built Windows alone until 0.8.0, and the reasoning is worth keeping
+because it was not wrong: each archive is around 160 MB with PyTorch in it,
+none of them is signed, and running from source is a normal thing to do on
+macOS and Linux. What changed is that the other five products all publish
+three, and Argus — which carries the same torch and timesfm dependencies —
+does it without trouble. Uniformity across the six was judged worth the runner
+minutes.
+
+Two consequences of that decision are load-bearing:
+
+- **No macOS `.app` bundle.** `core/paths.py` writes `data/` and `config/`
+  beside `sys.executable`, which inside an `.app` would be inside the bundle
+  itself. A folder build on all three keeps one rule about where user data
+  goes. Argus reaches the same conclusion for the same reason.
+- **The download section of the notes is written once, by the `notes` job,
+  after all three uploads.** Three runners each rewriting one release body is
+  three runners racing: the last to finish wins and the other two archives
+  vanish from the page. `tests/test_release_workflow.py` fails if a build step
+  ever writes `<!-- download -->` again.
 
 v0.1.0 is the measurement to size future changes against: dependency install
 2 minutes, PyInstaller 2m21s, smoke test and launcher checks 15 seconds, zip
@@ -242,15 +264,89 @@ dependency like `docs/generate_screenshots.py`, deliberately absent from
 `requirements.txt`. Committing them rather than generating at build time is
 what stops a release depending on which fonts a runner happens to have.
 
-**Two mechanisms, both needed.** `Tyche.spec` passes `icon=` so the .exe
-carries the resource Explorer draws before the program runs; `gui/app.py`
+**Two mechanisms, both needed.** `Tyche.spec` passes `icon=` so the executable
+carries the resource a file manager draws before the program runs; `gui/app.py`
 sets the *window* icon at runtime with `iconphoto` (the PNG, everywhere) and
 `iconbitmap` (the .ico, Windows only). Setting one does not do the other.
+
+**And the spec's `icon=` is chosen per platform, which it has to be.**
+PyInstaller's `normalize_icon_type` accepts only `.icns` on macOS and only
+`.ico` on Windows, and converts anything else *if Pillow happens to be
+installed* — which Tyche does not require at build time. A hardcoded `.ico` is
+what killed XIP's first macOS release: Windows and Linux published and the
+macOS job died on the last line of the spec. `_ICON_FOR_EXE` maps
+`darwin → .icns`, `win32 → .ico` and everything else to `None`, since
+PyInstaller ignores an icon on Linux and warns about it on every build.
+`tests/test_release_workflow.py` parses the committed `.icns` back — the
+container's declared length, each entry's declared length, and that every
+payload is really a PNG — so a file with the right name and the wrong bytes
+fails in the suite rather than on a runner.
 
 The PhotoImage is kept on the instance because Tk holds only a weak reference
 to it: let it be collected and the window shows a blank icon with nothing
 raised. The two attempts are also deliberately independent — one `try` around
 both would let a failing `iconbitmap` take the PNG fallback down with it.
+
+## What travels in the archive besides the program
+
+Three things, and none of them was there before 0.8.0:
+
+- **`licenses/`** — the terms of everything in the bundle. Tyche's own AGPL as
+  `Tyche-LICENSE.txt`, CPython's and Tcl/Tk's from `licenses/` in this
+  repository, each wheel's own copy read out of its installed metadata, and on
+  Linux the build machine's `debian/copyright` for every system library
+  PyInstaller collected. `tools/collect_licences.py` assembles it.
+
+  Every archive up to 0.3.3 shipped **no licence file at all**, not even
+  Tyche's. That is a straightforward compliance defect: PyTorch and NumPy
+  require their notices be reproduced in a binary distribution, the LGPL
+  system libraries require a copy of their licence to accompany the object
+  code, and the AGPL requires the same of Tyche. `THIRD-PARTY-LICENSES.md` in
+  the repository does not fix it — somebody who downloads a zip never sees it.
+
+- **`licenses/THIRD-PARTY-LICENSES-<platform>.md`** — the inventory of which
+  binary belongs to which project, written by `tools/licence_inventory.py` on
+  the runner that built that archive. It has to be that machine: PyInstaller
+  collects whatever the linker there resolved. Run with `--licences` pointed
+  at the tree about to be packaged, so a distribution that puts a binary in
+  the bundle and no notice in it is reported.
+
+  **Exit code 2 means "written, and some rows need a human".** Anything else
+  means the script did not finish, and the job fails. Argus's first release
+  run swallowed exactly that: the script raised on every machine without
+  dpkg, `|| echo ::warning::` turned the crash into a warning, and two
+  platforms published with no inventory in them at all.
+
+- **the launcher and the executable's digest** — `start.cmd` on Windows,
+  `start.sh` on Linux, the same `start.sh` as `start.command` on macOS so the
+  Finder runs it on a double-click. It recomputes the digest and refuses to
+  start a binary that does not match. That catches a truncated download or a
+  half-finished unpack, not tampering: the digest travels in the same archive
+  as the file it describes. The one that answers tampering is in the release
+  notes, because it arrives by a route the archive did not.
+
+Both halves of the launcher are checked in the release job, on a copy — some
+programs create folders next to themselves on first run, and a check that
+leaves its droppings inside the archive has broken the thing it was
+protecting.
+
+## The interface font
+
+`core/fonts.py` is **a copy of Argus's, not a variant**, like
+`tools/make_icon.py`. Every `ctk.CTkFont(...)` passes
+`family=ui_font_family()`; the one exception is the monospace block in
+`gui/widgets.py`, which asks for `monospace` on purpose.
+
+Before 0.8.0 nothing named a family, so every label took CustomTkinter's
+default — Roboto on Linux, the system font elsewhere. That was invisible while
+Tyche shipped to Windows only. It stopped being invisible the moment the same
+window had to look like the same program on three platforms.
+
+`ui_font_family()` resolves once and remembers: `families()` walks the whole
+font database and this is asked for on every label built. It falls back to
+whatever Tk itself would have used, which is the right answer for a machine
+that has none of the five — better a font the system chose than a name it will
+silently substitute.
 
 ## Screenshots
 
@@ -871,9 +967,16 @@ that nothing reads back.
 ## Licensing
 
 **AGPL-3.0-or-later, and that is the whole of it.** No commercial tier, no
-CLA, none of the Argus/Iris/Proteus dual-licensing apparatus. Every source
+CLA, none of the Orion/Iris/Proteus dual-licensing apparatus. Every source
 file carries `SPDX-License-Identifier: AGPL-3.0-or-later`; new files carry it
 too.
+
+Argus used to be on that list and no longer is: it withdrew its commercial
+licence in 1.2.0, and for Tyche's reason — the forecast runs on weights
+licensed for non-commercial use only, so the offer could not be kept. Argus
+kept its CLA; Tyche has none, and `tests/test_docs.py` and
+`tests/test_packaging.py` both fail if a `CLA.md` appears or if a template
+starts asking a contributor to agree to one.
 
 0.7.0 made that change, and the reasoning is worth keeping because the request
 that produced it contained a misconception it would be easy to reintroduce.
