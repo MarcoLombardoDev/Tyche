@@ -26,6 +26,7 @@ publishes the releases.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -675,8 +676,17 @@ def test_ci_greps_for_what_the_program_actually_says_with_no_archive():
     looking for English the program no longer prints, and the build went red on
     a step that was testing nothing. The literal lives in ``main.NO_ARCHIVE``;
     this asserts the workflow is still looking for it.
+
+    Read out of the source rather than imported. This module is one of the two
+    the ``docs`` job runs with pytest and PyYAML and nothing else, precisely so
+    that it answers in seconds and cannot be broken by a dependency — and
+    ``import main`` pulls in numpy through ``core.features``, which turned the
+    whole job red the first time it ran.
     """
-    from main import NO_ARCHIVE
+    source = (REPO / "main.py").read_text(encoding="utf-8")
+    match = re.search(r'^NO_ARCHIVE\s*=\s*"([^"]+)"', source, re.MULTILINE)
+    assert match, "main.py no longer defines NO_ARCHIVE as a plain string literal"
+    NO_ARCHIVE = match.group(1)
 
     text = "\n".join(
         s.get("run", "") for s in load(CI_WORKFLOW)["jobs"]["test"]["steps"]

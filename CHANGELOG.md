@@ -43,7 +43,10 @@ Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
   `tests/test_third_party_licences.py`, che erano gli unici tre guardiani
   condivisi che Tyche non aveva.
 - La CI esegue la suite anche su Windows, e i guardiani sui documenti in un
-  job a parte che risponde in venti secondi.
+  job a parte che risponde in venti secondi con pytest e PyYAML soli. Perché
+  ci riesca, il test che confronta il messaggio «Nessun archivio in» con
+  quello che la CI cerca legge la costante dal sorgente invece di importare
+  `main`, che tira dentro numpy.
 
 ### Modificato
 
