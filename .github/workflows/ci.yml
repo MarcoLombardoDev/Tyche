@@ -262,6 +262,85 @@ jobs:
           print(f"\n{elapsed:.0f}s for {scored} draws — {elapsed / scored:.1f}s per model call")
           PY
 
+  checkpoint-licence:
+    # A diagnostic, not a test, and manual only.
+    #
+    # The `timesfm` *package* is Apache-2.0. The *weights* each checkpoint
+    # downloads carry their own terms, and Tyche's documentation records that
+    # google/timesfm-3.0-pytorch is under timesfm-non-commercial-license-v1.0
+    # — non-commercial, non-production. That is fine for a private tool and
+    # decisive for anything sold, so it is the single fact any licensing
+    # decision about this program turns on.
+    #
+    # It has never been checked from this repository. Hugging Face is blocked
+    # by the egress policy of the environment Tyche was written in (403 through
+    # the proxy), so the claim is documentation quoting documentation. A GitHub
+    # runner has the network to ask the model card directly.
+    #
+    # Prints rather than asserts. A licence that changed would be news, not a
+    # build failure, and the answer wanted here is a string a human reads.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - name: What licence does each checkpoint declare?
+        run: |
+          python - <<'PY'
+          import json
+
+          import requests
+
+          # The one Tyche uses, the one Argus used before 1.1.0, and the
+          # 200M 3.0 in case a smaller commercially-usable option exists.
+          CHECKPOINTS = (
+              "google/timesfm-3.0-pytorch",
+              "google/timesfm-2.5-200m-pytorch",
+              "google/timesfm-1.0-200m-pytorch",
+          )
+
+          for repo in CHECKPOINTS:
+              print(f"\n=== {repo}")
+              try:
+                  r = requests.get(
+                      f"https://huggingface.co/api/models/{repo}",
+                      timeout=30,
+                      headers={"User-Agent": "Tyche (licence check)"},
+                  )
+              except Exception as exc:
+                  print(f"  unreachable: {exc}")
+                  continue
+              print(f"  HTTP {r.status_code}")
+              if r.status_code != 200:
+                  # 401 here means gated: the terms have to be accepted on the
+                  # site before the weights download at all, which is itself
+                  # part of the answer.
+                  print(f"  {r.text[:200]}")
+                  continue
+              data = r.json()
+              card = data.get("cardData") or {}
+              print(f"  cardData.license      : {card.get('license')}")
+              print(f"  cardData.license_name : {card.get('license_name')}")
+              print(f"  cardData.license_link : {card.get('license_link')}")
+              print(f"  gated                 : {data.get('gated')}")
+              licence_tags = [t for t in data.get("tags", []) if t.startswith("license")]
+              print(f"  licence tags          : {licence_tags}")
+              files = [s.get("rfilename") for s in data.get("siblings", []) or []]
+              print(f"  licence files in repo : "
+                    f"{[f for f in files if f and 'LICENSE' in f.upper()]}")
+
+          print(
+              "\nRead the 'license' field, not this job's exit code: it prints "
+              "and never fails.\nA non-commercial licence on the checkpoint "
+              "Tyche defaults to is the fact that\ndecides whether this program "
+              "can carry a commercial licence of its own."
+          )
+          PY
+
   scraper-recon:
     # A diagnostic, not a test, and manual only.
     #

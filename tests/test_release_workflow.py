@@ -458,6 +458,24 @@ def test_the_cleanup_never_deletes_the_release_it_just_published():
 # CI and release must not drift apart
 # ─────────────────────────────────────────────────────────────
 
+def test_the_licence_check_is_manual_and_cannot_fail_a_build():
+    """A diagnostic that asks a third party a question is not a test.
+
+    The checkpoint's licence is a fact about someone else's model card. It can
+    change without anything in this repository changing, and a scheduled job
+    that turned that into a red build would be reporting Google's paperwork as
+    a Tyche regression. Manual dispatch, prints, never asserts.
+    """
+    job = load(CI_WORKFLOW)["jobs"]["checkpoint-licence"]
+    assert job["if"] == "github.event_name == 'workflow_dispatch'"
+    run = "\n".join(s.get("run", "") for s in job["steps"])
+    assert "assert" not in run, "the licence check must report, not assert"
+    # The three checkpoints that matter: Tyche's default, the one Argus used
+    # before 1.1.0, and the older 200M.
+    for checkpoint in ("timesfm-3.0-pytorch", "timesfm-2.5-200m-pytorch"):
+        assert checkpoint in run
+
+
 def test_ci_greps_for_what_the_program_actually_says_with_no_archive():
     """A grep in a workflow is a copy of a string the program owns.
 
