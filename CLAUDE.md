@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 184 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 222, GUI included
+python -m pytest tests/ -q                                   # 187 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 226, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `184 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `187 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -501,6 +501,36 @@ page for whatever the caller runs next.
   reads it at all, which is the cheap half and the half that was missing.
   `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
   mirror: declared, read, but unreachable from the interface.
+
+## Why one combination is the default
+
+The owner asked why anyone would generate more than one combination, since the
+first is the six numbers the method ranks highest. He was right, and the
+answer is a measurement rather than an argument. Combination *k* is
+`ranked[k-1 : k-1+size]` — the method's later preferences — so over 1,000 real
+draws and against a forecaster with a deliberately leaked edge:
+
+| | comb. 1 | comb. 2 | comb. 3 | comb. 4 | comb. 5 |
+|---|---|---|---|---|---|
+| `frequenza`, real archive | 0.393 | 0.377 | 0.375 | 0.352 | 0.358 |
+| a forecaster with a real edge | **1.486** | 0.776 | 0.417 | 0.313 | 0.304 |
+
+On the real archive the five are indistinguishable — the differences are
+inside one standard error — because a method that knows nothing has no
+preferences worth respecting. Against genuine skill the first combination
+scores nearly five times the fifth, which by then is barely above chance.
+
+**So more than one combination is never better per euro, and under real skill
+it is strictly worse.** The default was 5 and is now 1, and the panel says
+what the extra ones are. `test_the_extra_combinations_are_the_methods_discarded_choices`
+pins the second row of that table.
+
+This also settles the related question: if a player wants to stake more than
+one column, a *system* is the better-argued way to do it than more
+combinations. A system of seven stays at the top of the ranking; five sliding
+combinations reach down to rank ten. Neither improves the return per euro —
+nothing does — but only one of them spends the extra money on numbers the
+method actually liked.
 
 ## Systems, the SuperStar, and the one ratio that must not move
 

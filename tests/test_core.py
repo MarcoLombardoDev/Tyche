@@ -2010,5 +2010,70 @@ def test_an_empty_prediction_costs_nothing_rather_than_raising():
     assert ticket_cost([]).total == 0.0
 
 
+def test_the_extra_combinations_are_the_methods_discarded_choices():
+    """Why the default is one combination, asserted rather than asserted at.
+
+    Combination k is ranked[k-1 : k-1+size] — the method's later preferences.
+    Against a forecaster that genuinely knows something, the first combination
+    must beat the fifth by a wide margin, because the fifth is built from
+    numbers the method ranked below the ones it discarded. On the real archive
+    the two are indistinguishable, which is the same fact seen from the other
+    side: a method that knows nothing has no preferences worth respecting.
+
+    So more than one combination is never better per euro, and under real skill
+    it is worse. That is a fact about the ranking, not about this archive.
+    """
+    import random
+
+    from core.archive import ALL_NUMBERS
+    from core.predictor import rank_numbers
+
+    draws = random_archive(500, seed=41)
+    scored, size = 300, 6
+    totals = [0, 0]
+    for i in range(len(draws) - scored, len(draws)):
+        rng = random.Random(i)
+        # A forecaster with a real edge: a fifth of the six leaked to the top.
+        scores = {n: rng.random() for n in ALL_NUMBERS}
+        for n in draws[i].numbers:
+            if rng.random() < 0.20:
+                scores[n] += 1.0
+        ranked = rank_numbers(scores)
+        actual = set(draws[i].numbers)
+        for slot, offset in enumerate((0, 4)):          # combinations 1 and 5
+            totals[slot] += len(actual & set(ranked[offset:offset + size]))
+
+    first, fifth = (v / scored for v in totals)
+    assert first > fifth * 2, (
+        f"the first combination should dominate: {first:.3f} vs {fifth:.3f}"
+    )
+
+
+def test_one_combination_is_the_shipped_default():
+    """The default is a recommendation, and this one has a measurement behind it."""
+    from core.data_manager import DEFAULT_SETTINGS
+
+    assert DEFAULT_SETTINGS["combinations"] == 1
+
+
+def test_the_cost_line_agrees_with_itself_in_number(cli, capsys):
+    """"1 colonne" is the kind of thing a reader notices and nothing catches."""
+    import core.data_manager as dm
+
+    settings = dm.load_settings()
+    settings["combinations"] = 1
+    settings["prediction_size"] = 6
+    dm.save_settings(settings)
+
+    _, out = _run(cli, ["--forecast", "frequenza"], capsys)
+    assert "1 colonna" in out
+    assert "1 colonne" not in out
+
+    settings["combinations"] = 3
+    dm.save_settings(settings)
+    _, out = _run(cli, ["--forecast", "frequenza"], capsys)
+    assert "3 colonne" in out
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

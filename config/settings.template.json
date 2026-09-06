@@ -9,7 +9,7 @@
   "html_archive_url": "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}",
   "auto_repair_labels": true,
   "prediction_method": "timesfm",
-  "combinations": 5,
+  "combinations": 1,
   "prediction_size": 6,
   "predict_superstar": false,
   "column_price": 1.0,

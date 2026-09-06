@@ -279,6 +279,19 @@ una colonna vincente ma un 6, ventiquattro 5 e novanta 4 — perché ogni colonn
 che contiene cinque dei sei è anch'essa sulla schedina. La scheda Previsione
 stampa quella tabella.
 
+**Perché una combinazione sola.** La seconda combinazione è la settima scelta
+del metodo al posto della sesta, la terza l'ottava, e così via scendendo lungo
+la graduatoria. Su 1.000 estrazioni reali le cinque combinazioni segnano lo
+stesso punteggio — 0,393 contro 0,358, dentro un errore standard — perché un
+metodo che non sa niente non ha preferenze da rispettare. Ma contro un
+previsore a cui è stato dato un vantaggio vero, la prima combinazione segna
+1,486 centri per estrazione e la quinta 0,304, appena sopra il caso.
+
+Quindi più di una combinazione non vale mai di più per euro speso, e se il
+metodo sapesse qualcosa varrebbe di meno. Il valore predefinito è **1**. Se si
+vuole comunque puntare più di una colonna, un sistema è il modo meglio
+argomentato per farlo: resta in cima alla graduatoria invece di scendere.
+
 **Quanto costa.** La scheda Previsione stampa il costo della giocata che sta
 mostrando, ai prezzi che si impostano — un euro a colonna e cinquanta centesimi
 per il SuperStar, che si aggiunge a *ogni* colonna e non una volta sola. Sono
@@ -395,8 +408,8 @@ quello che fa `core/forecaster.py`.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 184 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 222, GUI compresa
+python -m pytest tests/ -q                                    # 187 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 226, GUI compresa
 python -m ruff check .
 ```
 

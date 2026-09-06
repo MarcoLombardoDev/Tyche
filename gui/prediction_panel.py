@@ -22,7 +22,7 @@ import customtkinter as ctk
 from core.data_manager import log_prediction
 from core.features import DEFAULT_WINDOW
 from core.forecaster import TimesFMForecaster
-from core.localise import it_date, it_number
+from core.localise import it_count, it_date, it_number
 from core.predictor import (
     METHODS,
     SUPERSTAR_ODDS,
@@ -55,9 +55,16 @@ def _cost_lines(prediction, cost) -> list[str]:
     lines = [
         f"Costo della giocata: {it_number(cost.total, 2)} euro"
         + (" (SuperStar compreso)." if cost.superstar else "."),
-        f"  {cost.plays} giocate da {cost.size} numeri = "
-        f"{it_number(cost.columns_paid)} colonne.",
+        f"  {it_count(cost.plays, 'giocata', 'giocate')} da {cost.size} numeri = "
+        f"{it_count(cost.columns_paid, 'colonna', 'colonne')}.",
     ]
+    if cost.plays > 1:
+        lines.append(
+            f"  Le combinazioni oltre la prima sono le scelte successive del "
+            f"metodo — la {cost.plays}ª è la sua {cost.size + cost.plays - 1}ª "
+            "preferenza. Non valgono di più per euro speso, e se il metodo "
+            "sapesse qualcosa varrebbero di meno."
+        )
     if cost.duplicated:
         share = cost.duplicated / cost.columns_paid
         lines += [
@@ -131,7 +138,10 @@ class PredictionPanel(ctk.CTkFrame):
             "l'estrazione da prevedere è indipendente da tutto ciò che guardano. "
             "Il passo 3 lo misura sui dati veri.\n"
             "Quanti numeri per combinazione e se giocare il SuperStar si scelgono "
-            "nelle Impostazioni.",
+            "nelle Impostazioni.\n"
+            "Una combinazione sola è quasi sempre la scelta giusta: la seconda è la "
+            "settima scelta del metodo al posto della sesta, la terza l'ottava, e "
+            "così via scendendo lungo la graduatoria.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
@@ -148,7 +158,7 @@ class PredictionPanel(ctk.CTkFrame):
 
         ctk.CTkLabel(row, text="Combinazioni", text_color=MUTED).pack(side="left", padx=(0, 6))
         self.count = ctk.CTkOptionMenu(row, width=70, values=[str(i) for i in range(1, 11)])
-        self.count.set(str(self.app.settings.get("combinations", 5)))
+        self.count.set(str(self.app.settings.get("combinations", 1)))
         self.count.pack(side="left", padx=(0, 16))
 
         ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")

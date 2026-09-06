@@ -73,7 +73,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
 
     # --- Prediction ---
     "prediction_method": "timesfm",   # "timesfm" | "frequenza" | "ritardo" | "casuale"
-    "combinations": 5,
+    # One, and the default is the argument. Combination 2 is the method's 7th
+    # choice instead of its 6th, 3 its 8th, and so on down the ranking. If a
+    # method knows nothing they all score the same and each is another euro
+    # for the same nothing; if a method knew something the extra ones would be
+    # strictly worse. Measured both ways — see CLAUDE.md.
+    "combinations": 1,
     # Numbers per combination. Six is a plain column; more is a sistema
     # integrale covering C(size, 6) columns, which is also what it costs.
     # core.predictor caps it at 12 — 924 columns — because the cost climbs

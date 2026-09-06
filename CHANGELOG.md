@@ -12,6 +12,27 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.6.1] — 2026-09-06
+
+Una combinazione sola, e il perché misurato.
+
+### Cambiato
+
+- **Il valore predefinito delle combinazioni passa da 5 a 1.** La seconda
+  combinazione è la settima scelta del metodo al posto della sesta, la terza
+  l'ottava, e così via: sono le preferenze che il metodo aveva scartato.
+- Su 1.000 estrazioni reali le cinque combinazioni segnano lo stesso
+  punteggio, perché un metodo che non sa niente non ha preferenze da
+  rispettare. Contro un previsore a cui è stato dato un vantaggio vero, però,
+  la prima segna 1,486 centri per estrazione e la quinta 0,304 — appena sopra
+  il caso.
+- **Quindi più di una combinazione non vale mai di più per euro speso, e se il
+  metodo sapesse qualcosa varrebbe di meno.** La scheda Previsione lo dice
+  adesso, invece di offrire cinque combinazioni senza spiegare cosa siano.
+- Chi vuole comunque puntare più di una colonna trova la risposta meglio
+  argomentata in un sistema, che resta in cima alla graduatoria invece di
+  scendere lungo di essa.
+
 ## [0.6.0] — 2026-09-05
 
 Quanto costa la giocata, e dove finiscono i soldi.

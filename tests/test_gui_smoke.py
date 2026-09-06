@@ -376,6 +376,9 @@ def test_the_prediction_prints_what_the_ticket_costs(app):
     app.settings["column_price"] = 1.0
     app.settings["superstar_price"] = 0.5
     panel.method.set(_LABELS["ritardo"])
+    # Set explicitly rather than leaning on the default, which is 1 since
+    # 0.6.1 — the duplication this checks only exists with several plays.
+    panel.count.set("5")
     panel._generate()
     app.update()
 
@@ -384,6 +387,22 @@ def test_the_prediction_prints_what_the_ticket_costs(app):
     # Five plays of 84 columns at 1.50 each.
     assert "630,00" in text
     assert "pagate due volte" in text
+
+
+def test_a_single_combination_wastes_nothing_and_says_so(app):
+    """The shipped default, and the reason it is the default."""
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.settings["prediction_size"] = 9
+    app.settings["predict_superstar"] = False
+    panel.method.set(_LABELS["ritardo"])
+    panel.count.set("1")
+    panel._generate()
+    app.update()
+
+    text = panel.box.get("1.0", "end")
+    assert "pagate due volte" not in text
+    assert "scelte successive" not in text
 
 
 def test_validation_rejects_a_non_numeric_draw_count(app):

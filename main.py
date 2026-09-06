@@ -39,7 +39,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from core.localise import it_date, it_number
+from core.localise import it_count, it_date, it_number
 from core.predictor import METHODS
 from core.version import APP_NAME, APP_TITLE, __version__
 
@@ -384,7 +384,7 @@ def _run_forecast(method: str) -> int:
     )
     print(
         f"\ncosto: {it_number(cost.total, 2)} euro "
-        f"({it_number(cost.columns_paid)} colonne"
+        f"({it_count(cost.columns_paid, 'colonna', 'colonne')}"
         + (f", di cui {it_number(cost.duplicated)} pagate due volte"
            if cost.duplicated else "")
         + ")"
