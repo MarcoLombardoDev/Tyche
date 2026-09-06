@@ -704,28 +704,32 @@ def test_the_linux_leg_hard_requires_the_gui():
     assert "xvfb-run" in step["run"]
 
 
-def test_the_windows_leg_decides_by_trying_and_says_which_way_it_went():
+def test_the_windows_leg_does_not_claim_to_test_the_interface():
     """Two ways to be wrong here, and this rules out both.
 
-    Requiring the GUI unconditionally turned the first Windows run red on the
-    runner image rather than on Tyche: actions/setup-python's interpreter
-    imports tkinter and then cannot read its own tcl8.6/init.tcl. Skipping the
-    suite quietly is the other way — a leg that tests no interface and does
-    not say so, which is precisely the failure TYCHE_REQUIRE_GUI exists to
-    prevent on Linux.
+    Requiring the GUI on Windows turned the build red on the runner image
+    rather than on Tyche: actions/setup-python's interpreter cannot reliably
+    read its own Tcl library, failing on `tcl8.6/init.tcl` one run and on the
+    icon library sourced from `tk8.6/tk.tcl` the next. Skipping the suite
+    quietly is the other way — a leg that tests no interface and does not say
+    so is exactly what TYCHE_REQUIRE_GUI exists to prevent on Linux.
+
+    So the leg must not set the switch, and must say in the log what it is not
+    testing. Turning it back on when the image is fixed means editing this
+    test too, which is the point: it is a decision, not a default.
     """
     steps = load(CI_WORKFLOW)["jobs"]["test"]["steps"]
-    probe = next(s for s in steps if s.get("id") == "tk")
-    assert "tkinter.Tk()" in probe["run"], "the probe does not actually start Tk"
-    assert "::warning::" in probe["run"], (
-        "a runner that cannot start Tk has to say so in the log"
-    )
+    windows = [s for s in steps if "Windows" in str(s.get("if", ""))]
+    assert windows, "there is no Windows leg"
 
-    windows = next(
-        s for s in steps if s.get("name") == "Tests, GUI included (Windows)"
+    suite = next(s for s in windows if "-m pytest" in s.get("run", ""))
+    assert "TYCHE_REQUIRE_GUI" not in (suite.get("env") or {}), (
+        "the Windows leg requires a GUI this runner image cannot reliably start"
     )
-    assert windows["env"]["TYCHE_REQUIRE_GUI"] == "${{ steps.tk.outputs.require }}", (
-        "the Windows leg must take the switch from the probe, not hardcode it"
+    assert "xvfb-run" not in suite["run"], "there is no Xvfb on a Windows runner"
+
+    assert any("::warning::" in s.get("run", "") for s in windows), (
+        "nothing says the interface is untested on this leg"
     )
 
 

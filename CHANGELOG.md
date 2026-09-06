@@ -48,12 +48,14 @@ Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
   quello che la CI cerca legge la costante dal sorgente invece di importare
   `main`, che tira dentro numpy.
 
-  Sul runner Windows Tk non parte: il Python di `actions/setup-python` importa
-  `tkinter` e poi non riesce a leggere il proprio `tcl8.6/init.tcl`. È un
-  difetto dell'immagine, non di Tyche, quindi quel job prova ad aprire una
-  `Tk()` e decide da lì se pretendere l'interfaccia — invece di saltarla in
-  silenzio, che sarebbe l'altro modo di sbagliare. Se una versione futura
-  dell'immagine lo sistema, il job ricomincia a pretenderla da solo.
+  Sul runner Windows Tk non è affidabile: il Python di `actions/setup-python`
+  importa `tkinter` e poi non riesce a leggere la propria libreria Tcl — due
+  run di fila su due file diversi, `tcl8.6/init.tcl` e la libreria di icone di
+  `tk8.6/tk.tcl`. È un difetto dell'immagine, non di Tyche. Lì l'interfaccia
+  non viene pretesa e il job lo dichiara nel log; a testarla è la gamba Linux,
+  sotto un server X vero. La gamba Windows resta per quello che verifica
+  davvero, e che prima non verificava nessuno: percorsi, codifiche e fine
+  riga sulla piattaforma da cui viene la maggior parte dei download.
 
 ### Modificato
 

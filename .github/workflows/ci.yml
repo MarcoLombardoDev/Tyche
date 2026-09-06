@@ -99,46 +99,41 @@ jobs:
           TYCHE_REQUIRE_GUI: "1"
         run: xvfb-run -a python -m pytest tests/ -q
 
-      # Whether this runner can actually start Tk, decided by trying rather
-      # than assumed.
+      # The Windows leg does not require the GUI, and the reason is the
+      # runner rather than Tyche.
       #
-      # The Linux leg always can: xvfb-run gives it a real display. The Windows
-      # image is another matter. actions/setup-python's interpreter imports
-      # tkinter perfectly well and then cannot read its own
-      # tcl/tcl8.6/init.tcl — "couldn't read file ...: No error" — so Tk never
-      # comes up. That is a property of the runner image and not of Tyche, and
-      # failing the build on it would be reporting somebody else's packaging as
-      # a Tyche regression.
+      # actions/setup-python's interpreter there cannot reliably read its own
+      # Tcl library out of the hosted tool cache. Two consecutive runs failed
+      # on two different files — `tcl8.6/init.tcl` on one, the icon library
+      # sourced from `tk8.6/tk.tcl` on the next — both with the same
+      # "couldn't read file ...: No error", which is a filesystem that
+      # sometimes answers and sometimes does not.
       #
-      # Setting `TYCHE_REQUIRE_GUI: "1"` unconditionally is what this replaced,
-      # and it turned the first Windows run red on exactly that. Skipping the
-      # GUI suite quietly instead — which is what Argus does, having no such
-      # switch — is the other way to be wrong: a leg that tests no interface
-      # and does not say so. The probe does neither. It says out loud what this
-      # runner can do, and if a future image fixes Tcl this leg starts
-      # requiring the GUI on its own, with nobody having to remember to come
-      # back and turn it on.
-      - name: Can this runner start Tk?
-        id: tk
+      # This was a probe first: build a `Tk()`, set the switch from whether it
+      # worked. That is the shape this deserves and it does not work here,
+      # because the probe succeeded and then the suite failed anyway — a bare
+      # window comes up before Tk sources the library that fails. A check that
+      # can pass and then be wrong is worse than no check.
+      #
+      # So: the interface is tested on Linux, under a real X server, where
+      # TYCHE_REQUIRE_GUI=1 turns a skipped GUI suite into a failure. This leg
+      # is here for what it does test reliably and what nothing tested before
+      # — paths, encodings and line endings on the platform most of the
+      # downloads are for — and it says out loud what it is not testing.
+      - name: Note that the interface is not tested here
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          if python -c "import tkinter; tkinter.Tk().destroy()" 2> tk-probe.log; then
-            echo "Tk starts here; the GUI suite is required."
-            echo "require=1" >> "$GITHUB_OUTPUT"
-          else
-            cat tk-probe.log
-            echo "::warning::Tk cannot start on this runner, so the GUI suite \
-                  will skip. The Linux leg is what tests the interface."
-            echo "require=" >> "$GITHUB_OUTPUT"
-          fi
+          echo "::warning::Tk cannot be relied on with this runner image, so \
+                the GUI suite skips on Windows. The Linux leg tests the \
+                interface."
 
-      - name: Tests, GUI included (Windows)
+      - name: Tests, the GUI suite skipping (Windows)
         if: runner.os == 'Windows'
-        env:
-          # Empty means "not required" — tests/test_gui_smoke.py reads the
-          # variable as set unless it is empty, "0" or "false".
-          TYCHE_REQUIRE_GUI: ${{ steps.tk.outputs.require }}
+        # TYCHE_REQUIRE_GUI deliberately unset — see the note above. The suite
+        # reports the skip, and tests/test_release_workflow.py fails if this
+        # step ever starts setting it, so turning it back on is a deliberate
+        # edit made when the runner image is fixed.
         run: python -m pytest tests/ -q
 
       - name: Version reports without importing the GUI

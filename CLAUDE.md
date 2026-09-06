@@ -65,19 +65,26 @@ verified. Argus should probably grow the same switch.
 
 **With one exception, and it is the runner's fault rather than the switch's.**
 The CI suite runs on Windows as well as Linux since 0.8.0 — it matters more now
-that a Windows binary is published — and `actions/setup-python`'s interpreter
-there imports `tkinter` perfectly well and then cannot read its own
-`tcl/tcl8.6/init.tcl`: *"couldn't read file ...: No error"*. Tk never comes up.
-Requiring the GUI unconditionally on that leg reports somebody else's packaging
-as a Tyche regression, which is what the first Windows run did.
+that a Windows binary is published — and there **`TYCHE_REQUIRE_GUI` is
+deliberately not set**. `actions/setup-python`'s interpreter cannot reliably
+read its own Tcl library out of the hosted tool cache: two consecutive runs
+failed on two different files, `tcl8.6/init.tcl` on one and the icon library
+sourced from `tk8.6/tk.tcl` on the next, both with *"couldn't read file ...: No
+error"*. That is a filesystem that sometimes answers and sometimes does not.
 
-So the Windows leg **probes** — it tries to build a `Tk()` and sets the switch
-from the result — rather than assuming either way. Skipping the GUI suite
-quietly instead, which is what Argus does by having no switch at all, would be
-the other way to be wrong: a leg that tests no interface and does not say so.
-The probe emits a `::warning::` when Tk will not start, and if a future runner
-image fixes Tcl the leg starts requiring the GUI on its own. Two tests in
-`tests/test_release_workflow.py` hold that shape.
+**A probe was tried first and is the thing not to try again.** Build a `Tk()`,
+set the switch from whether it worked: the right shape, and it does not work
+here. The probe passed and the suite failed anyway, because a bare window comes
+up before Tk sources the library that fails. A check that can pass and then be
+wrong is worse than no check, and it cost a build to learn.
+
+So the interface is tested on Linux, under a real X server, and the Windows leg
+says in its log what it is not testing. That warning is the half that matters:
+skipping quietly — which is what Argus does by having no switch at all — is the
+other way to be wrong. `test_the_windows_leg_does_not_claim_to_test_the_interface`
+fails if the step starts setting the switch *or* if the warning disappears, so
+turning it back on when the image is fixed means editing a test as well, which
+makes it a decision rather than a default.
 
 **The two counts above are maintained by hand and they drift.** By 0.6.2 they
 said 187 where the suite ran 194, because several sessions incremented them
