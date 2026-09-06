@@ -182,6 +182,23 @@ def test_timesfm_without_the_model_reports_instead_of_crashing(app):
     assert app._status.cget("text")
 
 
+def test_the_window_carries_the_application_icon(app):
+    """Argus shipped none for a while and ran under the bare Tk feather.
+
+    The PhotoImage is kept on the instance because Tk holds only a weak
+    reference to it: dropping it leaves a blank icon and nothing raises.
+    """
+    assert getattr(app, "_app_icon", None) is not None
+    assert app._app_icon.width() > 0
+
+
+def test_the_icon_files_are_committed():
+    """Drawn once and committed, so no build depends on which fonts a runner has."""
+    assets = Path(__file__).resolve().parent.parent / "assets"
+    for name in ("app_icon.png", "app_icon.ico", "app_icon.icns"):
+        assert (assets / name).is_file(), name
+
+
 def test_the_app_opens_on_the_path(app):
     """A user who opens Tyche must land on the map, not on a panel.
 

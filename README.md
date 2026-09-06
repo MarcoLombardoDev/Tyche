@@ -415,7 +415,7 @@ quello che fa `core/forecaster.py`.
 
 ```
 python -m pytest tests/ -q                                    # 194 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 226, GUI compresa
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 228, GUI compresa
 python -m ruff check .
 ```
 

@@ -51,7 +51,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 194 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 226, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 228, GUI included
 python -m ruff check .
 ```
 
@@ -223,6 +223,34 @@ The checkpoint is **not** bundled: 1.3 GB, downloaded on first use, and
 non-commercial where the package code around it is Apache-2.0. Shipping
 weights inside the archive would make it a redistribution of them, which is a
 different question from running them locally.
+
+## The icon
+
+```
+python tools/make_icon.py Tyche assets app_icon
+```
+
+`tools/make_icon.py` is **a copy of Argus's, not a variant**. The four
+products draw the same icon — the initial, in a serif face, black on white,
+inside a thin frame — so a taskbar with several open reads as one family. The
+script takes the product name and derives the letter, which is why Tyche's
+call passes `Tyche` and gets a T. Change the drawing in one place and copy the
+file to the others; do not let them diverge.
+
+Committed output, three files, and Pillow to draw them — a documentation
+dependency like `docs/generate_screenshots.py`, deliberately absent from
+`requirements.txt`. Committing them rather than generating at build time is
+what stops a release depending on which fonts a runner happens to have.
+
+**Two mechanisms, both needed.** `Tyche.spec` passes `icon=` so the .exe
+carries the resource Explorer draws before the program runs; `gui/app.py`
+sets the *window* icon at runtime with `iconphoto` (the PNG, everywhere) and
+`iconbitmap` (the .ico, Windows only). Setting one does not do the other.
+
+The PhotoImage is kept on the instance because Tk holds only a weak reference
+to it: let it be collected and the window shows a blank icon with nothing
+raised. The two attempts are also deliberately independent — one `try` around
+both would let a failing `iconbitmap` take the PNG fallback down with it.
 
 ## Screenshots
 

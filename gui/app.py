@@ -39,6 +39,7 @@ which fails intermittently and only under load, i.e. in front of the user.
 from __future__ import annotations
 
 import contextlib
+import os
 import queue
 import threading
 import traceback
@@ -98,8 +99,46 @@ class TycheApp(ctk.CTk):
         self.configure(fg_color=BG_ROOT)
 
         self._build()
+        self._set_window_icon()
         self._poll_queue()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _set_window_icon(self) -> None:
+        """Give the window the application icon.
+
+        Two files, because Tk uses two: the PhotoImage works everywhere and Tk
+        has read PNG since 8.6, and ``iconbitmap`` is tried afterwards on
+        Windows for the sharper small sizes.
+
+        The PhotoImage is kept on the instance. Tk holds only a weak reference
+        to it, and a garbage-collected image leaves a blank icon.
+
+        Never raises, and the two attempts are independent on purpose: one
+        ``try`` around both would let a failing ``iconbitmap`` take the
+        fallback down with it and leave Tk's default feather. A missing icon is
+        cosmetic, and nothing cosmetic should stop the program starting.
+
+        Same drawing as Argus, one letter apart — see tools/make_icon.py.
+        """
+        import tkinter as tk
+
+        from core.paths import bundled_dir
+
+        assets = bundled_dir() / "assets"
+
+        png = assets / "app_icon.png"
+        if png.exists():
+            try:
+                self._app_icon = tk.PhotoImage(file=str(png))
+                self.iconphoto(True, self._app_icon)
+            except Exception:  # noqa: BLE001 — see the docstring
+                pass
+
+        if os.name == "nt":
+            ico = assets / "app_icon.ico"
+            if ico.exists():
+                with contextlib.suppress(Exception):
+                    self.iconbitmap(str(ico))
 
     # ── layout ───────────────────────────────────────────────
     def _build(self) -> None:

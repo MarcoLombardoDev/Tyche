@@ -38,6 +38,10 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files
 # customtkinter/assets/). Without this the import succeeds, the first widget
 # raises, and the failure looks nothing like a missing data file.
 datas = collect_data_files("customtkinter")
+
+# Both files: Windows takes the .ico through iconbitmap, and Tk
+# everywhere else needs the PNG, which iconphoto reads.
+datas += [("assets/app_icon.ico", "assets"), ("assets/app_icon.png", "assets")]
 binaries = []
 hiddenimports = []
 
@@ -99,6 +103,10 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    # The executable's own resource, which is what Explorer draws before the
+    # program ever runs. The window icon is set separately in gui/app.py:
+    # this one and that one are different mechanisms and both are needed.
+    icon="assets/app_icon.ico",
 )
 
 coll = COLLECT(

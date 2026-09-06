@@ -12,6 +12,23 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.6.3] — 2026-09-06
+
+L'icona, la stessa famiglia degli altri strumenti.
+
+### Aggiunto
+
+- **Tyche ha un'icona**: l'iniziale in un carattere con grazie, nera su bianco
+  dentro una cornice sottile — lo stesso disegno di Argus, una lettera di
+  differenza, così una barra delle applicazioni con più strumenti aperti si
+  legge come una famiglia sola.
+- La disegna `tools/make_icon.py`, che è una **copia** di quello di Argus e non
+  una variante: prende il nome del prodotto e ne ricava la lettera. I file
+  sono committati e non generati durante la build, così nessuna release
+  dipende da quali caratteri tipografici si trovano sulla macchina che compila.
+- L'eseguibile Windows porta l'icona come propria risorsa, e la finestra la
+  imposta a parte all'avvio: sono due meccanismi diversi e servono entrambi.
+
 ## [0.6.2] — 2026-09-06
 
 La documentazione allineata a quello che il programma fa davvero.
