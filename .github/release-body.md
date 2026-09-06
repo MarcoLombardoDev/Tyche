@@ -2,8 +2,8 @@
 
 Un'applicazione desktop che scarica lo storico completo delle estrazioni del
 SuperEnalotto dal dicembre 1997, lo esamina in cerca di struttura sfruttabile,
-lo consegna a TimesFM 3.0 — il modello fondazionale per serie temporali di
-Google — e misura onestamente quanto valgano le previsioni che ne escono.
+mette alla prova ogni metodo di previsione sulle estrazioni già avvenute e poi
+genera delle combinazioni, dicendo quanto valgono e quanto costano.
 
 La versione breve di quella misura: **niente**. Le estrazioni sono
 indipendenti, i test lo dicono, e ogni metodo del programma segna 0,4 numeri
@@ -18,6 +18,41 @@ immutabili: 1 su 622.614.630 per sei numeri, 1 su 327 per tre. I premi sono a
 totalizzatore, quindi il concessionario trattiene una quota fissa di ogni euro
 giocato e il rendimento atteso di una schedina è inferiore al suo prezzo
 qualunque cosa si giochi.
+
+## Un percorso in quattro passi
+
+Il programma si apre su una mappa, non su un pannello. Ogni passo porta la
+domanda a cui risponde e quello che ha prodotto finora, e apre la scheda che
+fa il lavoro.
+
+| | Passo | La domanda |
+|---|---|---|
+| 1 | **Archivio** | Ci sono i dati? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
+| 2 | **Prova del nove** | C'è qualcosa da prevedere? Cinque test dell'ipotesi che le estrazioni siano indipendenti e uniformi. |
+| 3 | **Validazione** | I metodi battono il caso? Backtest walk-forward, senza che nessuno possa sbirciare il futuro. |
+| 4 | **Previsione** | Il punto di arrivo: i numeri, con accanto quello che i passi precedenti hanno stabilito che valgono. |
+
+L'ordine è l'argomento del programma: si arriva alle combinazioni *attraverso*
+le prove, non saltandole.
+
+## Quanto vale la prova, e quanto costa la giocata
+
+**La validazione dichiara la propria sensibilità.** «Non abbiamo trovato
+niente» e «non avremmo potuto trovarlo» producono lo stesso tabellone, quindi
+il pulsante *Calibra* rifà la stessa prova contro previsori il cui vantaggio è
+noto, e riporta quale vantaggio si sarebbe accorta di vedere.
+
+**Sistemi e SuperStar.** Si sceglie quanti numeri per combinazione, da sei a
+dodici, e se giocare anche il SuperStar. La Validazione segue la dimensione
+scelta. Un sistema accorcia le probabilità del 6 e moltiplica il costo dello
+stesso identico fattore — la probabilità per euro non si muove — e il
+programma lo dice invece di lasciarlo intendere.
+
+**Il costo è calcolato**, ai prezzi che si impostano, e mostra dove finiscono
+i soldi: le combinazioni proposte si sovrappongono, quindi giocandone cinque
+da dodici numeri il 40% della spesa compra colonne già comprate. Il valore
+predefinito è una combinazione sola, perché la seconda è la settima scelta del
+metodo al posto della sesta.
 
 ## Eseguirlo dai sorgenti
 
@@ -44,12 +79,16 @@ C'è una riga di comando per le parti che vale la pena automatizzare:
 
 ```
 python main.py --update --yes         # aggiorna l'archivio
+python main.py --import FILE --yes    # importa un file scaricato a mano
 python main.py --check                # i cinque test di indipendenza
 python main.py --validate 500         # backtest walk-forward
 python main.py --power                # sensibilita' della validazione
-python main.py --forecast timesfm     # sei numeri
+python main.py --forecast ritardo     # una giocata, senza scaricare il modello
 python main.py --export-sqlite data/tyche.db
 ```
+
+`--update` e `--import` mostrano che cosa cambierebbero e non scrivono nulla
+senza `--yes`.
 
 ## Che cosa è stato verificato prima di pubblicare
 
@@ -71,6 +110,10 @@ E sul pacchetto Windows, prima che venisse allegato:
 - TimesFM è davvero dentro il pacchetto, non silenziosamente perduto;
 - l'avviatore fa partire il programma, e si rifiuta di farlo quando l'impronta
   registrata non corrisponde.
+
+Questa pagina è l'unica release pubblicata: finita la build, il workflow
+cancella la precedente e il suo tag. `CHANGELOG.md` nel repository conserva la
+storia di ogni versione.
 
 ## Licenza
 

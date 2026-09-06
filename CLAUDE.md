@@ -10,11 +10,13 @@ archive and forecasts it with TimesFM 3.0. Same shape as Argus: logic in
 `core/`, interface in `gui/`, no GUI imports below `gui/`.
 
 ```
-main.py       entry point, plus --check/--validate/--update/--import headless
-core/         archive, sources, features, statistics, forecasting (no GUI imports)
+main.py       entry point, plus the headless modes: --check, --validate,
+              --power, --update, --import, --forecast, --export-sqlite
+core/         archive, sources, features, statistics, scoring, power,
+              forecasting — no GUI imports below this line
 core/sources/ the three ways draw history gets in
-gui/          one module per panel
-tests/        test_core.py, test_gui_smoke.py
+gui/          one module per panel; home_panel.py is the path the app opens on
+tests/        test_core.py, test_gui_smoke.py, test_release_workflow.py
 ```
 
 ## Branch
@@ -48,18 +50,25 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 187 core tests
+python -m pytest tests/ -q                                   # 194 core tests
 TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 226, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `187 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `194 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
+
+**The two counts above are maintained by hand and they drift.** By 0.6.2 they
+said 187 where the suite ran 194, because several sessions incremented them
+with a `sed` instead of running the suite and reading the number. Measure them
+when you touch them. The load-bearing part of that line is not the count
+anyway, it is the `1 skipped`: that is the whole GUI suite, and it is what
+`TYCHE_REQUIRE_GUI=1` exists to turn into a failure.
 
 `tkinter` is an OS package and it must match the interpreter actually running
 the tests. This bites in exactly the way Argus's notes describe: on the

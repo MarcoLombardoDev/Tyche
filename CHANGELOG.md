@@ -12,6 +12,32 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.6.2] — 2026-09-06
+
+La documentazione allineata a quello che il programma fa davvero.
+
+### Documentazione
+
+- **La premessa che compare su ogni pagina di release descriveva la 0.1.0.**
+  Non nominava il percorso in quattro passi, né i sistemi, né il SuperStar, né
+  il costo della giocata, né la calibrazione della validazione. Riscritta.
+- Il README mostra ora anche la scheda **Previsione**, che è il punto di
+  arrivo del percorso ed era l'unica delle sette a non comparire mai. La
+  descrizione del passo 4 non promette più «sei numeri», visto che può essere
+  un sistema fino a dodici.
+- Gli elenchi dei comandi in README e premessa includono `--import` e usano
+  `--forecast ritardo`, che non richiede di scaricare 1,3 GB di pesi per
+  vedere come funziona.
+
+### Corretto
+
+- **Il docstring di `main.py` consigliava `--forecast gap`**, un metodo che non
+  esiste più dalla 0.2.0: eseguirlo esce con codice 2 e un errore. Ora dice
+  `ritardo`, che è come si chiama.
+- I conteggi dei test nella documentazione dicevano 187 dove la suite ne
+  eseguiva 194. Erano incrementati a mano invece che misurati; ora sono quelli
+  veri, e `CLAUDE.md` avverte che vanno misurati.
+
 ## [0.6.1] — 2026-09-06
 
 Una combinazione sola, e il perché misurato.

@@ -34,24 +34,30 @@ scheda che lo fa.
 | 1 | **Archivio** | Ci sono i dati? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
 | 2 | **Prova del nove** | C'è qualcosa da prevedere? Cinque test dell'ipotesi che le estrazioni siano indipendenti e uniformi. |
 | 3 | **Validazione** | I metodi battono il caso? Backtest walk-forward, senza che nessuno possa sbirciare il futuro. |
-| 4 | **Previsione** | Il punto di arrivo: sei numeri, da TimesFM 3.0 o da tre metodi di riferimento, quello casuale incluso. |
+| 4 | **Previsione** | Il punto di arrivo: la giocata, da TimesFM 3.0 o da tre metodi di riferimento, quello casuale incluso — con accanto quanto costa e quanto vale. |
 
 Fuori percorso ci sono **Statistiche** — frequenze, ritardi, decine e coppie,
 ogni tabella con accanto il valore che produrrebbe il caso — e
-**Impostazioni**, con checkpoint, dispositivo, token e indirizzi delle
-sorgenti.
+**Impostazioni**, con checkpoint, dispositivo, token Hugging Face, numeri
+per combinazione, SuperStar, prezzi e indirizzi delle sorgenti.
 
 L'ordine dei passi è l'argomento del programma. Il passo 2 dice che le
 estrazioni sono indipendenti, il passo 3 che nessun metodo batte il caso, e il
-passo 4 consegna comunque sei numeri — perché è quello a cui serve. Chi
+passo 4 consegna comunque la giocata — perché è quello a cui serve. Chi
 percorre la strada arriva alle combinazioni avendo già letto quanto valgono,
 che è un posto migliore per dirlo di una scheda che si può non aprire mai.
 
 ![Validazione](docs/screenshots/06_validazione.png)
 
-*La scheda Validazione. Tre metodi, 400 estrazioni, il caso vale 0,4000 — e le
-palline viola della scheda Previsione hanno lo stesso aspetto sicuro
-qualunque metodo le abbia prodotte.*
+*Il passo 3. Tre metodi, 400 estrazioni, il caso vale 0,4000 — e nessuno lo
+batte.*
+
+![Previsione](docs/screenshots/05_previsione.png)
+
+*Il passo 4, che è dove si voleva arrivare. Le palline viola hanno lo stesso
+aspetto sicuro qualunque metodo le abbia prodotte, ed è esattamente il punto:
+sotto ci sono il costo della giocata e le probabilità che nessun metodo
+cambia.*
 
 C'è anche una riga di comando, per le parti che vale la pena automatizzare:
 
@@ -62,7 +68,7 @@ python main.py --power                  # quanto piccolo un vantaggio deve esser
 python main.py --update                 # aggiorna da estrazioni.it — prova a vuoto
 python main.py --update --yes           # ...e scrive
 python main.py --import FILE --yes      # importa un file scaricato a mano
-python main.py --forecast timesfm       # sei numeri
+python main.py --forecast ritardo       # una giocata, senza scaricare il modello
 python main.py --export-sqlite data/tyche.db
 ```
 
@@ -408,7 +414,7 @@ quello che fa `core/forecaster.py`.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 187 test core
+python -m pytest tests/ -q                                    # 194 test core
 TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 226, GUI compresa
 python -m ruff check .
 ```

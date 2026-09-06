@@ -19,7 +19,7 @@ scripting, and neither needs a window:
     python main.py --update             # refresh the archive (dry run)
     python main.py --update --yes       # ...and write it
     python main.py --import FILE --yes  # import a file you downloaded
-    python main.py --forecast gap       # six numbers, no window
+    python main.py --forecast ritardo   # six numbers, no model needed
     python main.py --export-sqlite data/tyche.db
 
 ``--update`` and ``--import`` are dry runs unless ``--yes`` is given. That is
