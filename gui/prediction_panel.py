@@ -31,6 +31,7 @@ from core.predictor import (
     system_columns,
     system_profile,
     system_top_prize_odds,
+    ticket_cost,
     value_note,
 )
 from gui.theme import BG_ROOT, MUTED
@@ -42,6 +43,31 @@ _METHOD_LABELS = {
     "ritardo": "Ritardo (assenti da più tempo)",
     "casuale": "Casuale (la condizione di controllo)",
 }
+
+
+def _cost_lines(prediction, cost) -> list[str]:
+    """What the plays on screen would cost, and what the money actually buys.
+
+    Money is formatted the Italian way, comma for the decimal — unlike the
+    statistics elsewhere, which keep the full stop because they sit beside
+    chi-square and p-values. A price is not a test statistic.
+    """
+    lines = [
+        f"Costo della giocata: {it_number(cost.total, 2)} euro"
+        + (" (SuperStar compreso)." if cost.superstar else "."),
+        f"  {cost.plays} giocate da {cost.size} numeri = "
+        f"{it_number(cost.columns_paid)} colonne.",
+    ]
+    if cost.duplicated:
+        share = cost.duplicated / cost.columns_paid
+        lines += [
+            f"  Ma le colonne diverse sono {it_number(cost.columns_distinct)}: "
+            f"{it_number(cost.duplicated)} vengono pagate due volte, "
+            f"il {share:.0%} della spesa.",
+            "  Le combinazioni scorrono di un posto lungo la graduatoria, quindi "
+            "si sovrappongono. Giocandone una sola non si spreca niente.",
+        ]
+    return lines
 
 
 def _ticket_lines(prediction) -> list[str]:
@@ -215,8 +241,15 @@ class PredictionPanel(ctk.CTkFrame):
             shape += f" — sistema da {it_number(system_columns(prediction.size))} colonne"
         if prediction.superstar is not None:
             shape += ", SuperStar compreso"
+        cost = ticket_cost(
+            prediction.combinations,
+            superstar=prediction.superstar is not None,
+            column_price=float(self.app.settings.get("column_price", 1.0)),
+            superstar_price=float(self.app.settings.get("superstar_price", 0.5)),
+        )
         self.note.configure(
             text=f"{prediction.note}  ·  {shape}. "
+            f"Costo: {it_number(cost.total, 2)} euro. "
             f"Punteggio atteso dal caso: {expected_hits(prediction.size):.3f} "
             "numeri indovinati per estrazione."
         )
@@ -248,6 +281,14 @@ class PredictionPanel(ctk.CTkFrame):
             "",
         ]
         lines += _ticket_lines(prediction)
+        settings = self.app.settings
+        cost = ticket_cost(
+            prediction.combinations,
+            superstar=prediction.superstar is not None,
+            column_price=float(settings.get("column_price", 1.0)),
+            superstar_price=float(settings.get("superstar_price", 0.5)),
+        )
+        lines += ["", *_cost_lines(prediction, cost)]
         lines += ["", value_note()]
         self.box.set_text("\n".join(lines))
         self.app.set_status(

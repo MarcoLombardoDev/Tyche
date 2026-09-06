@@ -48,14 +48,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 178 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 213, GUI included
+python -m pytest tests/ -q                                   # 184 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 222, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `178 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `184 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -533,6 +533,31 @@ one: the game began on 28 March 2006 and the 914 earlier draws store 0 for
 "not on record", so counting those would put a spike on a number that was
 never drawn. The random baseline randomises the SuperStar too, because a
 control that controls only part of the ticket is not one.
+
+**The cost is computed, not quoted, and it exposes an overlap.** 0.6.0 added
+`ticket_cost`, priced from two settings — a euro a column and fifty cents for
+the SuperStar, which is charged per column rather than per ticket. The prices
+are settings because the operator sets them and arithmetic does not.
+
+The interesting part is `distinct_columns`. `build_combinations` slides one
+place down the ranking per play, so consecutive systems share most of their
+numbers and therefore most of their columns: five systems of twelve pay for
+4,620 columns and cover 2,772, so **40% of the stake buys columns twice**. A
+receiver charges per column submitted, so that money is really spent. Whether
+it is a mistake is the user's call; the panel shows it rather than printing a
+total that hides it.
+
+Money is formatted with an Italian decimal comma, unlike everything else on
+these screens. That is not a break with the note above about decimals keeping
+the full stop — that rule is about statistics sitting beside chi-square and
+p-values. A price is not a test statistic.
+
+**A float setting used to become a string.** The settings panel handled bool
+and int and fell through to the raw text for everything else, so a price typed
+into it came back as `"1.25"` and the first arithmetic on it would have been
+what raised. Fixed with the prices, and it accepts a comma because that is
+what an Italian keyboard produces. Two tests fail if the branch is removed —
+checked by removing it.
 
 **The backtest follows the setting.** `walk_forward(picks=...)` already
 existed; the panel and the CLI now pass `prediction_size` into it, so a nine

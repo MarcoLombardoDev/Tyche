@@ -29,6 +29,7 @@ part of this module with unconditional value.
 
 from __future__ import annotations
 
+import itertools
 import math
 import random
 from collections import Counter
@@ -357,6 +358,75 @@ def _check_system_size(size: int) -> None:
         raise ValueError(
             f"un sistema va da {SYSTEM_MIN} a {SYSTEM_MAX} numeri, non {size}"
         )
+
+
+# What a play costs at the receiver, as of 2026. Both are settings, because
+# they are set by the operator and not by arithmetic: if either changes, the
+# user edits a number instead of waiting for a release.
+DEFAULT_COLUMN_PRICE = 1.00
+DEFAULT_SUPERSTAR_PRICE = 0.50
+
+
+@dataclass(frozen=True)
+class TicketCost:
+    """What the combinations on screen would cost, and what they really cover."""
+
+    plays: int
+    size: int
+    columns_paid: int
+    columns_distinct: int
+    superstar: bool
+    total: float
+
+    @property
+    def duplicated(self) -> int:
+        """Columns paid for more than once across the plays."""
+        return self.columns_paid - self.columns_distinct
+
+
+def distinct_columns(combinations: list[tuple[int, ...]]) -> int:
+    """How many *different* six-number columns a set of plays actually covers.
+
+    Not the same as what they cost. :func:`build_combinations` slides one
+    place down the ranking for each play, so consecutive systems share most of
+    their numbers and therefore most of their columns: five systems of twelve
+    pay for 4,620 columns and cover 2,772 of them, wasting 40% of the stake on
+    columns bought twice.
+
+    A receiver charges per column submitted, so the duplicates really are paid
+    for. Whether that is a mistake is the user's call — but they should be
+    able to see it, which is why this is computed rather than assumed away.
+    """
+    seen = set()
+    for play in combinations:
+        seen.update(frozenset(c) for c in itertools.combinations(sorted(play), NUMBERS_PER_DRAW))
+    return len(seen)
+
+
+def ticket_cost(
+    combinations: list[tuple[int, ...]],
+    superstar: bool = False,
+    column_price: float = DEFAULT_COLUMN_PRICE,
+    superstar_price: float = DEFAULT_SUPERSTAR_PRICE,
+) -> TicketCost:
+    """Price the plays on screen, at the prices the settings carry.
+
+    The SuperStar is charged per column, like the column itself, so adding it
+    to a system multiplies its cost by the same factor as the system.
+    """
+    if not combinations:
+        return TicketCost(0, NUMBERS_PER_DRAW, 0, 0, superstar, 0.0)
+    size = len(combinations[0])
+    paid = len(combinations) * system_columns(size)
+    per_column = column_price + (superstar_price if superstar else 0.0)
+    return TicketCost(
+        plays=len(combinations),
+        size=size,
+        columns_paid=paid,
+        columns_distinct=distinct_columns(combinations),
+        superstar=superstar,
+        total=round(paid * per_column, 2),
+    )
 
 
 def expected_hits(size: int = NUMBERS_PER_DRAW) -> float:

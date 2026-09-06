@@ -66,6 +66,13 @@ FIELDS = [
      "Il SuperStar esce da un'urna separata, quindi è un numero da 1 a 90 "
      "indipendente dai sei e che può ripeterne uno. Indovinarlo è 1 su 90, "
      "sempre, e viene scelto sulla storia della sua urna e non su quella dei sei."),
+    ("column_price", "Costo di una colonna (euro)", "text",
+     "Quanto costa una singola colonna da sei numeri. Serve solo a calcolare "
+     "il costo della giocata mostrata nella scheda Previsione: è un prezzo "
+     "deciso dal concessionario, non dalla matematica, quindi si cambia qui."),
+    ("superstar_price", "Costo del SuperStar (euro)", "text",
+     "Si aggiunge per ogni colonna, non una volta sola: su un sistema il "
+     "SuperStar costa quanto il sistema moltiplicato per questo prezzo."),
     ("validation_draws", "Estrazioni per la validazione", "text",
      "Quante estrazioni recenti valuta il backtest walk-forward."),
 ]
@@ -138,6 +145,15 @@ class SettingsPanel(ctk.CTkFrame):
                 except (TypeError, ValueError):
                     self.app.set_status(
                         f"{key}: «{raw}» non è un numero intero — non salvato."
+                    )
+                    return
+            elif isinstance(default, float):
+                # A comma is what an Italian keyboard produces for a price.
+                try:
+                    value = float(str(raw).strip().replace(",", "."))
+                except (TypeError, ValueError):
+                    self.app.set_status(
+                        f"{key}: «{raw}» non è un numero — non salvato."
                     )
                     return
             else:

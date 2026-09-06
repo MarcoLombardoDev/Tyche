@@ -1944,5 +1944,71 @@ def test_chance_moves_with_the_number_of_picks():
     assert abs(nine.results[0].expected_mean - 0.6) < 1e-9
 
 
+def test_a_plain_ticket_costs_one_euro_a_column():
+    from core.predictor import ticket_cost
+
+    cost = ticket_cost([(1, 2, 3, 4, 5, 6), (1, 2, 3, 4, 5, 7)])
+    assert cost.columns_paid == 2
+    assert cost.total == 2.00
+    assert cost.duplicated == 0
+
+
+def test_the_superstar_is_charged_on_every_column():
+    """Not once per ticket: on a system it multiplies with the system."""
+    from core.predictor import ticket_cost
+
+    plain = ticket_cost([tuple(range(1, 10))])
+    starred = ticket_cost([tuple(range(1, 10))], superstar=True)
+    assert plain.columns_paid == 84
+    assert plain.total == 84.00
+    assert starred.total == 84 * 1.50
+
+
+def test_prices_come_from_the_settings():
+    from core.predictor import ticket_cost
+
+    cost = ticket_cost(
+        [(1, 2, 3, 4, 5, 6)], superstar=True,
+        column_price=2.0, superstar_price=1.0,
+    )
+    assert cost.total == 3.00
+
+
+def test_overlapping_plays_are_paid_for_twice_and_the_ticket_says_so():
+    """Five systems of twelve pay for 4,620 columns and cover 2,772.
+
+    build_combinations slides one place down the ranking on purpose, so the
+    plays share numbers and therefore columns. A receiver charges per column
+    submitted, so the duplicates are real money — which is worth showing
+    rather than hiding behind a single total.
+    """
+    from core.predictor import predict, ticket_cost
+
+    draws = random_archive(400, seed=31)
+    prediction = predict(draws, "frequenza", combinations=5, size=12)
+    cost = ticket_cost(prediction.combinations)
+    assert cost.columns_paid == 5 * 924
+    assert cost.columns_distinct < cost.columns_paid
+    assert cost.duplicated == cost.columns_paid - cost.columns_distinct
+    # One play alone wastes nothing.
+    single = ticket_cost(prediction.combinations[:1])
+    assert single.duplicated == 0
+
+
+def test_distinct_columns_counts_a_system_exactly_once():
+    from core.predictor import distinct_columns, system_columns
+
+    play = tuple(range(1, 11))
+    assert distinct_columns([play]) == system_columns(10)
+    # The same play twice covers no more ground.
+    assert distinct_columns([play, play]) == system_columns(10)
+
+
+def test_an_empty_prediction_costs_nothing_rather_than_raising():
+    from core.predictor import ticket_cost
+
+    assert ticket_cost([]).total == 0.0
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))

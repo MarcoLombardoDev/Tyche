@@ -279,6 +279,18 @@ una colonna vincente ma un 6, ventiquattro 5 e novanta 4 — perché ogni colonn
 che contiene cinque dei sei è anch'essa sulla schedina. La scheda Previsione
 stampa quella tabella.
 
+**Quanto costa.** La scheda Previsione stampa il costo della giocata che sta
+mostrando, ai prezzi che si impostano — un euro a colonna e cinquanta centesimi
+per il SuperStar, che si aggiunge a *ogni* colonna e non una volta sola. Sono
+prezzi decisi dal concessionario e non dalla matematica, quindi stanno nelle
+Impostazioni e si cambiano lì se cambiano.
+
+Il conto rivela una cosa che non è ovvia. Le combinazioni proposte scorrono di
+un posto lungo la graduatoria, quindi si sovrappongono: cinque sistemi da
+dodici numeri fanno pagare 4.620 colonne e ne coprono 2.772 di diverse. **Il
+40% della spesa se ne va in colonne comprate due volte.** Giocandone una sola
+non si spreca niente, e Tyche lo dice invece di limitarsi a stampare un totale.
+
 **Il SuperStar.** Esce da un'urna separata, quindi è un numero da 1 a 90
 indipendente dai sei che può ripeterne uno — sull'archivio reale lo fa 247
 volte contro 223 attese. Tyche lo sceglie sulla storia della sua urna e non su
@@ -383,8 +395,8 @@ quello che fa `core/forecaster.py`.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 178 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 213, GUI compresa
+python -m pytest tests/ -q                                    # 184 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 222, GUI compresa
 python -m ruff check .
 ```
 

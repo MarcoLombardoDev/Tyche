@@ -373,6 +373,22 @@ def _run_forecast(method: str) -> int:
         )
     if prediction.superstar is not None:
         print(f"\nSuperStar: {prediction.superstar} (1 su 90, sempre)")
+
+    from core.predictor import ticket_cost
+
+    cost = ticket_cost(
+        prediction.combinations,
+        superstar=prediction.superstar is not None,
+        column_price=float(settings.get("column_price", 1.0)),
+        superstar_price=float(settings.get("superstar_price", 0.5)),
+    )
+    print(
+        f"\ncosto: {it_number(cost.total, 2)} euro "
+        f"({it_number(cost.columns_paid)} colonne"
+        + (f", di cui {it_number(cost.duplicated)} pagate due volte"
+           if cost.duplicated else "")
+        + ")"
+    )
     spread = prediction.scores[prediction.ranked[0]] - prediction.scores[prediction.ranked[-1]]
     print(f"\nescursione dei punteggi sui novanta numeri: {spread:.6f}")
     print(f"\n{value_note()}")

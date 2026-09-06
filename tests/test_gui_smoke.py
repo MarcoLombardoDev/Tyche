@@ -339,6 +339,53 @@ def test_a_plain_column_says_so_and_shows_no_system_table(app):
     assert "Sistema integrale" not in text
 
 
+def test_settings_save_keeps_a_price_a_number(app):
+    """Floats fell straight through to strings before 0.6.0.
+
+    The panel knew bool and int and nothing else, so a price typed here came
+    back as text and the first arithmetic on it would have been what raised.
+    A comma is accepted because that is what an Italian keyboard produces.
+    """
+    panel = app._panels["settings"]
+    app.show("settings")
+    panel._widgets["column_price"].delete(0, "end")
+    panel._widgets["column_price"].insert(0, "1,25")
+    panel._save()
+    app.update()
+    assert app.settings["column_price"] == 1.25
+    assert isinstance(app.settings["column_price"], float)
+
+
+def test_settings_save_refuses_a_price_that_is_not_a_number(app):
+    panel = app._panels["settings"]
+    app.show("settings")
+    app.settings["column_price"] = 1.0
+    panel._widgets["column_price"].delete(0, "end")
+    panel._widgets["column_price"].insert(0, "gratis")
+    panel._save()
+    app.update()
+    assert app.settings["column_price"] == 1.0
+    assert "non è un numero" in app._status.cget("text")
+
+
+def test_the_prediction_prints_what_the_ticket_costs(app):
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.settings["prediction_size"] = 9
+    app.settings["predict_superstar"] = True
+    app.settings["column_price"] = 1.0
+    app.settings["superstar_price"] = 0.5
+    panel.method.set(_LABELS["ritardo"])
+    panel._generate()
+    app.update()
+
+    text = panel.box.get("1.0", "end")
+    assert "Costo della giocata" in text
+    # Five plays of 84 columns at 1.50 each.
+    assert "630,00" in text
+    assert "pagate due volte" in text
+
+
 def test_validation_rejects_a_non_numeric_draw_count(app):
     panel = app._panels["validation"]
     app.show("validation")

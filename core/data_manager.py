@@ -82,6 +82,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Whether the ticket plays the SuperStar too. Off by default: it is a
     # separate drum and a separate stake, so it should be asked for.
     "predict_superstar": False,
+    # What a play costs at the receiver. Set by the operator rather than by
+    # arithmetic, so they are settings: if either changes, edit the number.
+    "column_price": 1.00,
+    "superstar_price": 0.50,
 
     # --- Validation ---
     # How many of the most recent draws the walk-forward backtest scores. 300

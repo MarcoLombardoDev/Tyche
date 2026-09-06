@@ -12,6 +12,8 @@
   "combinations": 5,
   "prediction_size": 6,
   "predict_superstar": false,
+  "column_price": 1.0,
+  "superstar_price": 0.5,
   "validation_draws": 300,
   "validation_baselines": [
     "casuale",

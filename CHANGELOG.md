@@ -12,6 +12,34 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.6.0] — 2026-09-05
+
+Quanto costa la giocata, e dove finiscono i soldi.
+
+### Costo
+
+- **La scheda Previsione stampa quanto costa la giocata che mostra**, e lo
+  ripete sotto ai pulsanti insieme alla forma della giocata. Anche `--forecast`
+  lo dice.
+- I prezzi sono **due impostazioni** — un euro a colonna e cinquanta centesimi
+  per il SuperStar — perché li decide il concessionario e non la matematica.
+  Il SuperStar si aggiunge a *ogni* colonna, non una volta sola: su un sistema
+  costa quanto il sistema moltiplicato per il suo prezzo.
+- **Il conto mostra una cosa che non è ovvia.** Le combinazioni proposte
+  scorrono di un posto lungo la graduatoria, quindi si sovrappongono: cinque
+  sistemi da dodici numeri fanno pagare 4.620 colonne e ne coprono 2.772 di
+  diverse. Il 40% della spesa va in colonne comprate due volte. Giocandone una
+  sola non si spreca niente, e adesso il programma lo dice invece di stampare
+  un totale che lo nasconde.
+
+### Corretto
+
+- **Il pannello delle Impostazioni non sapeva salvare un decimale.** Gestiva
+  booleani e interi e per tutto il resto teneva il testo grezzo, quindi un
+  prezzo scritto lì tornava come stringa e il primo calcolo su di esso sarebbe
+  stato quello che sollevava l'errore. Ora accetta anche la virgola, che è
+  quello che produce una tastiera italiana.
+
 ## [0.5.0] — 2026-09-05
 
 Sistemi e SuperStar, con la matematica dichiarata.
