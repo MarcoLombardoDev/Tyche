@@ -117,7 +117,13 @@ storia di ogni versione.
 
 ## Licenza
 
-Privato, tutti i diritti riservati. Il pacchetto `timesfm` è Apache-2.0; i
-**pesi** `google/timesfm-3.0-pytorch` che scarica sono coperti da
-`timesfm-non-commercial-license-v1.0` e sono limitati a un uso non commerciale e
-non di produzione.
+**AGPL-3.0-or-later.** Puoi usarlo, studiarlo, modificarlo e ridistribuirlo;
+se lo distribuisci o lo esponi come servizio devi consegnare il sorgente alle
+stesse condizioni. Nessuna licenza commerciale, nessun CLA.
+
+I **pesi del modello sono un'altra cosa dal codice.** Il pacchetto `timesfm` è
+Apache-2.0; i pesi `google/timesfm-3.0-pytorch` che il programma scarica al
+primo uso dichiarano `timesfm-non-commercial-license-v1.0` — uso non
+commerciale e non di produzione. Quel permesso non è di Tyche da concedere, e
+`THIRD-PARTY-LICENSES.md` lo spiega per esteso. Tutto il resto del programma
+funziona senza scaricare alcun peso.

@@ -1,8 +1,8 @@
 # Tyche — SuperEnalotto Archive Analysis & TimesFM Forecasting
 # Copyright (C) 2026 Marco Lombardo
 #
-# Private project. All rights reserved; see LICENSE.
-# Distributed WITHOUT ANY WARRANTY.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Distributed WITHOUT ANY WARRANTY; see LICENSE for the full terms.
 
 """
 tests/test_core.py — Tyche
@@ -2073,6 +2073,76 @@ def test_the_cost_line_agrees_with_itself_in_number(cli, capsys):
     dm.save_settings(settings)
     _, out = _run(cli, ["--forecast", "frequenza"], capsys)
     assert "3 colonne" in out
+
+
+# ─────────────────────────────────────────────────────────────
+# The licence
+# ─────────────────────────────────────────────────────────────
+
+def _source_files() -> list[Path]:
+    repo = Path(__file__).resolve().parent.parent
+    files = [repo / "main.py", repo / "build.py", repo / "Tyche.spec"]
+    for folder in ("core", "gui", "tests", "tools", "docs"):
+        files += sorted((repo / folder).rglob("*.py"))
+    return [f for f in files if f.is_file()]
+
+
+def _header(path: Path, lines: int = 12) -> str:
+    """The top of a file, which is where a licence claim lives."""
+    with path.open(encoding="utf-8") as handle:
+        return "".join(next(handle, "") for _ in range(lines))
+
+
+def test_every_source_file_declares_the_licence():
+    """One SPDX line per file, and a new file has to carry it too.
+
+    The header was rewritten across 42 files when Tyche went AGPL in 0.7.0.
+    Nothing stops the 43rd being added without it, and a file with no header
+    is a file whose terms a reader has to infer — which is the one thing a
+    licence exists to remove.
+    """
+    missing = [
+        f.name for f in _source_files()
+        if "SPDX-License-Identifier: AGPL-3.0-or-later" not in _header(f)
+    ]
+    assert not missing, f"no SPDX header in: {', '.join(sorted(missing))}"
+
+
+def test_no_file_still_claims_all_rights_reserved():
+    """The two statements are contradictory and both were in the tree."""
+    repo = Path(__file__).resolve().parent.parent
+    offenders = []
+    for f in [*_source_files(), repo / "LICENSE"]:
+        # The header, not the whole file: this very test names the phrase it
+        # searches for, and a file discussing a licence is not claiming one.
+        if f.is_file() and "rights reserved" in _header(f).lower():
+            offenders.append(f.name)
+    assert not offenders, f"still all-rights-reserved: {', '.join(offenders)}"
+
+
+def test_the_licence_is_the_agpl_and_the_repository_says_so():
+    repo = Path(__file__).resolve().parent.parent
+    licence = (repo / "LICENSE").read_text(encoding="utf-8")
+    assert "GNU AFFERO GENERAL PUBLIC LICENSE" in licence
+    assert "Version 3, 19 November 2007" in licence
+    # No commercial tier, so no CLA: a CLA exists to allow relicensing, which
+    # is what dual licensing needs and Tyche does not do.
+    assert not (repo / "COMMERCIAL-LICENSE.md").exists()
+    assert not (repo / "CLA.md").exists()
+
+
+def test_the_weights_licence_is_stated_where_a_recipient_would_look():
+    """The AGPL permits commercial use; the TimesFM 3.0 weights do not.
+
+    Tyche can grant the first and cannot grant the second, and someone who
+    received a copy has no way to know that unless it is written down.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    third_party = (repo / "THIRD-PARTY-LICENSES.md").read_text(encoding="utf-8")
+    assert "timesfm-non-commercial-license-v1.0" in third_party
+    assert "apache-2.0" in third_party.lower()
+    readme = (repo / "README.md").read_text(encoding="utf-8")
+    assert "timesfm-non-commercial-license-v1.0" in readme
 
 
 if __name__ == "__main__":

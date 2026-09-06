@@ -12,6 +12,45 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.7.0] — 2026-09-06
+
+Tyche è software libero: AGPL-3.0-or-later.
+
+### Licenza
+
+- **`LICENSE` è ora la AGPL-3.0**, al posto di «tutti i diritti riservati», e
+  tutti e 43 i file sorgente — i 42 moduli Python e `Tyche.spec` — portano
+  l'intestazione `SPDX-License-Identifier: AGPL-3.0-or-later`.
+- Si può usare, studiare, modificare e ridistribuire per qualunque scopo. Chi
+  lo distribuisce, o lo espone come servizio di rete, deve consegnare il
+  sorgente alle stesse condizioni.
+- **Nessuna licenza commerciale e nessun CLA.** Una contribuzione si offre
+  sotto la stessa licenza, che è quello che l'AGPL prevede di suo: un CLA
+  serve a poter rilicenziare il codice altrui sotto termini che chi l'ha
+  scritto non ha scelto, ed è quello che serve a chi vende.
+- **Il motivo per cui non c'è una parte commerciale è misurato, non
+  supposto.** Il job `checkpoint-licence` ha chiesto alle model card: i pesi
+  `google/timesfm-3.0-pytorch` dichiarano
+  `timesfm-non-commercial-license-v1.0`, mentre il 2.5 e l'1.0 sono
+  Apache-2.0. Vendere una licenza commerciale su un programma il cui metodo
+  principale gira su pesi che lo vietano non si può fare onestamente.
+
+### Aggiunto
+
+- **`THIRD-PARTY-LICENSES.md`**: che cosa Tyche richiede, sotto quale licenza,
+  e che cosa ognuna chiede a chi ridistribuisce. Con la distinzione che conta
+  di più — i pesi del modello non sono il codice del modello — e la tabella
+  delle licenze dichiarate dai tre checkpoint.
+- **`CONTRIBUTING.md`**: come si prepara una modifica, che cosa deve portare, e
+  le tre cose che non si toccano perché farebbero sembrare vincibile una
+  lotteria.
+
+### Invariato
+
+Il funzionamento del programma. Nessun metodo, nessuna impostazione, nessun
+checkpoint è cambiato: la 0.7.0 dice sotto quali condizioni si può avere
+Tyche, non che cosa Tyche fa.
+
 ## [0.6.3] — 2026-09-06
 
 L'icona, la stessa famiglia degli altri strumenti.

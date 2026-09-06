@@ -50,14 +50,14 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 194 core tests
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 228, GUI included
+python -m pytest tests/ -q                                   # 199 core tests
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 233, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
-or no `tkinter` — a bare `pytest tests/` on a headless box reports `194 passed,
+or no `tkinter` — a bare `pytest tests/` on a headless box reports `199 passed,
 1 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
@@ -870,26 +870,56 @@ that nothing reads back.
 
 ## Licensing
 
-Private, all rights reserved. No AGPL, no commercial tiers, none of the
-Argus/Iris/Proteus dual-licensing apparatus — the owner asked for a private
-tool and it is one.
+**AGPL-3.0-or-later, and that is the whole of it.** No commercial tier, no
+CLA, none of the Argus/Iris/Proteus dual-licensing apparatus. Every source
+file carries `SPDX-License-Identifier: AGPL-3.0-or-later`; new files carry it
+too.
 
-The one licence fact that has to stay accurate: the `timesfm` **package** is
-Apache-2.0 and the `google/timesfm-3.0-pytorch` **weights** are under
-`timesfm-non-commercial-license-v1.0`, non-commercial and non-production use
-only. That is fine for a private tool. If Tyche is ever sold or run in
-production, the weights are the blocker, and dropping to a 2.5 checkpoint —
-which is Apache-2.0 — is not a swap: 2.5 has no native multivariate
-forecasting and `core/forecaster.py` is built around 3.0's.
+0.7.0 made that change, and the reasoning is worth keeping because the request
+that produced it contained a misconception it would be easy to reintroduce.
+The owner asked for Argus's dual-licence model, describing AGPL as what makes
+Tyche "a private-use-only tool". **It is the opposite.** The AGPL grants
+everyone the right to use, modify and redistribute, commercially included; the
+previous `All rights reserved` was the restrictive one. Going AGPL widened
+what others may do. He was told this and chose it anyway, which is a decision
+and not an oversight — do not "correct" it back.
 
-Unlike Argus, this repository has no dependency-licence tripwire test, because
-it has four runtime dependencies and none of them is copyleft. Check any new
-one before adding it.
+**The commercial tier was dropped for a reason, and the reason is measured.**
+The `checkpoint-licence` CI job asked the model cards directly on 6 September
+2026:
+
+| checkpoint | declared licence |
+|---|---|
+| `google/timesfm-3.0-pytorch` — Tyche's default | `other` → `timesfm-non-commercial-license-v1.0` |
+| `google/timesfm-2.5-200m-pytorch` | `apache-2.0` |
+| `google/timesfm-1.0-200m-pytorch` | `apache-2.0` |
+
+None is gated, so the weights download with nothing accepted — which is how a
+restriction like that goes unnoticed. A commercial licence for Tyche would
+have sold the right to use commercially a program whose headline method runs
+on weights that forbid it. Argus's dual licence works because Argus's default
+*was* 2.5; it moved to 3.0 in its 1.1.0 and its licence documents were not
+updated, which is Argus's problem to fix and the owner said he would.
+
+The distinction that has to stay accurate: the `timesfm` **package** is
+Apache-2.0, the **weights** are a separate work under a separate licence, and
+Tyche never redistributes them — it downloads them on the user's machine.
+`THIRD-PARTY-LICENSES.md` states all of this for whoever receives a copy.
+
+No dependency imposes copyleft on Tyche: customtkinter is CC0, numpy BSD,
+requests and timesfm Apache-2.0, torch BSD, and `certifi`'s MPL-2.0 is
+file-level and reaches only its own files. The AGPL here is a choice, not
+something inherited. There is still no dependency-licence tripwire test —
+check any new dependency by hand before adding it.
 
 ## The repository
 
-Private. Treat that as a decision that could change, not a guarantee: nothing
-here should carry a credential. `.gitignore` is deny-by-default on `data/`,
+Private, and AGPL — which is not a contradiction. The licence governs whoever
+receives a copy; keeping the repository closed is what stops anyone receiving
+one. The owner said he would decide about publishing separately.
+
+Treat privacy as a decision that could change, not a guarantee: nothing here
+should carry a credential. `.gitignore` is deny-by-default on `data/`,
 `config/settings.json` and every `.env` variant, with narrow `!` exceptions
 for templates. Keep that shape — allowlist the one file, do not loosen the
 directory.

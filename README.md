@@ -400,22 +400,37 @@ cosa giusta, e che rende la sua classifica una copia di quella per frequenza.
 
 ## Licenza
 
-Tyche è un **progetto privato**, tutti i diritti riservati. Vedi `LICENSE`.
+Tyche è **AGPL-3.0-or-later**. Vedi `LICENSE` per il testo completo e
+`THIRD-PARTY-LICENSES.md` per che cosa dipende da cosa.
 
-La distinzione su TimesFM conta se questo dovesse cambiare: il codice del
-pacchetto `timesfm` è Apache-2.0, ma i **pesi** `google/timesfm-3.0-pytorch`
-sono sotto `timesfm-non-commercial-license-v1.0`, riservati a uso non
-commerciale e non di produzione. I pesi fino alla 2.5 restano Apache-2.0 — ma
-la 2.5 non ha previsione multivariata nativa e non è un sostituto immediato di
-quello che fa `core/forecaster.py`.
+In breve: puoi usarlo, studiarlo, modificarlo e ridistribuirlo per qualunque
+scopo. Se lo distribuisci — o se lo esponi come servizio di rete — devi
+consegnare il sorgente alle stesse condizioni, comprese le tue modifiche. Non
+c'è una licenza commerciale e non c'è un CLA: una contribuzione si offre sotto
+la stessa licenza, che è quello che l'AGPL prevede di suo.
+
+**I pesi del modello sono un'altra cosa dal codice del modello**, ed è la
+distinzione che conta di più qui perché i due arrivano insieme. Il pacchetto
+`timesfm` è Apache-2.0. I **pesi** `google/timesfm-3.0-pytorch`, che Tyche
+scarica al primo uso, dichiarano `timesfm-non-commercial-license-v1.0`: uso non
+commerciale e non di produzione. Verificato sulla model card, e chiunque può
+rifare la verifica con il job `checkpoint-licence` della CI.
+
+Quindi: l'AGPL ti permette di usare Tyche anche commercialmente, ed è un
+permesso che Tyche può darti. Non si estende ai pesi della 3.0, che non sono
+suoi da concedere. Il checkpoint 2.5 è Apache-2.0 e l'impostazione lo accetta
+già, ma `core/forecaster.py` è scritto sull'API della 3.0 e andrebbe adattato.
+Tutto il resto del programma — archivio, statistiche, test di indipendenza,
+validazione e i tre metodi che non sono TimesFM — funziona senza scaricare
+alcun peso.
 
 ---
 
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 194 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 228, GUI compresa
+python -m pytest tests/ -q                                    # 199 test core
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 233, GUI compresa
 python -m ruff check .
 ```
 

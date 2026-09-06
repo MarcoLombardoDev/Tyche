@@ -1,8 +1,8 @@
 # Tyche — SuperEnalotto Archive Analysis & TimesFM Forecasting
 # Copyright (C) 2026 Marco Lombardo
 #
-# Private project. All rights reserved; see LICENSE.
-# Distributed WITHOUT ANY WARRANTY.
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Distributed WITHOUT ANY WARRANTY; see LICENSE for the full terms.
 
 """
 version.py — Tyche
@@ -23,7 +23,7 @@ APP_TITLE = "Tyche — Analisi dell'archivio SuperEnalotto e previsioni con Time
 
 # Bump by hand on a release. A frozen executable has no .py sources on disk
 # to derive a date from — the same reasoning as Argus's version.py.
-__version__ = "0.6.3"
+__version__ = "0.7.0"
 
 # google/timesfm-3.0-pytorch, released 31 August 2026: 330M parameters, native
 # multivariate forecasting, and the reason Tyche can hand TimesFM all 90
