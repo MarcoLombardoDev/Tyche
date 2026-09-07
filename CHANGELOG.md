@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [0.9.0] — 2026-09-07
+## [0.9.0] — 2026-09-07 — `f1cec1f`
 
 TimesFM dice se può funzionare prima che tu glielo chieda.
 
