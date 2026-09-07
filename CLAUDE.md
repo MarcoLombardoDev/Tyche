@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 314, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 354, GUI included
+python -m pytest tests/ -q                                   # 316, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 356, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`314 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`316 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -992,6 +992,27 @@ ancestor, and it is far too small to matter to a player even where it was
 strongest. The README says all of this.
 
 ## Editing the README
+
+**It opens the way every product in this family does: icon, `Name — payoff`,
+then badges.** It used to be a bare `# Tyche` with the strapline on its own
+line underneath, which is the one screen a reader who knows the other
+repositories should recognise instantly. The title is `APP_TITLE`, verbatim —
+a test compares the two, so changing the product's name means changing it in
+`core/version.py` and the README together, and the window title and the mail
+subject follow from the same constant.
+
+The payoff says **what the program does, not how**. "Analisi e previsione
+SuperEnalotto", not the older "analisi dell'archivio SuperEnalotto e previsioni
+con TimesFM 3.0": naming the model in the title promises the program is about
+TimesFM, and TimesFM is one of four methods — the one the rest of this README
+exists to put in its place.
+
+Three badges: licence, Python floor, CI. **No commercial-licence badge**, since
+there is no commercial licence, and the Python floor is 3.12 because NumPy
+requires it — a badge saying 3.10 would send somebody to an install that cannot
+resolve. The CI badge will not render while the repository is private; it
+starts working the day that changes, and until then it is the only part of the
+header that is aspirational.
 
 The README deliberately contains **no `$` characters and no KaTeX**. Argus's
 notes describe two expensive traps in GitHub's restricted KaTeX subset — a

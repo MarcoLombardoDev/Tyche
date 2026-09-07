@@ -84,6 +84,51 @@ def headings(text: str, level: int) -> list[str]:
 # Structure
 # ---------------------------------------------------------------------------
 
+def test_the_readme_opens_the_way_every_product_here_does():
+    """Icon, name — payoff, then badges. The shape, not the wording.
+
+    The README used to open with a bare `# Tyche` and put the strapline on its
+    own line underneath, where the other five carry it in the title. A reader
+    who has seen one of these repositories should recognise the first screen
+    of any of them.
+
+    The payoff says what the program does rather than how: naming TimesFM
+    there would promise the program is about the model, and TimesFM is one of
+    four methods — the one the rest of the README exists to put in its place.
+    """
+    import sys
+
+    sys.path.insert(0, REPO)
+    from core.version import APP_TITLE
+
+    lines = read("README.md").splitlines()
+    title = lines[0]
+    assert title.startswith("# "), f"the first line is not a title: {title!r}"
+    icon, _, rest = title[2:].partition(" ")
+    assert icon and not icon.isascii(), f"no icon before the name: {title!r}"
+    assert rest == APP_TITLE, (
+        f"the README title and APP_TITLE disagree:\n  README: {rest!r}\n  code:   {APP_TITLE!r}"
+    )
+    assert " — " in rest, "the title is a name without a payoff"
+
+
+def test_the_badges_are_present_and_point_somewhere_real():
+    """Three, and each one a claim that can be wrong.
+
+    No commercial-licence badge: Tyche has no commercial tier, and the badge
+    the other three carry links a document that does not exist here. The
+    Python floor is not decoration either — NumPy requires 3.12, so a badge
+    saying 3.10 would send somebody to an install that cannot resolve.
+    """
+    head = "\n".join(read("README.md").splitlines()[:8])
+    assert "img.shields.io/badge/Licenza-AGPL" in head
+    assert "img.shields.io/badge/Python-3.12" in head
+    assert "actions/workflows/ci.yml/badge.svg" in head
+    assert "COMMERCIAL-LICENSE" not in head, (
+        "a commercial-licence badge, for a product that has no commercial licence"
+    )
+
+
 def test_the_readme_keeps_its_sections_in_order():
     assert tuple(headings(read("README.md"), 2)) == README_SKELETON
 

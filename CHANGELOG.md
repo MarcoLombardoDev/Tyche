@@ -10,6 +10,15 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 ## [Non rilasciato]
 
+### Modificato
+- **Il titolo è `Tyche — Analisi e previsione SuperEnalotto`**, ovunque: la
+  prima riga del README, la barra della finestra, l'intestazione della pagina
+  di rilascio e la sottoscritta nella barra in alto. Prima il README apriva con
+  un `# Tyche` scarno e la frase stava sotto, da sola, e quella frase nominava
+  TimesFM — che è uno dei quattro metodi, quello che tutto il resto del README
+  esiste per ridimensionare. Il README ora apre come gli altri cinque prodotti:
+  icona, `Nome — payoff`, poi i badge.
+
 ### Aggiunto
 - **La release registra da quale commit è stata costruita**, nell'intestazione
   della propria sezione del changelog. È quello che la cancellazione del tag

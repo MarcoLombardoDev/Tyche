@@ -1,4 +1,4 @@
-**Tyche — analisi dell'archivio SuperEnalotto e previsioni con TimesFM 3.0.**
+**Tyche — analisi e previsione SuperEnalotto.**
 
 Un'applicazione desktop che scarica lo storico completo delle estrazioni del
 SuperEnalotto dal dicembre 1997, lo esamina in cerca di struttura sfruttabile,

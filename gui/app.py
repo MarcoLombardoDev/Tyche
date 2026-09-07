@@ -197,7 +197,10 @@ class TycheApp(ctk.CTk):
             font=ctk.CTkFont(family=ui_font_family(), size=20, weight="bold"),
         ).pack(side="left", padx=(18, 6))
         ctk.CTkLabel(
-            bar, text="Analisi dell'archivio SuperEnalotto", text_color=MUTED,
+            # The payoff from APP_TITLE, which the window title already
+            # carries whole. Sliced rather than repeated so the two cannot
+            # drift apart.
+            bar, text=APP_TITLE.split(" — ", 1)[-1], text_color=MUTED,
             font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(side="left", padx=(0, 20))
 

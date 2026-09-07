@@ -1,6 +1,8 @@
-# Tyche
+# 🎲 Tyche — Analisi e previsione SuperEnalotto
 
-**Analisi dell'archivio SuperEnalotto e previsioni con TimesFM 3.0.**
+[![Licenza: AGPL v3](https://img.shields.io/badge/Licenza-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/MarcoLombardoDev/Tyche/actions/workflows/ci.yml/badge.svg)](https://github.com/MarcoLombardoDev/Tyche/actions/workflows/ci.yml)
 
 Un'applicazione desktop che scarica lo storico completo delle estrazioni del
 SuperEnalotto dal dicembre 1997, lo sottopone a test per cercarvi struttura
@@ -12,6 +14,12 @@ La versione breve di quella misura: **niente**. Le estrazioni sono
 indipendenti, i test lo dicono, e ogni metodo del programma ottiene 0,4 centri
 su sei, che è esattamente il caso. Tyche è costruito per dimostrarlo con cura,
 non per affermarlo.
+
+> 🎲 **Non può aiutarti a vincere**, e non pretende di poterlo fare. Le
+> probabilità sono esatte e immutabili: 1 su 622.614.630 per sei numeri —
+> vedi [Le probabilità, che nessun metodo cambia](#le-probabilità-che-nessun-metodo-cambia).
+> ⚖️ **AGPL-3.0-or-later e basta**: nessuna licenza commerciale, nessun CLA. I
+> pesi di TimesFM sono un'altra cosa dal codice — vedi [Licenza](#licenza).
 
 ---
 

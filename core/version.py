@@ -19,7 +19,11 @@ being asked to do.
 """
 
 APP_NAME = "Tyche"
-APP_TITLE = "Tyche — Analisi dell'archivio SuperEnalotto e previsioni con TimesFM"
+# Name — payoff, the shape every product in this family uses for its title:
+# short enough for a window title bar and for the README's first line, which
+# are the two places it is read. What it does, not how — TimesFM is one of four
+# methods and naming it here would promise the program is about the model.
+APP_TITLE = "Tyche — Analisi e previsione SuperEnalotto"
 
 # Bump by hand on a release. A frozen executable has no .py sources on disk
 # to derive a date from — the same reasoning as Argus's version.py.
