@@ -237,12 +237,12 @@ class TycheApp(ctk.CTk):
     def _build_licence_bar(self) -> None:
         """A fixed strip naming the licence and how to ask about it.
 
-        The same line every product in this family carries, wording included,
-        because a licence notice is the one place they should read alike. It
-        stays in English where the rest of the interface is Italian: it names
-        an SPDX identifier and a copyright holder, neither of which is
-        translated, and CLAUDE.md's language boundary is about the product's
-        own text rather than about a notice quoting a licence.
+        The same strip every product in this family carries, in the same place
+        and saying the same things — but **in Italian**, unlike theirs. Tyche
+        forecasts an Italian lottery and exists only for people who play it, so
+        the language boundary in CLAUDE.md applies here like anywhere else a
+        user reads something. ``AGPL-3.0`` is left alone: it is an SPDX
+        identifier, not a phrase.
 
         Packed before the status footer, so it sits below it: with
         ``side="bottom"`` Tk stacks each new widget above the last.
@@ -265,7 +265,7 @@ class TycheApp(ctk.CTk):
             centre,
             text=(
                 f"© 2026 Marco Lombardo — {APP_NAME}  |  "
-                "Licensed under AGPL-3.0  |  Contact:"
+                "Distribuito con licenza AGPL-3.0  |  Contatti:"
             ),
             font=ctk.CTkFont(family=ui_font_family(), size=9),
             text_color=SEP,
@@ -285,11 +285,14 @@ class TycheApp(ctk.CTk):
     def open_contact_email(self, event=None) -> None:
         """Open the mail client on a contact enquiry.
 
+        The subject is Italian like the rest of what a user sees; the docstring
+        is English like the rest of what a developer sees.
+
         Suppressed rather than reported: with no mail client configured the
         address is still legible on screen, so there is nothing a dialog would
         tell the reader that they cannot already see.
         """
-        subject = quote(f"{APP_TITLE} — enquiry")
+        subject = quote(f"{APP_TITLE} — richiesta")
         with contextlib.suppress(Exception):
             webbrowser.open(f"mailto:{CONTACT_EMAIL}?subject={subject}")
 

@@ -51,7 +51,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 312, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 351, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 352, GUI included
 python -m ruff check .
 ```
 
@@ -375,17 +375,20 @@ silently substitute.
 
 A fixed strip at the very bottom of the window, below the status footer:
 
-    © 2026 Marco Lombardo — Tyche  |  Licensed under AGPL-3.0  |  Contact: …
+    © 2026 Marco Lombardo — Tyche  |  Distribuito con licenza AGPL-3.0  |  Contatti: …
 
-**The same line every product in this family carries, wording included.** It is
-the one place they should read alike, so the test compares the parts rather
-than accepting anything that mentions a licence. Tyche had no such bar at all
-until 0.8.0.
+**The same strip every product in this family carries**, in the same place and
+saying the same things. Tyche had none at all until 0.8.0.
 
-**It stays in English**, which looks like a violation of the language boundary
-and is not. It names an SPDX identifier and a copyright holder; neither is
-translated, and the boundary is about the product's own text rather than about
-a notice quoting a licence.
+**But in Italian, unlike theirs, and that is the point of the difference.**
+The first version of this bar copied Argus's English wording, on the argument
+that a licence notice names an SPDX identifier and a copyright holder and
+neither is translated. The owner corrected it: Tyche forecasts a lottery that
+exists only in Italy, so every one of its users reads Italian, and the
+language boundary applies here like anywhere else a user reads something.
+`AGPL-3.0` is left alone — an identifier is not a phrase.
+`test_the_licence_bar_is_in_italian_like_everything_else_a_user_reads` holds
+that, and fails if "Licensed under" or "Contact:" comes back.
 
 The address is written out and clickable rather than promised on request:
 whoever is running the program is exactly the person who might have a question

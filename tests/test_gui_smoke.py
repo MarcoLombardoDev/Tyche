@@ -583,6 +583,23 @@ def test_the_licence_bar_names_the_licence_and_the_address(app):
     assert app._licence_email.cget("text") == CONTACT_EMAIL
 
 
+def test_the_licence_bar_is_in_italian_like_everything_else_a_user_reads(app):
+    """The other products say "Licensed under ... | Contact:" and Tyche does
+    not, deliberately.
+
+    It forecasts an Italian lottery and exists only for people who play it, so
+    the language boundary applies to this strip like to any other text a user
+    reads — it was English in the first version of this bar and that was the
+    wrong call. ``AGPL-3.0`` stays as it is: an SPDX identifier is not a
+    phrase to translate.
+    """
+    text = app._licence_label.cget("text")
+    assert "Distribuito con licenza AGPL-3.0" in text
+    assert "Contatti:" in text
+    for english in ("Licensed under", "Contact:"):
+        assert english not in text, f"the bar still reads English: {english!r}"
+
+
 def test_the_address_looks_clickable(app):
     """A bare label that happens to react to clicks is undiscoverable: the
     hand cursor is what says it can be clicked at all."""

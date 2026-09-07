@@ -18,12 +18,13 @@ Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
 
 ### Aggiunto
 
-- **La barra della licenza in fondo alla finestra**, la stessa riga che
-  portano gli altri prodotti: `© 2026 Marco Lombardo — Tyche | Licensed under
-  AGPL-3.0 | Contact:` e l'indirizzo, cliccabile, che apre il client di posta.
-  Tyche non ne aveva nessuna. Resta in inglese dove il resto dell'interfaccia
-  è italiano: nomina un identificatore SPDX e un titolare del copyright, e non
-  si traduce né l'uno né l'altro.
+- **La barra della licenza in fondo alla finestra**, la stessa che portano
+  gli altri prodotti: `© 2026 Marco Lombardo — Tyche | Distribuito con licenza
+  AGPL-3.0 | Contatti:` e l'indirizzo, cliccabile, che apre il client di
+  posta. Tyche non ne aveva nessuna. In italiano, a differenza degli altri:
+  Tyche fa previsioni su un concorso che esiste solo in Italia, quindi chi lo
+  usa legge italiano. `AGPL-3.0` resta com'è, perché un identificatore non è
+  una frase da tradurre.
 
 - **Pacchetti per macOS e Linux**, oltre a quello per Windows. Ognuno è
   compilato sul proprio runner — PyInstaller non compila per altre
