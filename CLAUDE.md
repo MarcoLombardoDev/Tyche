@@ -996,10 +996,17 @@ too.
 
 Argus used to be on that list and no longer is: it withdrew its commercial
 licence in 1.2.0, and for Tyche's reason — the forecast runs on weights
-licensed for non-commercial use only, so the offer could not be kept. Argus
-kept its CLA; Tyche has none, and `tests/test_docs.py` and
-`tests/test_packaging.py` both fail if a `CLA.md` appears or if a template
-starts asking a contributor to agree to one.
+licensed for non-commercial use only, so the offer could not be kept. It kept
+its CLA for a while afterwards and has since withdrawn that too, on the
+grounds Tyche never had one: a CLA exists so an owner can license the whole
+work on other terms, and with no commercial tier there is nothing to relicense
+into. The two products now carry the same test.
+
+`tests/test_docs.py` and `tests/test_packaging.py` both fail if a `CLA.md`
+appears or if a template starts asking a contributor to agree to one. The
+first checks the two things that matter rather than the acronym — nothing
+links the file, nothing asks for agreement — because matching "CLA" line by
+line trips over a paragraph saying there is *no* CLA that happens to wrap.
 
 0.7.0 made that change, and the reasoning is worth keeping because the request
 that produced it contained a misconception it would be easy to reintroduce.

@@ -173,15 +173,28 @@ def test_there_is_no_commercial_tier_and_nothing_claims_there_is():
 
 
 def test_there_is_no_cla_and_nothing_asks_a_contributor_to_sign_one():
-    """A CLA exists to let an owner relicense contributions commercially.
+    """A CLA exists to let an owner relicense a contribution commercially.
 
     With no commercial tier there is nothing to relicense *to*, so asking for
     one would be collecting a right nobody intends to use. A contribution is
     offered under the AGPL like everything else here.
+
+    Two things are checked rather than the bare acronym: that nothing links
+    the file, and that nothing asks anyone to agree to it. Matching on "CLA"
+    line by line is fragile against a paragraph that says there *is* no CLA
+    and happens to wrap — the same trap as "todo" inside *metodo*, one test
+    down.
     """
     assert not os.path.exists(os.path.join(REPO, "CLA.md"))
-    for name in ("README.md", "CONTRIBUTING.md"):
-        assert "CLA.md" not in read(name), f"{name} links a CLA that does not exist"
+    for name in ("README.md", "CONTRIBUTING.md",
+                 ".github/PULL_REQUEST_TEMPLATE.md",
+                 ".github/ISSUE_TEMPLATE/config.yml"):
+        text = read(name)
+        assert "CLA.md" not in text, f"{name} links a CLA that does not exist"
+        flattened = " ".join(text.lower().split())
+        for ask in ("agree to the contributor license agreement",
+                    "agree to the cla", "firmare il cla", "aderire al cla"):
+            assert ask not in flattened, f"{name} asks for a CLA: {ask!r}"
 
 
 def test_the_readme_says_the_licence_is_agpl_and_only_that():
