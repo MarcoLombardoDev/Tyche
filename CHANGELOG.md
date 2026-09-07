@@ -18,6 +18,13 @@ Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
 
 ### Aggiunto
 
+- **La barra della licenza in fondo alla finestra**, la stessa riga che
+  portano gli altri prodotti: `© 2026 Marco Lombardo — Tyche | Licensed under
+  AGPL-3.0 | Contact:` e l'indirizzo, cliccabile, che apre il client di posta.
+  Tyche non ne aveva nessuna. Resta in inglese dove il resto dell'interfaccia
+  è italiano: nomina un identificatore SPDX e un titolare del copyright, e non
+  si traduce né l'uno né l'altro.
+
 - **Pacchetti per macOS e Linux**, oltre a quello per Windows. Ognuno è
   compilato sul proprio runner — PyInstaller non compila per altre
   piattaforme — e nessuno viene caricato prima di aver avviato Tk davvero,
@@ -60,6 +67,14 @@ Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
   sotto un server X vero. La gamba Windows resta per quello che verifica
   davvero, e che prima non verificava nessuno: percorsi, codifiche e fine
   riga sulla piattaforma da cui viene la maggior parte dei download.
+
+### Corretto
+
+- `core/localise.py` apriva con la riga di prodotto **in italiano** —
+  `APP_TITLE`, che è testo per l'utente — mentre gli altri quarantasette file
+  portavano quella inglese. Il guard sull'intestazione controllava solo che la
+  riga cominciasse per `# Tyche`, quindi non se ne accorgeva: adesso confronta
+  i file fra loro e pretende che la riga sia la stessa ovunque.
 
 ### Modificato
 

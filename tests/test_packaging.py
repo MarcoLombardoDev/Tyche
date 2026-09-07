@@ -538,3 +538,28 @@ class TestLicenceHeader:
                     )
                     break
         assert not wrong, "the licence header is broken in:\n  " + "\n  ".join(wrong)
+
+    def test_the_product_line_is_the_same_in_every_file(self):
+        """The shape check above passes on any line starting "# Tyche".
+
+        That is exactly how `core/localise.py` came to open with the *Italian*
+        product line — `APP_TITLE`, which is user-facing text — while the other
+        forty-seven files carried the English one. CLAUDE.md's language
+        boundary puts a file header on the developer's side of the line, and a
+        header nobody can grep for consistently is a header that drifts.
+
+        Compared file against file rather than against a literal here, so the
+        wording stays free to change as long as it changes everywhere at once.
+        """
+        seen: dict[str, list[str]] = {}
+        for path in self.sources():
+            lines = path.read_text(encoding="utf-8").splitlines()
+            if lines and lines[0].startswith("#!"):
+                lines = lines[1:]
+            seen.setdefault(lines[0], []).append(str(path.relative_to(REPO)))
+        if len(seen) > 1:
+            report = "\n  ".join(
+                f"{line!r} — {len(files)} file(s): {', '.join(sorted(files)[:3])}"
+                for line, files in sorted(seen.items(), key=lambda kv: -len(kv[1]))
+            )
+            raise AssertionError("the product line is not the same everywhere:\n  " + report)

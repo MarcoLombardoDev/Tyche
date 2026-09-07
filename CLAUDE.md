@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 311, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 346, GUI included
+python -m pytest tests/ -q                                   # 312, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 351, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`311 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`312 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -370,6 +370,32 @@ font database and this is asked for on every label built. It falls back to
 whatever Tk itself would have used, which is the right answer for a machine
 that has none of the five — better a font the system chose than a name it will
 silently substitute.
+
+## The licence bar
+
+A fixed strip at the very bottom of the window, below the status footer:
+
+    © 2026 Marco Lombardo — Tyche  |  Licensed under AGPL-3.0  |  Contact: …
+
+**The same line every product in this family carries, wording included.** It is
+the one place they should read alike, so the test compares the parts rather
+than accepting anything that mentions a licence. Tyche had no such bar at all
+until 0.8.0.
+
+**It stays in English**, which looks like a violation of the language boundary
+and is not. It names an SPDX identifier and a copyright holder; neither is
+translated, and the boundary is about the product's own text rather than about
+a notice quoting a licence.
+
+The address is written out and clickable rather than promised on request:
+whoever is running the program is exactly the person who might have a question
+about licensing, security or contributing. Clicking opens the mail client, and
+a machine with none configured is a normal state — the click is suppressed
+rather than reported, because the address is still legible on screen and a
+dialog would tell the reader nothing they cannot see.
+
+Packed *before* the status footer so it ends up below it: with
+`side="bottom"`, Tk stacks each new widget above the last.
 
 ## Screenshots
 

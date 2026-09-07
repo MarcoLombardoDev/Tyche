@@ -43,6 +43,8 @@ import os
 import queue
 import threading
 import traceback
+import webbrowser
+from urllib.parse import quote
 
 import customtkinter as ctk
 
@@ -50,7 +52,7 @@ from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
 from core.fonts import ui_font_family
 from core.localise import it_date, it_number
-from core.version import APP_NAME, APP_TITLE, __version__
+from core.version import APP_NAME, APP_TITLE, CONTACT_EMAIL, __version__
 from gui.archive_panel import ArchivePanel
 from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
@@ -220,6 +222,8 @@ class TycheApp(ctk.CTk):
         self._archive_label = ctk.CTkLabel(footer, text="", anchor="e", text_color=MUTED)
         self._archive_label.pack(side="right", padx=16)
 
+        self._build_licence_bar()
+
         for key, _, panel_class in VIEWS:
             self._panels[key] = panel_class(self.body, self)
         self.show(self._active)
@@ -228,6 +232,66 @@ class TycheApp(ctk.CTk):
             self.set_status(
                 "Nessun archivio su disco — apri Archivio e scarica l'esportazione."
             )
+
+    # ── the licence bar ──────────────────────────────────────
+    def _build_licence_bar(self) -> None:
+        """A fixed strip naming the licence and how to ask about it.
+
+        The same line every product in this family carries, wording included,
+        because a licence notice is the one place they should read alike. It
+        stays in English where the rest of the interface is Italian: it names
+        an SPDX identifier and a copyright holder, neither of which is
+        translated, and CLAUDE.md's language boundary is about the product's
+        own text rather than about a notice quoting a licence.
+
+        Packed before the status footer, so it sits below it: with
+        ``side="bottom"`` Tk stacks each new widget above the last.
+
+        Whoever is running the program is exactly the person who might have a
+        question about licensing, security or contributing, so the address is
+        written out and clickable rather than promised on request.
+        """
+        bar = ctk.CTkFrame(self, fg_color=BG_ROOT, corner_radius=0, height=22)
+        bar.pack(fill="x", side="bottom")
+        bar.pack_propagate(False)
+
+        # A transparent frame with no fill stays centred in the bar.
+        centre = ctk.CTkFrame(bar, fg_color="transparent")
+        centre.pack(expand=True)
+
+        # Both kept on the instance so the suite can read them back rather
+        # than walking the widget tree looking for a © sign.
+        self._licence_label = ctk.CTkLabel(
+            centre,
+            text=(
+                f"© 2026 Marco Lombardo — {APP_NAME}  |  "
+                "Licensed under AGPL-3.0  |  Contact:"
+            ),
+            font=ctk.CTkFont(family=ui_font_family(), size=9),
+            text_color=SEP,
+        )
+        self._licence_label.pack(side="left")
+
+        self._licence_email = ctk.CTkLabel(
+            centre,
+            text=CONTACT_EMAIL,
+            font=ctk.CTkFont(family=ui_font_family(), size=9, underline=True),
+            text_color=ACCENT,
+            cursor="hand2",
+        )
+        self._licence_email.pack(side="left", padx=(4, 0))
+        self._licence_email.bind("<Button-1>", self.open_contact_email)
+
+    def open_contact_email(self, event=None) -> None:
+        """Open the mail client on a contact enquiry.
+
+        Suppressed rather than reported: with no mail client configured the
+        address is still legible on screen, so there is nothing a dialog would
+        tell the reader that they cannot already see.
+        """
+        subject = quote(f"{APP_TITLE} — enquiry")
+        with contextlib.suppress(Exception):
+            webbrowser.open(f"mailto:{CONTACT_EMAIL}?subject={subject}")
 
     def show(self, key: str) -> None:
         for other in self._panels.values():

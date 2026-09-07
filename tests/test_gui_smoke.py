@@ -559,3 +559,60 @@ def test_the_self_check_passes_and_writes_its_report(tmp_path):
     # The workflow greps for this line to confirm the bundle came up on the
     # platform's real toolkit rather than a fallback.
     assert "sistema grafico:" in text
+
+
+# ─────────────────────────────────────────────────────────────
+# The licence bar
+#
+# Ported from Argus, which carries the same strip and the same four checks.
+# The line is the one place these products deliberately read alike, wording
+# included, so a test that only asserted "something mentions AGPL" would let
+# them drift apart while staying green.
+# ─────────────────────────────────────────────────────────────
+
+def test_the_licence_bar_names_the_licence_and_the_address(app):
+    """Whoever is running the program is the person who may have a licensing
+    or security question, so the address is spelled out rather than promised
+    'on request'."""
+    from core.version import APP_NAME, CONTACT_EMAIL
+
+    text = app._licence_label.cget("text")
+    assert "AGPL-3.0" in text
+    assert "© 2026 Marco Lombardo" in text
+    assert APP_NAME in text
+    assert app._licence_email.cget("text") == CONTACT_EMAIL
+
+
+def test_the_address_looks_clickable(app):
+    """A bare label that happens to react to clicks is undiscoverable: the
+    hand cursor is what says it can be clicked at all."""
+    assert app._licence_email.cget("cursor") == "hand2"
+
+
+def test_clicking_the_address_opens_the_mail_client(app, monkeypatch):
+    from core.version import CONTACT_EMAIL
+    from gui import app as app_mod
+
+    opened = []
+    monkeypatch.setattr(app_mod.webbrowser, "open", opened.append)
+
+    app.open_contact_email()
+
+    assert len(opened) == 1
+    assert opened[0].startswith(f"mailto:{CONTACT_EMAIL}?subject=")
+
+
+def test_a_missing_mail_client_does_not_crash(app, monkeypatch):
+    """No mail client configured is a normal state on a headless or
+    locked-down box; the address stays readable on screen, so it must not
+    raise."""
+    from gui import app as app_mod
+
+    def explode(url):
+        raise OSError("no mail client")
+
+    monkeypatch.setattr(app_mod.webbrowser, "open", explode)
+
+    app.open_contact_email()
+
+    assert app.winfo_exists()
