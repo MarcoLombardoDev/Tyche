@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 312, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 352, GUI included
+python -m pytest tests/ -q                                   # 314, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 354, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`312 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`314 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -207,6 +207,19 @@ them has a test:
 - `--cleanup-tag` removes the git tag with the release, which is what was
   being done by hand. `CHANGELOG.md` keeps every version's section, so the
   project's record does not depend on those pages surviving.
+- **The step before it records which commit the release was built from**, into
+  that version's changelog heading, and pushes it to `main`. That is what the
+  cleanup would otherwise destroy: AGPL-3.0 §6 obliges whoever distributed a
+  binary to hand over the corresponding source, and somebody holding a
+  superseded archive still has it long after the release page is gone — the
+  commit stays in `main`'s history, but with the tag deleted nothing says
+  *which* commit. Argus reached this first and wrote the hash by hand, after
+  the fact, which is how one of its versions shipped with the placeholder
+  still in the heading: from inside the commit being tagged there is no way to
+  know its own hash. **Before the cleanup, not after** — a failure there has to
+  leave the older release standing rather than deleting it and losing the
+  pointer in the same run, which is the opposite of Argus's ordering because
+  Argus keeps every release.
 
 **Three archives**, built by the `build` matrix after the tests pass — Windows,
 macOS and Linux, each on its own runner, because PyInstaller does not

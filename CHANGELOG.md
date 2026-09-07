@@ -10,7 +10,14 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 ## [Non rilasciato]
 
-Niente, per ora.
+### Aggiunto
+- **La release registra da quale commit è stata costruita**, nell'intestazione
+  della propria sezione del changelog. È quello che la cancellazione del tag
+  distruggerebbe: chi ha scaricato un archivio ormai superato lo tiene molto
+  dopo che la pagina della release è sparita, il commit resta nella storia di
+  `main`, ma senza il tag niente dice *quale*. Il passo gira **prima** della
+  cancellazione, così se fallisce la release precedente resta in piedi invece
+  di sparire portandosi via il riferimento.
 
 ## [0.8.0] — 2026-09-07
 

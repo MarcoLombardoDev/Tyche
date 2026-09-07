@@ -586,6 +586,50 @@ def test_the_release_body_keeps_the_disclaimer():
 # Only one release survives, and the order is the safety
 # ─────────────────────────────────────────────────────────────
 
+def test_the_release_records_which_commit_it_was_built_from():
+    """This repository keeps one release and deletes the previous tag with it.
+
+    So the pointer from a published archive back to the commit that built it
+    disappears the next time a version ships. AGPL-3.0 §6 obliges whoever
+    distributed a binary to hand over the corresponding source, and somebody
+    holding a superseded archive still has it long after the release page is
+    gone: the commit stays in main's history, but nothing would say *which*
+    commit. CHANGELOG.md is a file, so it survives the deletion.
+
+    Argus recorded this by hand, after the fact, and shipped a version with
+    the placeholder still in the heading — from inside the commit being tagged
+    there is no way to know its own hash. The workflow knows, because by then
+    the tag exists.
+    """
+    workflow = load(WORKFLOW)
+    assert "sha" in workflow["jobs"]["release"]["outputs"], (
+        "the release job does not publish the tagged commit"
+    )
+    steps = workflow["jobs"]["notes"]["steps"]
+    record = next((s for s in steps if "CHANGELOG.md" in s.get("run", "")), None)
+    assert record is not None, "nothing writes the commit into the changelog"
+    assert "git push origin main" in record["run"], (
+        "the changelog is edited and never pushed"
+    )
+    # It must land on the branch people read, not on the tag.
+    checkout = next(s for s in steps if s.get("uses", "").startswith("actions/checkout"))
+    assert checkout["with"]["ref"] == "main"
+
+
+def test_the_commit_is_recorded_before_the_older_release_is_deleted():
+    """The ordering is the safety property, and it is the opposite of Argus's.
+
+    Argus keeps every release, so recording last costs nothing. Here the
+    cleanup destroys the tag that would otherwise answer the question, so a
+    failure while recording must leave the older release standing rather than
+    deleting it and losing the pointer in the same run.
+    """
+    runs = [s.get("run", "") for s in load(WORKFLOW)["jobs"]["notes"]["steps"]]
+    record = next(i for i, r in enumerate(runs) if "CHANGELOG.md" in r)
+    deleted = next(i for i, r in enumerate(runs) if "gh release delete " in r)
+    assert record < deleted, "the cleanup runs before the commit is recorded"
+
+
 def _notes_steps():
     return load(WORKFLOW)["jobs"]["notes"]["steps"]
 

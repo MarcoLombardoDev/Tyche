@@ -60,6 +60,9 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
+      # The commit the tag actually sits on. One, however many archives hang
+      # off it — the notes job writes it into the changelog.
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       - name: Work out which tag to publish
         id: tag
@@ -78,6 +81,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Which commit is being released
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         with:
@@ -627,9 +634,12 @@ jobs:
     needs: [release, build]
     runs-on: ubuntu-latest
     steps:
+      # The default branch, not the tag: this job commits to the file people
+      # read, and a detached checkout has nothing to push to. Nothing here
+      # reads the repository at the tagged revision.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release.outputs.tag }}
+          ref: main
 
       - uses: actions/download-artifact@v4
         with:
@@ -733,6 +743,83 @@ jobs:
           print(body)
           PY
           gh release edit "$TAG" --notes-file body.md
+
+      # Before the cleanup, not after, and that ordering is the point.
+      #
+      # This repository keeps exactly one release and deletes the previous
+      # tag with it, so the pointer from a published archive back to the
+      # commit that built it disappears the next time a version ships.
+      # AGPL-3.0 §6 obliges whoever distributed a binary to hand over the
+      # corresponding source, and somebody holding a superseded archive still
+      # has it long after the release page is gone: the source itself is fine —
+      # the commit stays in main's history — but nothing would say *which*
+      # commit. The changelog is a file, so it survives the deletion.
+      #
+      # Argus reached this first and recorded the hash by hand, after the fact,
+      # which is how one of its versions shipped with the placeholder still in
+      # the heading: from inside the commit being tagged there is no way to
+      # know its own hash. This step knows, because by now the tag exists and
+      # points at exactly one commit — however many archives hang off it.
+      #
+      # Running it *before* the cleanup means a failure here leaves the older
+      # release standing rather than deleting it and losing the pointer in the
+      # same run.
+      - name: Record which commit this release was built from
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+          VERSION: ${{ needs.release.outputs.version }}
+          SHA: ${{ needs.release.outputs.sha }}
+        run: |
+          git config user.name "MarcoLombardoDev"
+          git config user.email "202866655+MarcoLombardoDev@users.noreply.github.com"
+          # Already on main from the checkout above; pull in case something
+          # else landed while the archives were building.
+          git pull --ff-only origin main
+
+          short=$(git rev-parse --short=7 "$SHA")
+          python3 - "$VERSION" "$short" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          version, short = sys.argv[1:3]
+          path = pathlib.Path("CHANGELOG.md")
+          text = path.read_text(encoding="utf-8")
+
+          # The heading for this version, whatever it currently says after the
+          # date. Matched on the version alone so a heading that already
+          # carries a hash, or a placeholder, or nothing, is all one case.
+          pattern = re.compile(
+              rf"^(## \[{re.escape(version)}\][^\n]*?)"
+              rf"(?:\s+—\s+(?:`[0-9a-f]+`|commit[^\n]*))?$",
+              re.MULTILINE,
+          )
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit(f"no changelog heading for {version}")
+
+          already = match.group(0)
+          wanted = f"{match.group(1)} — `{short}`"
+          if already == wanted:
+              print(f"{version} already records {short}")
+              raise SystemExit(0)
+
+          path.write_text(text.replace(already, wanted, 1), encoding="utf-8")
+          print(f"{already!r} -> {wanted!r}")
+          PY
+
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "nothing to record"
+            exit 0
+          fi
+          git add CHANGELOG.md
+          # Two -m flags rather than one heredoc: a heredoc indented to match
+          # this file would put its leading spaces in the commit message.
+          git commit \
+            -m "Record that $TAG was built from $short" \
+            -m "Written by the release workflow, because a commit cannot know its own hash from the inside. Only the newest release stays online and its tag goes with it, so this line is the only thing left pointing from a published archive back to the source that built it."
+          git push origin main
 
       # Deliberately the last step of the last job, and deliberately not
       # `if: always()`. This repository keeps exactly one release — the current
