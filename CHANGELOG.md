@@ -10,6 +10,10 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 ## [Non rilasciato]
 
+Niente, per ora.
+
+## [0.8.0] — 2026-09-07
+
 Allineamento alle convenzioni degli altri cinque prodotti della famiglia.
 
 ### Aggiunto
