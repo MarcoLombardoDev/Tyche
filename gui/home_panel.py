@@ -48,6 +48,7 @@ import customtkinter as ctk
 from core.archive import describe_archive, freshness
 from core.fonts import ui_font_family
 from core.localise import it_date, it_number
+from core.predictor import method_name
 from gui.theme import (
     ACCENT,
     BG_PANEL,
@@ -249,7 +250,7 @@ class HomePanel(ctk.CTkFrame):
         if not beat:
             return (
                 f"Eseguito su {it_number(report.draws_scored)} estrazioni: nessun "
-                f"metodo batte il caso. Il migliore è {best.method} con "
+                f"metodo batte il caso. Il migliore è {method_name(best.method)} con "
                 f"{best.mean_hits:.4f} centri per estrazione, contro "
                 f"{best.expected_mean:.4f} del caso.",
                 GOOD, "✓",
@@ -273,6 +274,6 @@ class HomePanel(ctk.CTkFrame):
             )
         return (
             f"{len(prediction.combinations)} combinazioni generate con "
-            f"«{prediction.method}».",
+            f"«{method_name(prediction.method)}».",
             GOOD, "✓",
         )

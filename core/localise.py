@@ -62,3 +62,19 @@ def it_count(value: int, singular: str, plural: str) -> str:
     estrazioni" in an interface reads as a bug in everything around it.
     """
     return f"{it_number(value)} {singular if value == 1 else plural}"
+
+
+def it_bytes(value: int | float) -> str:
+    """``1382400000`` as ``1,29 GB``.
+
+    Powers of 1024, which is what a download counts and what the file manager
+    will say about the result afterwards. The precision rises with the unit
+    because the number does not: ``546 MB`` is as much as anyone wants while a
+    download runs, and ``1,29 GB`` is the same amount of information.
+    """
+    size = float(value)
+    for unit, decimals in (("B", 0), ("KB", 0), ("MB", 1)):
+        if abs(size) < 1024:
+            return f"{it_number(size, decimals)} {unit}"
+        size /= 1024
+    return f"{it_number(size, 2)} GB"

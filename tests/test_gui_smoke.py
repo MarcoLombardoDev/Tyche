@@ -161,7 +161,13 @@ def test_each_baseline_method_produces_combinations(app):
 
 
 def test_timesfm_without_the_model_reports_instead_of_crashing(app):
-    """The failure has to reach the status bar, not the worker's traceback."""
+    """The failure has to reach the status bar, not the worker's traceback.
+
+    The method is no longer offered when it cannot run, so this forces the
+    selection past that guard. It is the belt to the interface's braces: a
+    build where the availability check itself is wrong must still explain
+    itself rather than print a stack-trace tail.
+    """
     import time
 
     from core.forecaster import TimesFMForecaster
@@ -180,6 +186,114 @@ def test_timesfm_without_the_model_reports_instead_of_crashing(app):
             break
         time.sleep(0.05)
     assert app._status.cget("text")
+
+
+def _force_availability(monkeypatch, state):
+    """Describe a machine other than this one to both panels."""
+    import gui.model_status as model_status
+
+    monkeypatch.setattr(model_status, "availability", lambda checkpoint=None: state)
+
+
+def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
+    """The defect this replaces: press Esegui, wait, get a generic failure.
+
+    A 1.3 GB download that has not happened is not an error condition. It is
+    a fact about the machine, knowable before anything is started, and the
+    panel now says it and offers the download instead of finding out the
+    expensive way.
+    """
+    from core.model_store import NO_CHECKPOINT, Availability
+
+    _force_availability(
+        monkeypatch,
+        Availability(NO_CHECKPOINT, "I pesi non sono su questo computer.", True),
+    )
+    panel = app._panels["validation"]
+    app.show("validation")
+    app.update()
+
+    assert "pesi" in panel.model_status.label.cget("text")
+    assert panel.model_status.button.winfo_ismapped(), "no download button offered"
+    box = panel._checks["timesfm"]
+    assert box.cget("state") == "disabled"
+    assert not box.get(), "an unusable method must not stay ticked"
+
+
+def test_the_download_button_is_absent_when_there_is_nothing_to_download(app, monkeypatch):
+    """A missing *package* is not fixed by fetching weights."""
+    from core.model_store import NO_PACKAGE, Availability
+
+    _force_availability(
+        monkeypatch, Availability(NO_PACKAGE, "TimesFM non è installato.", False)
+    )
+    app.show("validation")
+    app.update()
+    assert not app._panels["validation"].model_status.button.winfo_ismapped()
+
+
+def test_ready_weights_re_enable_the_method_on_both_panels(app, monkeypatch):
+    """Availability is read on every tab switch, not once at start-up.
+
+    The download can be started from either panel, so the other one has to
+    notice that it happened.
+    """
+    from core.model_store import READY, Availability
+    from gui.prediction_panel import _METHOD_LABELS
+
+    _force_availability(monkeypatch, Availability(READY, "Pronto.", False))
+
+    app.show("validation")
+    app.update()
+    assert app._panels["validation"]._checks["timesfm"].cget("state") == "normal"
+
+    app.show("prediction")
+    app.update()
+    assert _METHOD_LABELS["timesfm"] in app._panels["prediction"].method.cget("values")
+
+
+def test_an_unavailable_model_is_not_in_the_prediction_menu(app, monkeypatch):
+    from core.model_store import NO_CHECKPOINT, Availability
+    from gui.prediction_panel import _METHOD_LABELS
+
+    _force_availability(
+        monkeypatch, Availability(NO_CHECKPOINT, "Pesi assenti.", True)
+    )
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.update()
+    assert _METHOD_LABELS["timesfm"] not in panel.method.cget("values")
+    assert _METHOD_LABELS["frequenza"] in panel.method.cget("values")
+
+
+def test_running_an_unavailable_method_explains_rather_than_starts_a_worker(app, monkeypatch):
+    """Forced past the disabled checkbox, «Esegui» must still not fail generically."""
+    from core.model_store import NO_CHECKPOINT, Availability
+
+    _force_availability(
+        monkeypatch,
+        Availability(NO_CHECKPOINT, "I pesi di TimesFM non sono scaricati.", True),
+    )
+    panel = app._panels["validation"]
+    app.show("validation")
+    app.update()
+    panel._checks["timesfm"].configure(state="normal")
+    panel._checks["timesfm"].select()
+    panel._run()
+    app.update()
+    assert "pesi" in app._status.cget("text").lower()
+    assert not app._busy, "no worker should have been started"
+
+
+def test_the_method_is_written_TimesFM_where_the_user_reads_it(app):
+    """`timesfm` is an identifier settings.json stores, not a label to show."""
+    panel = app._panels["validation"]
+    app.show("validation")
+    app.update()
+    labels = {m: box.cget("text") for m, box in panel._checks.items()}
+    assert labels["timesfm"] == "TimesFM"
+    assert labels["frequenza"] == "Frequenza"
+    assert "timesfm" not in labels.values()
 
 
 def test_the_window_carries_the_application_icon(app):

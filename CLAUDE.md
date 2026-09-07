@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 316, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 356, GUI included
+python -m pytest tests/ -q                                   # 341, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 387, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`316 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`341 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -798,6 +798,84 @@ importing it at module level put a `gui/` import *above* the tkinter skip. On
 a machine without Tk that turns a skip into a collection error — the failure
 mode this file exists to prevent, inverted. Deferred imports in that file go
 below the skip block, with the others.
+
+## Telling the user TimesFM cannot run, instead of failing at it
+
+0.9.0, from the owner pressing «Esegui» on a fresh install and getting a
+generic failure. The diagnosis is worth keeping because the defect was not in
+the error handling — the message reached the status bar exactly as designed.
+
+**A 1.3 GB download that has not happened is not an error condition.** It is a
+fact about the machine, knowable before anything starts, and the interface was
+finding it out the expensive way: build a forecaster, import timesfm, let hf
+download or fail, turn the exception into a sentence. `core/model_store.py`
+answers the same question from `importlib.util.find_spec` and a
+`local_files_only` cache query, which is cheap enough to run while a panel is
+drawing itself — and that is the whole difference between "it failed" and "it
+cannot run yet, here is the button".
+
+Four things about it that are decisions rather than details:
+
+- **Nothing in that module imports torch or timesfm**, and nothing may. The
+  point is answering "is the model usable" without paying what using it costs;
+  a `from timesfm3 import ...` added for convenience deletes the module's
+  reason to exist. Its whole test suite runs on a machine with neither
+  installed, through the `_has_module` and `_checkpoint_cached` seams.
+- **`UNKNOWN` is usable.** timesfm present, huggingface_hub not, so the cache
+  cannot be inspected. Refusing to offer the method there would turn "I could
+  not check" into "it does not work", and the attempt speaks for itself.
+- **The panel is not the only guard.** `_run` checks availability again, the
+  checkbox being disabled notwithstanding, and
+  `test_running_an_unavailable_method_explains_rather_than_starts_a_worker`
+  forces past the disabled state to prove it. A build where the availability
+  check is itself wrong must still explain itself.
+- **Prediction hides the method; Validation greys it out.** Not an
+  inconsistency — `CTkOptionMenu` has no per-entry disabled state, so "not
+  offered" is the only way to put an entry out of reach. Rebuilding `values`
+  also means the selection has to be caught when it disappears, which
+  `_set_timesfm_available` does.
+
+**No Hugging Face token is required, and the interface must not imply one is.**
+The `checkpoint-licence` job asked the three model cards: none is gated. The
+token field exists for a repository whose owner restricted it, so
+`download_failure_message` names it on a 401/403 and never on a network error
+— `test_an_ordinary_network_failure_does_not_mention_a_token` holds that. A
+prompt that asks for an account on every hiccup sends the reader to make one
+for nothing. The owner believed a token was needed; it is not, and the panel
+now says so in the sentence offering the download.
+
+**The download percentage is assembled, and the denominator is on screen for a
+reason.** huggingface_hub reports a snapshot as one tqdm bar per file plus an
+outer bar counting files, created as the workers reach them — so there is no
+single bar to read and no byte total known up front. `DownloadProgress` adds
+the byte bars (unit `B`; the file counter is deliberately excluded, and there
+is a test, because five files in the denominator of a gigabyte would be
+invisible) and prints `546 MB di 1,29 GB (42%)`. **The percentage can fall**
+when a new file's bar appears. That is honest arithmetic on incomplete
+knowledge and it reads as a bug unless the reader can watch the denominator
+grow too — which is the whole argument for the longer message.
+
+Throttled to one report per whole percent or half-second, with an injected
+clock so the test does not wait. Unthrottled, every tqdm update becomes a
+closure queued onto the Tk main thread and the download makes the window
+unresponsive while reporting how smoothly it is going.
+
+**What no test here has ever seen is huggingface_hub emitting a bar.** The
+arithmetic is driven by hand; whether hf_hub honours `tqdm_class` at all is a
+claim about somebody else's library. The `forecast` CI job settles it — it
+downloads the checkpoint through `core/model_store.py`, prints every progress
+line and every file that landed, and fails if the last percentage is not 100.
+That step is also the measurement for the open question in
+`download_checkpoint`: it fetches the **whole repository**, because Tyche does
+not know which files the loader will ask for, and guessing wrong produces a
+download that looks complete and fails on the first forecast.
+
+**`timesfm` is an identifier; `TimesFM` is a name.** `core/predictor.METHOD_NAMES`
+is the one map, and `method_name` is what every screen goes through — the
+checkboxes, the option menu, all three result tables, the verdict and the path
+panel. The identifiers did not move and must not: `settings.json` stores them
+and `--forecast` takes them, and there is a test pinning the tuple. The CLI
+keeps printing identifiers, because there the identifier *is* the interface.
 
 ## CTkFrame is 200 pixels tall until you tell it otherwise
 

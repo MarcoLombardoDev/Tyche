@@ -10,7 +10,44 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 ## [Non rilasciato]
 
+Niente, per ora.
+
+## [0.9.0] — 2026-09-07
+
+TimesFM dice se può funzionare prima che tu glielo chieda.
+
+### Corretto
+
+- **Premere «Esegui» con TimesFM spuntato e i pesi non scaricati dava un
+  errore generico.** Un download da 1,3 GB che non è ancora avvenuto non è un
+  errore: è un fatto sulla macchina, che si può sapere *prima* di avviare
+  qualsiasi cosa. Ora Validazione e Previsione lo chiedono mentre si
+  disegnano, e dicono quale dei tre casi è — TimesFM non installato in questa
+  copia, pesi non ancora scaricati, oppure pronto.
+- **Finché i pesi non ci sono, TimesFM non è selezionabile.** La casella in
+  Validazione è disattivata e non spuntata; in Previsione il metodo non
+  compare nel menu, perché un menu a tendina non ha uno stato disattivato per
+  singola voce. Lo stato viene riletto a ogni cambio di scheda, quindi un
+  download avviato da un pannello sblocca anche l'altro.
+- **Il download ha una percentuale.** Compare nella barra di stato in basso,
+  al posto del vecchio «Carico google/…» che restava fermo per minuti. Accanto
+  alla percentuale c'è sempre il totale — `546 MB di 1,29 GB (42%) — 2 file su
+  5` — perché huggingface_hub crea una barra per file man mano che ci arriva:
+  il denominatore cresce durante il download e senza averlo sotto gli occhi
+  una percentuale che scende sembra un difetto.
+
 ### Modificato
+
+- **«TimesFM», non «timesfm», ovunque un utente legga.** L'identificativo non
+  si tocca — è quello che `settings.json` salva e che `--forecast` accetta, e
+  rinominarlo romperebbe entrambi — ma le caselle, il menu dei metodi, le
+  tabelle dei risultati e il verdetto ora usano i nomi come li scrive il resto
+  dell'applicazione: TimesFM, Frequenza, Ritardo, Casuale.
+- **La riga sul costo di TimesFM in Validazione dice di che costo si tratta.**
+  Diceva «costa una chiamata al modello per estrazione — parti basso», che
+  lasciava intendere un consumo esterno. Il modello gira in locale: dopo il
+  download non c'è più rete, e la spesa è tempo di CPU sulla macchina di chi
+  usa il programma.
 - **Il titolo è `Tyche — Analisi e previsione SuperEnalotto`**, ovunque: la
   prima riga del README, la barra della finestra, l'intestazione della pagina
   di rilascio e la sottoscritta nella barra in alto. Prima il README apriva con
@@ -20,6 +57,26 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
   icona, `Nome — payoff`, poi i badge.
 
 ### Aggiunto
+
+- **`core/model_store.py`** — sa se TimesFM può girare, e scarica i pesi. Non
+  importa né torch né timesfm: risponde da `importlib.util.find_spec` e dalla
+  cache di Hugging Face, così un pannello può chiederglielo mentre si disegna.
+  Importare il modello per sapere se il modello è importabile costa qualche
+  secondo e, la prima volta, un gigabyte.
+- **Un chiarimento che era una convinzione sbagliata**: per il checkpoint
+  predefinito **non serve alcun token Hugging Face**, né un account. Le tre
+  model card sono state interrogate dal job `checkpoint-licence` e nessuna è
+  ad accesso ristretto. Il messaggio di errore nomina il token solo su un
+  rifiuto di autorizzazione, mai su un problema di rete: dire «serve un token»
+  a ogni intoppo manda l'utente ad aprire un account per niente.
+- **`it_bytes`** in `core/localise.py`, con la virgola decimale italiana e le
+  potenze di 1024.
+- **Uno step della CI che misura il download vero.** L'aritmetica della
+  percentuale è coperta da test unitari su una macchina senza torch e senza
+  huggingface_hub; quello che lì non si può provare è se hf_hub rispetti
+  `tqdm_class`. Il job `forecast` ora scarica il checkpoint attraverso
+  `core/model_store.py`, stampa ogni riga di avanzamento e l'elenco dei file
+  ottenuti, e fallisce se l'ultima percentuale non è 100%.
 - **La release registra da quale commit è stata costruita**, nell'intestazione
   della propria sezione del changelog. È quello che la cancellazione del tag
   distruggerebbe: chi ha scaricato un archivio ormai superato lo tiene molto

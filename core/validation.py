@@ -47,7 +47,14 @@ from datetime import datetime, timezone
 
 from core.archive import NUMBER_MAX, NUMBERS_PER_DRAW, Draw
 from core.features import DEFAULT_WINDOW
-from core.predictor import METHODS, frequency_scores, gap_scores, random_scores, rank_numbers
+from core.predictor import (
+    METHODS,
+    frequency_scores,
+    gap_scores,
+    method_name,
+    random_scores,
+    rank_numbers,
+)
 from core.scoring import MEAN_RANK, score_draw
 from core.stats_tests import (
     chi_square_goodness_of_fit,
@@ -142,7 +149,7 @@ class ValidationReport:
         )
         if not beat:
             return (
-                f"{head} Nessuno lo batte: il migliore è {best.method} con "
+                f"{head} Nessuno lo batte: il migliore è {method_name(best.method)} con "
                 f"{best.mean_hits:.4f} centri per estrazione ({best.excess:+.1f} centri "
                 f"sull'intera prova, p = {best.p_value:.2f}). È il risultato atteso. Sei "
                 "numeri scelti da un modello fondazionale da 330 milioni di parametri, "
@@ -150,7 +157,7 @@ class ValidationReport:
                 "generatore casuale ottengono lo stesso punteggio, perché l'estrazione "
                 "che stanno prevedendo è indipendente da tutto ciò che guardano."
             )
-        names = ", ".join(f"{r.method} (p = {r.p_value:.3f})" for r in beat)
+        names = ", ".join(f"{method_name(r.method)} (p = {r.p_value:.3f})" for r in beat)
         return (
             f"{head} {len(beat)} lo superano al livello del 5%: {names}. Con "
             f"{len(self.results)} metodi in prova, la probabilità che almeno uno "

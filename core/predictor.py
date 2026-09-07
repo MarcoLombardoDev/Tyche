@@ -47,6 +47,24 @@ from core.localise import it_number
 # — it is the name of a model, not a word.
 METHODS = ("timesfm", "frequenza", "ritardo", "casuale")
 
+# How those identifiers are written on screen. The identifier and the display
+# name are deliberately two things: `timesfm` is what settings.json stores and
+# what `--forecast` takes, and changing it would break both, but a user reading
+# a table has no reason to see a lowercase run-together spelling of a product
+# name. Every screen goes through this map, so the window says "TimesFM" the
+# way the rest of the application does.
+METHOD_NAMES = {
+    "timesfm": "TimesFM",
+    "frequenza": "Frequenza",
+    "ritardo": "Ritardo",
+    "casuale": "Casuale",
+}
+
+
+def method_name(method: str) -> str:
+    """The display name for a method identifier, or the identifier itself."""
+    return METHOD_NAMES.get(method, method)
+
 
 @dataclass(frozen=True)
 class Prediction:

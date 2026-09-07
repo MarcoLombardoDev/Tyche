@@ -105,7 +105,19 @@ sudo apt install python3-tk
 ```
 
 La prima previsione con TimesFM scarica circa 1,3 GB di pesi da Hugging Face.
-Tutto il resto funziona senza.
+Tutto il resto funziona senza — e finché quei pesi non sono sul computer, i
+pannelli Previsione e Validazione lo dicono e offrono il pulsante per
+scaricarli, invece di lasciartelo scoprire premendo «Esegui».
+
+**Non serve un token Hugging Face**, né un account. Il checkpoint predefinito
+è ad accesso libero: il token in Impostazioni esiste solo per un repository
+che il suo proprietario abbia messo ad accesso ristretto.
+
+**E dopo il download non c'è più rete.** Il modello gira sul tuo computer, quindi
+il costo di una previsione è tempo di CPU e nient'altro: nessun consumo, nessuna
+chiamata a un servizio, nessun limite di quota. È il motivo per cui il pannello
+Validazione dice di partire da poche estrazioni — non per risparmiare qualcosa,
+ma perché ogni estrazione valutata è una passata del modello sulla tua macchina.
 
 Per Windows c'è un pacchetto pronto allegato a ogni release: si scompatta in
 una sola cartella e si avvia con `start.cmd`, senza installare Python.
@@ -441,8 +453,8 @@ come unica fonte, e che `--version` stampa.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 199 test core
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 233, GUI compresa
+python -m pytest tests/ -q                                    # 341 test core, 2 saltati
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 387, GUI compresa
 python -m ruff check .
 ```
 

@@ -27,6 +27,7 @@ from core.predictor import (
     METHODS,
     SUPERSTAR_ODDS,
     expected_hits,
+    method_name,
     predict,
     system_columns,
     system_profile,
@@ -34,6 +35,8 @@ from core.predictor import (
     ticket_cost,
     value_note,
 )
+from core.version import DEFAULT_TIMESFM_CHECKPOINT
+from gui.model_status import ModelStatus
 from gui.theme import BG_ROOT, MUTED
 from gui.widgets import ReportBox, ball_row, section
 
@@ -148,12 +151,16 @@ class PredictionPanel(ctk.CTkFrame):
         row.pack(fill="x")
 
         ctk.CTkLabel(row, text="Metodo", text_color=MUTED).pack(side="left", padx=(0, 6))
+        # TimesFM is added to the list by :meth:`_set_timesfm_available` once
+        # the weights are known to be there. An option menu has no per-entry
+        # disabled state, so "not offered" is how a method that cannot run is
+        # kept out of reach.
         self.method = ctk.CTkOptionMenu(
-            row, width=330, values=[_METHOD_LABELS[m] for m in METHODS]
+            row, width=330,
+            values=[_METHOD_LABELS[m] for m in METHODS if m != "timesfm"],
         )
-        self.method.set(
-            _METHOD_LABELS[self.app.settings.get("prediction_method", "frequenza")]
-        )
+        chosen = self.app.settings.get("prediction_method", "frequenza")
+        self.method.set(_METHOD_LABELS.get(chosen if chosen != "timesfm" else "frequenza"))
         self.method.pack(side="left", padx=(0, 16))
 
         ctk.CTkLabel(row, text="Combinazioni", text_color=MUTED).pack(side="left", padx=(0, 6))
@@ -162,6 +169,11 @@ class PredictionPanel(ctk.CTkFrame):
         self.count.pack(side="left", padx=(0, 16))
 
         ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")
+
+        self.model_status = ModelStatus(
+            controls.body, self.app, on_change=self._set_timesfm_available,
+        )
+        self.model_status.pack(fill="x", pady=(10, 0))
 
         self.note = ctk.CTkLabel(
             controls.body, text="", anchor="w", justify="left", text_color=MUTED, wraplength=1000
@@ -209,7 +221,9 @@ class PredictionPanel(ctk.CTkFrame):
 
         def work(report):
             forecaster = self.app.forecaster or TimesFMForecaster(
-                checkpoint=settings.get("timesfm_checkpoint", ""),
+                checkpoint=(
+                    settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
+                ),
                 device=settings.get("timesfm_device", "cpu"),
                 context_length=int(settings.get("context_length", 1024)),
                 representation=settings.get("representation", "frequenza"),
@@ -218,8 +232,7 @@ class PredictionPanel(ctk.CTkFrame):
             )
             if not forecaster.load_model(report):
                 raise RuntimeError(
-                    "TimesFM non si è caricato. Installalo con "
-                    "`pip install timesfm[torch]`, oppure scegli un altro metodo: "
+                    "TimesFM non si è caricato. Scegli un altro metodo: "
                     "ottengono tutti lo stesso punteggio."
                 )
             self.app.forecaster = forecaster
@@ -266,7 +279,7 @@ class PredictionPanel(ctk.CTkFrame):
 
         ranked = prediction.ranked
         lines = [
-            f"Metodo: {prediction.method}   Archivio: "
+            f"Metodo: {method_name(prediction.method)}   Archivio: "
             f"{it_number(prediction.archive_size)} estrazioni fino al "
             f"{it_date(prediction.archive_last_date)}",
             "",
@@ -303,8 +316,23 @@ class PredictionPanel(ctk.CTkFrame):
         self.box.set_text("\n".join(lines))
         self.app.set_status(
             f"{len(prediction.combinations)} combinazioni dal metodo "
-            f"{prediction.method}."
+            f"{method_name(prediction.method)}."
         )
 
+    def _set_timesfm_available(self, available: bool) -> None:
+        """Add TimesFM to the method menu, or take it back out.
+
+        Rebuilding ``values`` rather than juggling a disabled state, which
+        CTkOptionMenu has only for the whole control. When TimesFM disappears
+        while selected — it cannot, today, but a changed checkpoint would do
+        it — the selection falls back to the cheapest method rather than
+        leaving a label the menu no longer contains.
+        """
+        offered = [m for m in METHODS if m != "timesfm" or available]
+        self.method.configure(values=[_METHOD_LABELS[m] for m in offered])
+        if self._selected_method() not in offered:
+            self.method.set(_METHOD_LABELS["frequenza"])
+
     def refresh(self) -> None:
-        pass
+        # Every tab switch: the weights may have arrived from the other panel.
+        self.model_status.refresh()

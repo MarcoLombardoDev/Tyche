@@ -38,6 +38,12 @@ this costs nothing measurable; it would matter on a real problem.
 The model is loaded lazily and on a worker thread. The checkpoint is roughly
 1.3 GB and the first call downloads it from Hugging Face; doing that on the
 GUI thread would look like a hang.
+
+That download is :mod:`core.model_store`'s, not the evaluator's, so it reports
+a percentage instead of blocking silently — and so the interface can ask
+whether it is needed *before* offering the method. Once the weights are on
+disk nothing here touches the network again: the forecast is local, and its
+cost is the CPU time of one forward pass per scored draw.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ import numpy as np
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, Draw
 from core.features import DEFAULT_WINDOW, build_context
+from core.model_store import ensure_checkpoint
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 
 # TimesFM 3.0's own limit, restated so the reason for the chunking is visible
@@ -102,11 +109,16 @@ class TimesFMForecaster:
             _report(progress, f"timesfm non è installato: {exc}", 0.0)
             return False
 
-        _report(
-            progress,
-            f"Carico {self.checkpoint} (la prima volta scarica circa 1,3 GB)…",
-            0.2,
-        )
+        # The download happens here, with a percentage, rather than inside the
+        # evaluator's constructor where it is 1.3 GB of silence. No-op when the
+        # weights are already cached, which is every run after the first.
+        try:
+            ensure_checkpoint(self.checkpoint, token=self.hf_token, progress=progress)
+        except Exception as exc:  # noqa: BLE001 — the caller wants a sentence
+            _report(progress, str(exc), 0.0)
+            return False
+
+        _report(progress, f"Carico {self.checkpoint}…", 0.2)
         try:
             config = ModelConfig(
                 checkpoint_path=self.checkpoint,

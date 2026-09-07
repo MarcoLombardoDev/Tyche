@@ -23,9 +23,11 @@ from core.forecaster import TimesFMForecaster
 from core.localise import it_date
 from core.power import calibrate
 from core.power import report as power_report
-from core.predictor import METHODS
+from core.predictor import METHODS, method_name
 from core.scoring import MEAN_RANK
 from core.validation import walk_forward
+from core.version import DEFAULT_TIMESFM_CHECKPOINT
+from gui.model_status import ModelStatus
 from gui.theme import BG_ROOT, GOOD, MUTED, WARN
 from gui.widgets import ReportBox, section
 
@@ -57,11 +59,26 @@ class ValidationPanel(ctk.CTkFrame):
         # makes is that the cheap methods tie with chance first.
         selected = set(self.app.settings.get("validation_baselines") or [])
         for method in METHODS:
-            box = ctk.CTkCheckBox(row, text=method, width=90)
+            box = ctk.CTkCheckBox(row, text=method_name(method), width=110)
             if method in selected:
                 box.select()
             box.pack(side="left", padx=(0, 14))
             self._checks[method] = box
+        # Off until :meth:`refresh` has asked whether the weights are there.
+        # Drawn disabled rather than enabled-then-corrected: a control that is
+        # live for the first frame is a control somebody can click.
+        self._checks["timesfm"].deselect()
+        self._checks["timesfm"].configure(state="disabled")
+
+        # Directly under the checkbox it explains. The screenshot is what
+        # settled the position: three rows lower, the sentence saying why the
+        # first box is greyed out sat below two controls that have nothing to
+        # do with it, and read as a footnote about the panel rather than an
+        # answer about that box.
+        self.model_status = ModelStatus(
+            controls.body, self.app, on_change=self._set_timesfm_available,
+        )
+        self.model_status.pack(fill="x", pady=(8, 0))
 
         row2 = ctk.CTkFrame(controls.body, fg_color="transparent")
         row2.pack(fill="x", pady=(10, 0))
@@ -74,7 +91,13 @@ class ValidationPanel(ctk.CTkFrame):
         ctk.CTkButton(row2, text="Esegui", width=120, command=self._run).pack(side="left")
         ctk.CTkLabel(
             row2,
-            text="TimesFM costa una chiamata al modello per estrazione — parti basso.",
+            text=(
+                "TimesFM costa una chiamata al modello per ogni estrazione valutata, "
+                "sul tuo computer: la spesa è tempo di CPU, non consumo Hugging Face.\n"
+                "Gli altri tre metodi valutano 300 estrazioni in meno di un secondo. "
+                "Con TimesFM parti basso e guarda quanto ci mette."
+            ),
+            justify="left",
             text_color=MUTED,
         ).pack(side="left", padx=14)
 
@@ -114,6 +137,12 @@ class ValidationPanel(ctk.CTkFrame):
         if not methods:
             self.app.set_status("Seleziona almeno un metodo.")
             return
+        if "timesfm" in methods and not self.model_status.available:
+            # Belt and braces: the checkbox is disabled, and a run that got
+            # here anyway must still say what is missing rather than start a
+            # worker whose only job is to fail.
+            self.app.set_status(self.model_status.label.cget("text"))
+            return
         try:
             n_draws = int(self.n_draws.get())
         except ValueError:
@@ -128,7 +157,10 @@ class ValidationPanel(ctk.CTkFrame):
             forecaster = None
             if "timesfm" in methods:
                 forecaster = self.app.forecaster or TimesFMForecaster(
-                    checkpoint=settings.get("timesfm_checkpoint", ""),
+                    checkpoint=(
+                        settings.get("timesfm_checkpoint")
+                        or DEFAULT_TIMESFM_CHECKPOINT
+                    ),
                     device=settings.get("timesfm_device", "cpu"),
                     context_length=int(settings.get("context_length", 1024)),
                     representation=settings.get("representation", "frequenza"),
@@ -137,8 +169,8 @@ class ValidationPanel(ctk.CTkFrame):
                 )
                 if not forecaster.load_model(report):
                     raise RuntimeError(
-                        "TimesFM non si è caricato — toglilo dalla selezione, oppure "
-                        "installalo con `pip install timesfm[torch]`."
+                        "TimesFM non si è caricato. Togli la spunta e valuta gli "
+                        "altri metodi: ottengono lo stesso punteggio."
                     )
                 self.app.forecaster = forecaster
             return walk_forward(
@@ -213,7 +245,7 @@ class ValidationPanel(ctk.CTkFrame):
         ]
         for r in report.results:
             lines.append(
-                f"{r.method:<11} {r.mean_hits:>12.4f} {r.expected_mean:>7.4f} "
+                f"{method_name(r.method):<11} {r.mean_hits:>12.4f} {r.expected_mean:>7.4f} "
                 f"{r.total_hits:>7} {r.excess:>+9.1f} {r.z:>+7.2f} {r.p_value:>7.3f} "
                 f"{r.best_draw_hits:>4} {r.three_or_more:>5} "
                 f"{r.expected_three_or_more:>8.1f}"
@@ -225,7 +257,7 @@ class ValidationPanel(ctk.CTkFrame):
         ]
         lines.append("  " + " ".join(f"{k:>7}" for k in range(picks + 1)))
         for r in report.results:
-            lines.append(f"{r.method:<11}" + " ".join(f"{h:>7}" for h in r.histogram))
+            lines.append(f"{method_name(r.method):<11}" + " ".join(f"{h:>7}" for h in r.histogram))
             lines.append(
                 f"{'  χ² caso':<11}"
                 + f"  {r.chi2:.2f} su {r.chi2_dof} gdl, p = {r.chi2_p:.3f}"
@@ -252,7 +284,7 @@ class ValidationPanel(ctk.CTkFrame):
         ]
         for r in report.results:
             lines.append(
-                f"{r.method:<11} {r.mean_rank:>12.2f} {MEAN_RANK:>7.1f} "
+                f"{method_name(r.method):<11} {r.mean_rank:>12.2f} {MEAN_RANK:>7.1f} "
                 f"{r.rank_z:>+8.2f} {r.rank_p:>8.3f} "
                 f"{r.top_hits.get(10, 0):>8} {r.expected_top_hits.get(10, 0):>8.0f} "
                 f"{r.top_hits.get(20, 0):>8} {r.expected_top_hits.get(20, 0):>8.0f}"
@@ -265,5 +297,23 @@ class ValidationPanel(ctk.CTkFrame):
             f"Validazione su {report.draws_scored} estrazioni completata."
         )
 
+    def _set_timesfm_available(self, available: bool) -> None:
+        """Enable or disable the TimesFM checkbox to match the weights on disk.
+
+        Unticked as well as disabled when it goes away: a ticked box that
+        cannot be unticked because it is disabled is a run the user cannot
+        start and cannot see why.
+        """
+        box = self._checks["timesfm"]
+        if available:
+            box.configure(state="normal")
+            if "timesfm" in (self.app.settings.get("validation_baselines") or []):
+                box.select()
+        else:
+            box.deselect()
+            box.configure(state="disabled")
+
     def refresh(self) -> None:
-        pass
+        # On every tab switch, because the download that made TimesFM
+        # available may have been started from the Prediction tab.
+        self.model_status.refresh()
