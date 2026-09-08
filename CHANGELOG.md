@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [0.10.0] — 2026-09-08
+## [0.10.0] — 2026-09-08 — `a4f5f16`
 
 Meno schede, e i quattro metodi tutti insieme.
 
