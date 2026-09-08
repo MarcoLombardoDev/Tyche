@@ -18,6 +18,8 @@ undone later.
 
 from __future__ import annotations
 
+import tkinter
+
 import customtkinter as ctk
 
 from core.fonts import ui_font_family
@@ -44,7 +46,17 @@ def fit_text(label, margin: int = 32):
     applied = {"width": 0}
 
     def resize(event=None):
-        width = label.master.winfo_width()
+        # The binding lives on the toplevel and outlives the label: a panel
+        # destroyed while the window is still up leaves this callback pointing
+        # at a widget that is gone. On Linux the ordering happened never to
+        # hit it; the Windows leg of CI printed a TclError per orphan on every
+        # test that closed a window. Ask, and stand down when the answer is no.
+        try:
+            if not label.winfo_exists():
+                return
+            width = label.master.winfo_width()
+        except tkinter.TclError:
+            return
         if abs(width - applied["width"]) < 4:
             return
         applied["width"] = width

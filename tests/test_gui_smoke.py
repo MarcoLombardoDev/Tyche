@@ -352,13 +352,18 @@ def test_prose_wraps_to_the_window_and_not_to_a_number(app):
     home = app._panels["home"]
     app.show("home")
     app.update()
-    app.geometry("1600x900")
     app.update_idletasks()
-    app.update()
-    widths = [label.cget("wraplength") for label in home._state_labels.values()]
-    # Bigger than any of the numbers that used to be hardcoded (760, 780,
-    # 1000, 1080), so a label that simply kept its constructor value fails.
-    assert all(w > 1100 for w in widths), widths
+
+    # Against the parent's real width rather than a threshold: whether a
+    # geometry() request is granted depends on the window manager, and the
+    # Windows runner does not grant it. A label that merely kept its
+    # constructor value fails this on any machine, which a threshold did not.
+    for label in home._state_labels.values():
+        parent = label.master.winfo_width()
+        assert parent > 200, "the panel never got a width; nothing to check"
+        assert abs(label.cget("wraplength") - (parent - 32)) < 8, (
+            f"wraplength {label.cget('wraplength')} against a parent of {parent}"
+        )
 
 
 def test_the_archive_tab_carries_the_figures_that_had_their_own_tab(app):
