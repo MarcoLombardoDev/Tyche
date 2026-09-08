@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [0.11.0] — 2026-09-08
+## [0.11.0] — 2026-09-08 — `0610144`
 
 Una scheda in meno, due colonne in più, e il motivo per cui TimesFM non partiva.
 
