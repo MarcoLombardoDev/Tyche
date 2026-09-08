@@ -20,10 +20,9 @@ from __future__ import annotations
 
 import customtkinter as ctk
 
-from core.fonts import ui_font_family
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import BG_ROOT, MUTED
-from gui.widgets import fit_text, section
+from gui.widgets import body_font, fit_text, section
 
 # (key, label, kind, help). kind is "text", "secret", "bool", or a tuple of
 # choices. Every key in DEFAULT_SETTINGS that a user can meaningfully set
@@ -91,7 +90,9 @@ class SettingsPanel(ctk.CTkFrame):
         for key, label, kind, helptext in FIELDS:
             row = ctk.CTkFrame(scroll, fg_color="transparent")
             row.pack(fill="x", pady=(0, 12))
-            ctk.CTkLabel(row, text=label, width=200, anchor="w").pack(side="left")
+            ctk.CTkLabel(
+                row, text=label, width=200, anchor="w", font=body_font(),
+            ).pack(side="left")
             raw = self.app.settings.get(key, "")
             value = str(raw)
             if isinstance(kind, tuple):
@@ -113,7 +114,7 @@ class SettingsPanel(ctk.CTkFrame):
             fit_text(ctk.CTkLabel(
                 scroll, text=helptext, anchor="w", justify="left",
                 text_color=MUTED, wraplength=900,
-                font=ctk.CTkFont(family=ui_font_family(), size=11),
+                font=body_font(),
             )).pack(fill="x", padx=(200, 0), pady=(0, 10))
 
         ctk.CTkButton(block.body, text="Salva", width=120, command=self._save).pack(

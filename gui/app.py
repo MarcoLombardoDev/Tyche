@@ -66,6 +66,7 @@ from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
 from gui.settings_panel import SettingsPanel
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT, WARN, apply_theme
+from gui.widgets import BODY_SIZE, body_font, heading_font
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -194,14 +195,14 @@ class TycheApp(ctk.CTk):
 
         ctk.CTkLabel(
             bar, text=APP_NAME.upper(), text_color=ACCENT,
-            font=ctk.CTkFont(family=ui_font_family(), size=20, weight="bold"),
+            font=heading_font(20),
         ).pack(side="left", padx=(18, 6))
         ctk.CTkLabel(
             # The payoff from APP_TITLE, which the window title already
             # carries whole. Sliced rather than repeated so the two cannot
             # drift apart.
             bar, text=APP_TITLE.split(" — ", 1)[-1], text_color=MUTED,
-            font=ctk.CTkFont(family=ui_font_family(), size=12),
+            font=body_font(),
         ).pack(side="left", padx=(0, 20))
 
         self._nav: dict[str, ctk.CTkButton] = {}
@@ -226,9 +227,13 @@ class TycheApp(ctk.CTk):
         footer = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=0, height=34)
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
-        self._status = ctk.CTkLabel(footer, text="", anchor="w", text_color=MUTED)
+        self._status = ctk.CTkLabel(
+            footer, text="", anchor="w", text_color=MUTED, font=body_font(),
+        )
         self._status.pack(side="left", padx=16)
-        self._archive_label = ctk.CTkLabel(footer, text="", anchor="e", text_color=MUTED)
+        self._archive_label = ctk.CTkLabel(
+            footer, text="", anchor="e", text_color=MUTED, font=body_font(),
+        )
         self._archive_label.pack(side="right", padx=16)
 
         self.body = ctk.CTkFrame(self, fg_color=BG_ROOT)
@@ -263,7 +268,7 @@ class TycheApp(ctk.CTk):
         question about licensing, security or contributing, so the address is
         written out and clickable rather than promised on request.
         """
-        bar = ctk.CTkFrame(self, fg_color=BG_ROOT, corner_radius=0, height=24)
+        bar = ctk.CTkFrame(self, fg_color=BG_ROOT, corner_radius=0, height=26)
         bar.pack(fill="x", side="bottom")
         bar.pack_propagate(False)
 
@@ -279,7 +284,7 @@ class TycheApp(ctk.CTk):
                 f"© 2026 Marco Lombardo — {APP_NAME}  |  "
                 "Distribuito con licenza AGPL-3.0  |  Contatti:"
             ),
-            font=ctk.CTkFont(family=ui_font_family(), size=11),
+            font=body_font(),
             # MUTED, not SEP: SEP is the colour of a hairline rule and the
             # strip was effectively invisible against the background.
             text_color=MUTED,
@@ -289,7 +294,9 @@ class TycheApp(ctk.CTk):
         self._licence_email = ctk.CTkLabel(
             centre,
             text=CONTACT_EMAIL,
-            font=ctk.CTkFont(family=ui_font_family(), size=11, underline=True),
+            font=ctk.CTkFont(
+                family=ui_font_family(), size=BODY_SIZE, underline=True,
+            ),
             text_color=ACCENT,
             cursor="hand2",
         )

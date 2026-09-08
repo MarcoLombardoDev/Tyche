@@ -25,6 +25,25 @@ import customtkinter as ctk
 from core.fonts import ui_font_family
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, TEXT
 
+# One size for everything a user reads, and two exceptions with a reason:
+# buttons, which CustomTkinter sizes itself, and headings, which are bold.
+# Before 1.0.0 the labels ran 11, 12, 13 and the CustomTkinter default all on
+# one screen, because a label with no `font=` silently takes the toolkit's,
+# and the result read as four different kinds of text saying the same kind of
+# thing. `test_every_label_is_one_size_unless_it_is_a_heading` is the guard.
+BODY_SIZE = 12
+HEADING_SIZE = 15
+
+
+def body_font():
+    """The size every non-heading label uses. Pass it, do not default to it."""
+    return ctk.CTkFont(family=ui_font_family(), size=BODY_SIZE)
+
+
+def heading_font(size: int = HEADING_SIZE):
+    """Bold, and therefore exempt from the one-size rule."""
+    return ctk.CTkFont(family=ui_font_family(), size=size, weight="bold")
+
 
 def fit_text(label, margin: int = 32):
     """Make a label wrap to the window's width instead of a number from 2026.
@@ -75,14 +94,13 @@ def section(parent, title: str, subtitle: str = "") -> ctk.CTkFrame:
     """A titled block. Returns the frame callers put their content in."""
     wrapper = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=8)
     header = ctk.CTkLabel(
-        wrapper, text=title, anchor="w", text_color=TEXT,
-        font=ctk.CTkFont(family=ui_font_family(), size=15, weight="bold"),
+        wrapper, text=title, anchor="w", text_color=TEXT, font=heading_font(),
     )
     header.pack(fill="x", padx=14, pady=(12, 0))
     if subtitle:
         fit_text(ctk.CTkLabel(
             wrapper, text=subtitle, anchor="w", justify="left", text_color=MUTED,
-            font=ctk.CTkFont(family=ui_font_family(), size=12), wraplength=900,
+            font=body_font(), wraplength=900,
         )).pack(fill="x", padx=14, pady=(2, 0))
     body = ctk.CTkFrame(wrapper, fg_color="transparent")
     body.pack(fill="both", expand=True, padx=14, pady=12)
@@ -99,11 +117,14 @@ class ReportBox(ctk.CTkTextbox):
     a panel silently stops updating.
     """
 
-    def __init__(self, parent, height: int = 300, **kwargs):
+    def __init__(self, parent, height: int = 300, wrap: str = "none", **kwargs):
+        # ``wrap="none"`` for tables, which must not be re-flowed; ``"word"``
+        # for a box that is mostly prose, so it uses the window's width rather
+        # than a column count guessed when the text was written.
         super().__init__(
             parent, height=height, fg_color=BG_ROOT, text_color=TEXT,
-            font=ctk.CTkFont(family="monospace", size=12),
-            wrap="none", **kwargs,
+            font=ctk.CTkFont(family="monospace", size=BODY_SIZE),
+            wrap=wrap, **kwargs,
         )
         self.configure(state="disabled")
 

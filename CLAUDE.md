@@ -55,7 +55,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 350, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 398, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 399, GUI included
 python -m ruff check .
 ```
 
@@ -959,11 +959,31 @@ The working version binds on the **toplevel** and measures the label's
 the last applied width, `add="+"` on the bind because every label shares that
 toplevel, and one `after_idle` so the first frame is right.
 
-`test_prose_wraps_to_the_window_and_not_to_a_number` resizes the window to
-1600 and asserts the wraplength exceeds 1100 — bigger than any of the four
-hardcoded numbers, so a label that merely kept its constructor value fails.
-An earlier version of the test asserted `> 200` and passed with the helper
-removed entirely.
+`test_prose_wraps_to_the_window_and_not_to_a_number` compares the wraplength
+against the label's parent's real width. Two earlier versions of that test
+were wrong in opposite directions: `> 200` passed with the helper deleted, and
+`> 1100 after geometry("1600x900")` failed on Windows, where the window
+manager does not grant the request and the working helper read 700.
+
+**And the callback outlives the label.** The binding is on the toplevel, so a
+panel destroyed while the window is up leaves it pointing at a widget that is
+gone — a `TclError` per orphan on every subsequent resize, which only the
+Windows leg of CI ever printed. It checks `winfo_exists` and treats a
+`TclError` as "stand down".
+
+## One font size for everything a reader reads
+
+`gui.widgets.body_font()` — 12 — and `heading_font()`, which is bold. Those
+are the only two, and buttons are the exception because CustomTkinter sizes
+them itself.
+
+Before 1.0.0 one screen carried 11, 12, 13 and the toolkit's own default,
+because **a `CTkLabel` with no `font=` silently takes CustomTkinter's**, and
+nothing said otherwise. The result read as four kinds of text saying the same
+kind of thing. `test_every_label_is_one_size_unless_it_is_a_heading` walks
+every panel's widget tree and fails on any non-bold label that is not
+`BODY_SIZE`; it skips labels with empty text, which are `CTkScrollableFrame`'s
+own title widget and display nothing.
 
 ## Where the explanatory notes go, and why it is not a style question
 

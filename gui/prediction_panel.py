@@ -23,20 +23,18 @@ number generator disagree about which six numbers to play, and knows both are
 worth the same, has been told something no banner conveys.
 
 The four cells hold what actually differs between methods: the combinations
-and the scores behind them. What does not differ — the cost, the shape of the
-ticket, the odds — is printed once above them, because four identical copies
-of the same paragraph is noise, not symmetry.
+and the scores behind them. What does not differ — the archive, the cost, the
+shape of the ticket, the odds — is printed once *below* them, in one block,
+because four identical copies of the same paragraph is noise and a second
+strip above the grid was one place too many to look.
 """
 
 from __future__ import annotations
-
-import textwrap
 
 import customtkinter as ctk
 
 from core.data_manager import log_prediction
 from core.features import DEFAULT_WINDOW
-from core.fonts import ui_font_family
 from core.forecaster import TimesFMForecaster
 from core.localise import it_count, it_date, it_number
 from core.predictor import (
@@ -53,8 +51,15 @@ from core.predictor import (
 )
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.model_status import ModelStatus
-from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, TEXT, WARN
-from gui.widgets import ReportBox, ball_row, fit_text, section
+from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, WARN
+from gui.widgets import (
+    ReportBox,
+    ball_row,
+    body_font,
+    fit_text,
+    heading_font,
+    section,
+)
 
 _METHOD_LABELS = {
     "timesfm": "TimesFM 3.0 (modello fondazionale da 330M)",
@@ -75,16 +80,6 @@ _METHOD_BLURBS = {
     "ritardo": "assenti da più tempo",
     "casuale": "condizione di controllo",
 }
-
-
-def _wrap(text: str, width: int = 116) -> str:
-    """Fold a paragraph for the fixed-width strip, which does not wrap itself.
-
-    ``ReportBox`` is monospaced with ``wrap="none"`` because it holds tables.
-    A paragraph dropped into it becomes one very long line and a horizontal
-    scrollbar under everything else.
-    """
-    return "\n".join(textwrap.wrap(text, width=width))
 
 
 def _cost_lines(prediction, cost) -> list[str]:
@@ -181,10 +176,11 @@ class _MethodCell(ctk.CTkFrame):
         header.pack(fill="x", padx=10, pady=(8, 0))
         ctk.CTkLabel(
             header, text=method_name(method), anchor="w", text_color=ACCENT,
-            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
+            font=heading_font(14),
         ).pack(side="left")
         ctk.CTkLabel(
-            header, text=f" — {_METHOD_BLURBS[method]}", anchor="w", text_color=MUTED,
+            header, text=f" — {_METHOD_BLURBS[method]}", anchor="w",
+            text_color=MUTED, font=body_font(),
         ).pack(side="left")
 
         # height=0 because an empty CTkFrame requests 200x200, and a cell whose
@@ -193,7 +189,8 @@ class _MethodCell(ctk.CTkFrame):
         self.balls = ctk.CTkFrame(self, fg_color="transparent", height=0)
         self.balls.pack(fill="x", padx=10, pady=(6, 0))
         self.state = fit_text(ctk.CTkLabel(
-            self, text="", anchor="w", justify="left", text_color=MUTED, wraplength=520,
+            self, text="", anchor="w", justify="left", text_color=MUTED,
+            wraplength=520, font=body_font(),
         ))
         self.state.pack(fill="x", padx=10)
         # Twice what it was. Four boxes showing three rows each is four
@@ -215,13 +212,16 @@ class _MethodCell(ctk.CTkFrame):
         for i, combination in enumerate(prediction.combinations, 1):
             line = ctk.CTkFrame(self.balls, fg_color="transparent")
             line.pack(fill="x", pady=2)
-            ctk.CTkLabel(line, text=f"{i}.", width=20, text_color=MUTED).pack(side="left")
+            ctk.CTkLabel(
+                line, text=f"{i}.", width=20, text_color=MUTED, font=body_font(),
+            ).pack(side="left")
             ball_row(line, combination, size=30).pack(side="left")
         if prediction.superstar is not None:
             line = ctk.CTkFrame(self.balls, fg_color="transparent")
             line.pack(fill="x", pady=(6, 2))
             ctk.CTkLabel(
-                line, text="SuperStar", width=72, anchor="w", text_color=MUTED,
+                line, text="SuperStar", width=72, anchor="w",
+                text_color=MUTED, font=body_font(),
             ).pack(side="left")
             ball_row(line, (prediction.superstar,), size=30).pack(side="left")
         self.box.set_text("\n".join(_score_lines(prediction)))
@@ -273,38 +273,33 @@ class PredictionPanel(ctk.CTkFrame):
 
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
         row.pack(fill="x")
-        ctk.CTkLabel(row, text="Combinazioni", text_color=MUTED).pack(side="left", padx=(0, 6))
+        ctk.CTkLabel(
+            row, text="Combinazioni", text_color=MUTED, font=body_font(),
+        ).pack(side="left", padx=(0, 6))
         self.count = ctk.CTkOptionMenu(row, width=70, values=[str(i) for i in range(1, 11)])
         self.count.set(str(self.app.settings.get("combinations", 1)))
         self.count.pack(side="left", padx=(0, 16))
         ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")
-        ctk.CTkLabel(
-            row,
-            text=(
-                "Una combinazione sola è quasi sempre la scelta giusta: la seconda è "
-                "la settima scelta del metodo al posto della sesta, e così via."
-            ),
-            text_color=MUTED,
-        ).pack(side="left", padx=14)
 
-        self.model_status = ModelStatus(controls.body, self.app)
-        self.model_status.pack(fill="x", pady=(8, 0))
-
-        # One line here and the rest below the grid: what the four tickets
-        # have in common must not push the four tickets off the screen, which
-        # is what the first version of this layout did.
-        self.note = fit_text(ctk.CTkLabel(
-            controls.body, text="", anchor="w", justify="left",
-            text_color=TEXT, wraplength=1180,
-        ))
-        self.note.pack(fill="x", pady=(8, 0))
+        # TimesFM's state on the same line as the button, where the hint about
+        # combinations used to be: whether the fourth method can run is worth
+        # more of that space than a sentence about the third combination, and
+        # the cost block below says the same thing where it is relevant.
+        # No download button here — step 2 of the path owns that one.
+        self.model_status = ModelStatus(row, self.app, offer_download=False)
+        self.model_status.pack(side="left", fill="x", expand=True, padx=14)
 
         # Packed before the grid and to the bottom: pack gives the expanding
         # widget whatever is left, and a strip packed after it is simply
         # clipped off the window when the four cells are hungry.
-        self.detail = ReportBox(self, height=104)
+        #
+        # It wraps on words rather than being folded by hand, so the prose
+        # uses the whole window instead of breaking at a column count guessed
+        # in advance. The tables inside it are short enough not to need the
+        # width.
+        self.detail = ReportBox(self, height=120, wrap="word")
         self.detail.pack(side="bottom", fill="x", padx=22, pady=(4, 14))
-        self.detail.set_text(_wrap(value_note()))
+        self.detail.set_text(value_note())
 
         # Scrollable, because the cells are now taller than a 840px window can
         # show two rows of. Given the choice between four readable cells that
@@ -404,7 +399,6 @@ class PredictionPanel(ctk.CTkFrame):
                 cell.clear("Non generata.")
 
         if not predictions:
-            self.note.configure(text="")
             self.app.set_status("Nessun metodo ha prodotto una previsione.")
             return
 
@@ -415,21 +409,21 @@ class PredictionPanel(ctk.CTkFrame):
             column_price=float(self.app.settings.get("column_price", 1.0)),
             superstar_price=float(self.app.settings.get("superstar_price", 0.5)),
         )
-        self.note.configure(
-            text=(
-                f"Archivio: {it_number(any_prediction.archive_size)} estrazioni fino "
-                f"al {it_date(any_prediction.archive_last_date)}.  ·  "
-                f"Costo: {it_number(cost.total, 2)} euro — quello di UNA delle "
-                "quattro proposte qui sotto, che sono alternative e non una giocata "
-                "da moltiplicare per quattro.  ·  "
-                f"Punteggio atteso dal caso, per tutte e quattro: "
-                f"{expected_hits(any_prediction.size):.3f} numeri indovinati "
-                "per estrazione."
-            )
-        )
-        lines = _ticket_lines(any_prediction)
-        lines += ["", *_cost_lines(any_prediction, cost)]
-        lines += ["", _wrap(value_note())]
+        lines = [
+            f"Archivio: {it_number(any_prediction.archive_size)} estrazioni fino al "
+            f"{it_date(any_prediction.archive_last_date)}. Punteggio atteso dal "
+            f"caso, per tutte e quattro le proposte qui sopra: "
+            f"{expected_hits(any_prediction.size):.3f} numeri indovinati per "
+            "estrazione.",
+            "",
+            *_ticket_lines(any_prediction),
+            "",
+            *_cost_lines(any_prediction, cost),
+            "Il costo è quello di UNA delle quattro proposte: sono alternative, "
+            "non una giocata da moltiplicare per quattro.",
+            "",
+            value_note(),
+        ]
         self.detail.set_text("\n".join(lines))
         self.app.set_status(
             f"{it_count(len(predictions), 'metodo', 'metodi')} a confronto, "

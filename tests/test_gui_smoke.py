@@ -226,8 +226,9 @@ def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
     """The defect this replaces: press Genera, wait, get a generic failure.
 
     A 1.3 GB download that has not happened is not an error condition. It is a
-    fact about the machine, knowable before anything is started, and both
-    places that can start a forecast now say it and offer the download.
+    fact about the machine, knowable before anything is started, so the panel
+    says it. It does not offer the button: step 2 of the path has one, and two
+    buttons for one download is two places to look.
     """
     from core.model_store import NO_CHECKPOINT, Availability
 
@@ -239,7 +240,9 @@ def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
     app.show("prediction")
     app.update()
     assert "pesi" in panel.model_status.label.cget("text")
-    assert panel.model_status.button.winfo_ismapped(), "no download button offered"
+    assert not panel.model_status.button.winfo_ismapped(), (
+        "the download belongs to the path, not to this panel"
+    )
 
 
 def test_the_path_offers_the_download_as_its_second_step(app, monkeypatch):
@@ -402,6 +405,40 @@ def test_the_method_cells_are_bordered_and_tall_enough_to_read(app):
         assert cell.cget("border_color") == ACCENT
         assert cell.box.cget("height") == CELL_HEIGHT
     assert CELL_HEIGHT >= 240
+
+
+def test_every_label_is_one_size_unless_it_is_a_heading(app):
+    """One body size for everything a user reads, and one exception.
+
+    A CTkLabel with no ``font=`` silently takes CustomTkinter's default, so
+    before 1.0.0 the same screen carried 11, 12, 13 and the toolkit's own —
+    four kinds of text saying the same kind of thing. Headings are exempt
+    because they are bold, which is the thing that makes them headings; the
+    buttons size themselves and are not labels.
+    """
+    import customtkinter as ctk
+
+    from gui.app import VIEWS
+    from gui.widgets import BODY_SIZE
+
+    wrong = []
+
+    def walk(widget):
+        for child in widget.winfo_children():
+            if isinstance(child, ctk.CTkLabel) and child.cget("text").strip():
+                # Empty ones are CTkScrollableFrame's own title widget, which
+                # displays nothing and whose size therefore cannot be wrong.
+                font = child.cget("font")
+                size, weight = font.cget("size"), font.cget("weight")
+                if weight != "bold" and size != BODY_SIZE:
+                    wrong.append((child.cget("text")[:40], size))
+            walk(child)
+
+    for key, _, _ in VIEWS:
+        app.show(key)
+        app.update()
+    walk(app)
+    assert not wrong, f"labels off the body size: {wrong}"
 
 
 def test_the_window_carries_the_application_icon(app):
@@ -573,11 +610,12 @@ def test_the_cost_is_for_one_ticket_and_not_for_four(app):
     reads one price under four tickets and assumes it is the total.
     """
     panel = _generate(app)
-    assert "quattro" in panel.note.cget("text")
-    assert "non una giocata da moltiplicare" in panel.note.cget("text")
-    # And the cost itself is on the same line as that sentence, not three
-    # paragraphs away where the two can be read apart.
-    assert "Costo:" in panel.note.cget("text")
+    text = panel.detail.get("1.0", "end")
+    assert "quattro" in text
+    assert "non una giocata da moltiplicare" in text
+    # In the same block as the price, not three screens away where the two
+    # can be read apart.
+    assert "Costo della giocata" in text
 
 
 def test_a_single_combination_wastes_nothing_and_says_so(app):

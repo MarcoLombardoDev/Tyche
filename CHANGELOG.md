@@ -12,6 +12,34 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.0] — 2026-09-08
+
+La prima versione che si legge senza spiegazioni.
+
+Il numero non promette funzioni nuove: dice che l'interfaccia ha smesso di
+cambiare forma a ogni giro. Quattro schede, un percorso di tre passi, una
+previsione che mostra tutti e quattro i metodi affiancati, e un archivio che
+contiene anche le sue statistiche.
+
+### Modificato
+
+- **Una sola dimensione per tutti i testi**, con due eccezioni: i pulsanti,
+  che se la dà CustomTkinter, e i titoli, che sono in grassetto. Prima sullo
+  stesso schermo convivevano 11, 12, 13 e il valore predefinito del toolkit —
+  perché un'etichetta senza `font=` lo prende in silenzio — e il risultato si
+  leggeva come quattro tipi di testo che dicono la stessa cosa.
+- **Nella Previsione il pulsante per scaricare il modello non c'è più**: ce
+  n'è già uno al passo 2 del Percorso, e due pulsanti per un download sono due
+  posti dove cercarlo. Resta lo stato di TimesFM, che ha preso il posto della
+  frase sulle combinazioni: se il quarto metodo può girare o no vale più di
+  quello spazio.
+- **La riga «Archivio: …» sopra i quattro riquadri è confluita nel riquadro
+  finale.** Quello che i quattro hanno in comune si dice in un posto solo, e
+  ora è sotto, dove c'è già il costo.
+- **Il riquadro finale usa tutta la larghezza della finestra.** Prima il testo
+  veniva piegato a una colonna decisa in anticipo; adesso va a capo sulle
+  parole, dove finisce la finestra.
+
 ## [0.11.0] — 2026-09-08 — `0610144`
 
 Una scheda in meno, due colonne in più, e il motivo per cui TimesFM non partiva.

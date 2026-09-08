@@ -26,7 +26,7 @@ import customtkinter as ctk
 from core.model_store import availability
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import GOOD, MUTED, WARN
-from gui.widgets import fit_text
+from gui.widgets import body_font, fit_text
 
 
 class ModelStatus(ctk.CTkFrame):
@@ -37,15 +37,20 @@ class ModelStatus(ctk.CTkFrame):
     the method can run, and the panel knows what to grey out.
     """
 
-    def __init__(self, parent, app, on_change=None):
+    def __init__(self, parent, app, on_change=None, offer_download: bool = True):
         super().__init__(parent, fg_color="transparent")
         self.app = app
         self._on_change = on_change
+        # The Prediction panel says the state and does not offer the button:
+        # step 2 of the path already has one, and two buttons for one download
+        # is two places to look for it. The path keeps the offer because the
+        # path is where a user is told what has to be true before generating.
+        self._offer_download = offer_download
         self._state = None
 
         self.label = fit_text(ctk.CTkLabel(
             self, text="", anchor="w", justify="left",
-            text_color=MUTED, wraplength=760,
+            text_color=MUTED, wraplength=760, font=body_font(),
         ))
         self.label.pack(side="left", fill="x", expand=True)
 
@@ -83,7 +88,7 @@ class ModelStatus(ctk.CTkFrame):
 
     def _apply(self, text: str, colour: str, can_download: bool, available: bool) -> None:
         self.label.configure(text=text, text_color=colour)
-        if can_download:
+        if can_download and self._offer_download:
             self.button.pack(side="left", padx=(14, 0))
         else:
             self.button.pack_forget()

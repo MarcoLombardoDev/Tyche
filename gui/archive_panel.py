@@ -47,7 +47,7 @@ from core.localise import it_date, it_number
 from core.sources import EstrazioniItSource, LocalFileSource
 from core.statistics import decade_report, number_report, pairs_report, summary_lines
 from gui.theme import BG_ROOT, GOOD, MUTED, WARN
-from gui.widgets import ReportBox, fit_text, section
+from gui.widgets import ReportBox, body_font, fit_text, section
 
 
 class ArchivePanel(ctk.CTkFrame):
@@ -72,10 +72,13 @@ class ArchivePanel(ctk.CTkFrame):
         ctk.CTkButton(row, text="Importa un file…", width=155,
                       command=self._import_file).pack(side="left", padx=8)
 
-        self.status = ctk.CTkLabel(sources.body, text="", anchor="w", text_color=MUTED)
+        self.status = ctk.CTkLabel(
+            sources.body, text="", anchor="w", text_color=MUTED, font=body_font(),
+        )
         self.status.pack(fill="x", pady=(10, 0))
         self.freshness = fit_text(ctk.CTkLabel(
-            sources.body, text="", anchor="w", justify="left", wraplength=1000
+            sources.body, text="", anchor="w", justify="left", wraplength=1000,
+            font=body_font(),
         ))
         self.freshness.pack(fill="x", pady=(4, 0))
 
@@ -112,6 +115,7 @@ class ArchivePanel(ctk.CTkFrame):
         figures.pack(fill="x", padx=(8, 16), pady=(0, 8))
         self.summary = fit_text(ctk.CTkLabel(
             figures.body, text="", anchor="w", justify="left", text_color=MUTED,
+            font=body_font(),
         ))
         self.summary.pack(fill="x")
 

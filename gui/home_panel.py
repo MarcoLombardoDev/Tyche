@@ -49,7 +49,6 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from core.archive import describe_archive, freshness
-from core.fonts import ui_font_family
 from core.localise import it_count, it_date, it_number
 from core.model_store import availability
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
@@ -63,7 +62,7 @@ from gui.theme import (
     TEXT,
     WARN,
 )
-from gui.widgets import fit_text
+from gui.widgets import body_font, fit_text, heading_font
 
 # (key, number, title, what the step is for, the button's label)
 STEPS = [
@@ -99,7 +98,7 @@ class HomePanel(ctk.CTkFrame):
         head.pack(fill="x", padx=16, pady=(16, 8))
         ctk.CTkLabel(
             head, text="Che cosa fa Tyche", anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(family=ui_font_family(), size=16, weight="bold"),
+            font=heading_font(16),
         ).pack(fill="x", padx=16, pady=(14, 2))
         fit_text(ctk.CTkLabel(
             head,
@@ -114,7 +113,7 @@ class HomePanel(ctk.CTkFrame):
                 "modello scaricato, e poi la previsione."
             ),
             anchor="w", justify="left", text_color=MUTED, wraplength=1080,
-            font=ctk.CTkFont(family=ui_font_family(), size=12),
+            font=body_font(),
         )).pack(fill="x", padx=16, pady=(0, 14))
 
         for key, number, title, description, action in STEPS:
@@ -124,7 +123,7 @@ class HomePanel(ctk.CTkFrame):
         extra.pack(fill="x", padx=16, pady=(8, 16))
         ctk.CTkLabel(
             extra, text="Fuori percorso", anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(family=ui_font_family(), size=13, weight="bold"),
+            font=heading_font(13),
         ).pack(fill="x", padx=16, pady=(12, 2))
         row = ctk.CTkFrame(extra, fg_color="transparent")
         row.pack(fill="x", padx=16, pady=(4, 14))
@@ -139,8 +138,7 @@ class HomePanel(ctk.CTkFrame):
                 "e prezzi. L'archivio in cifre, numero per numero, sta nella scheda "
                 "Archivio."
             ),
-            anchor="w", justify="left", text_color=MUTED,
-            font=ctk.CTkFont(family=ui_font_family(), size=12),
+            anchor="w", justify="left", text_color=MUTED, font=body_font(),
         )).pack(side="left", fill="x", expand=True)
 
     def _step_card(
@@ -155,24 +153,23 @@ class HomePanel(ctk.CTkFrame):
         # tall and pushed the last step, the destination, below the fold.
         ctk.CTkLabel(
             card, text=number, width=42, text_color=ACCENT,
-            font=ctk.CTkFont(family=ui_font_family(), size=22, weight="bold"),
+            font=heading_font(22),
         ).pack(side="left", padx=(16, 0), pady=(12, 0), anchor="n")
 
         middle = ctk.CTkFrame(card, fg_color="transparent")
         middle.pack(side="left", fill="both", expand=True, pady=12)
         ctk.CTkLabel(
             middle, text=title, anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(family=ui_font_family(), size=15, weight="bold"),
+            font=heading_font(),
         ).pack(fill="x")
         fit_text(ctk.CTkLabel(
             middle, text=description, anchor="w", justify="left",
-            text_color=MUTED, wraplength=780,
-            font=ctk.CTkFont(family=ui_font_family(), size=12),
+            text_color=MUTED, wraplength=780, font=body_font(),
         )).pack(fill="x", pady=(1, 0))
         # What this step's state actually is, filled in by refresh().
         state = fit_text(ctk.CTkLabel(
             middle, text="", anchor="w", justify="left", text_color=MUTED,
-            wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
+            wraplength=780, font=body_font(),
         ))
         state.pack(fill="x", pady=(5, 0))
         self._state_labels[key] = state
@@ -180,8 +177,7 @@ class HomePanel(ctk.CTkFrame):
         right = ctk.CTkFrame(card, fg_color="transparent")
         right.pack(side="right", padx=16, pady=12)
         mark = ctk.CTkLabel(
-            right, text="", text_color=MUTED,
-            font=ctk.CTkFont(family=ui_font_family(), size=18, weight="bold"),
+            right, text="", text_color=MUTED, font=heading_font(18),
         )
         mark.pack(anchor="e", pady=(0, 2))
         self._marks[key] = mark
