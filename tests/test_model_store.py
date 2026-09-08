@@ -308,6 +308,98 @@ class TestDownloadFailures:
         assert "cache" in message.lower()
 
 
+class TestTheSlimDownload:
+    """A shorter download is only an improvement if it can still be loaded."""
+
+    def test_it_never_excludes_a_weights_format(self):
+        """The exclusion list and the acceptance list must not overlap.
+
+        Excluding a format that `_checkpoint_cached` then looks for would
+        produce a download the program itself calls incomplete, forever.
+        """
+        from core.model_store import _WEIGHT_SUFFIXES, SKIPPABLE
+
+        excluded = {pattern.lstrip("*") for pattern in SKIPPABLE}
+        assert not excluded & set(_WEIGHT_SUFFIXES)
+
+    def test_it_only_excludes_formats_torch_cannot_read(self):
+        """Every entry is another framework's serialisation, or a picture."""
+        from core.model_store import SKIPPABLE
+
+        assert set(SKIPPABLE) >= {"*.h5", "*.msgpack", "*.onnx"}
+        assert "*.json" not in SKIPPABLE, "the config is not optional"
+        assert "*.py" not in SKIPPABLE, "some checkpoints ship their own code"
+
+    def test_a_slim_download_that_lands_no_weights_is_retried_whole(
+        self, monkeypatch, tmp_path
+    ):
+        """The retry is what makes the exclusion safe to have guessed.
+
+        Nobody here can list that repository — Hugging Face answers 403
+        through this sandbox's proxy — so the patterns are an informed guess.
+        A guess that quietly cost the weights would be the worst failure
+        available; this one costs a second attempt.
+        """
+        calls = []
+        empty, full = tmp_path / "empty", tmp_path / "full"
+        empty.mkdir()
+        full.mkdir()
+        (full / "model.safetensors").write_bytes(b"x")
+
+        def fake_snapshot(checkpoint, token, progress, ignore):
+            calls.append(tuple(ignore))
+            return str(empty if ignore else full)
+
+        monkeypatch.setattr(model_store, "_snapshot", fake_snapshot)
+        path = model_store.download_checkpoint("org/model")
+        assert len(calls) == 2, "a weightless slim download must be retried"
+        assert calls[0] and not calls[1], "the retry must exclude nothing"
+        assert path == str(full)
+
+    def test_a_slim_download_with_weights_is_not_repeated(
+        self, monkeypatch, tmp_path
+    ):
+        calls = []
+        (tmp_path / "model.safetensors").write_bytes(b"x")
+
+        def fake_snapshot(checkpoint, token, progress, ignore):
+            calls.append(tuple(ignore))
+            return str(tmp_path)
+
+        monkeypatch.setattr(model_store, "_snapshot", fake_snapshot)
+        model_store.download_checkpoint("org/model")
+        assert len(calls) == 1
+
+
+class TestTheDiagnosis:
+    """Forty lines a user can paste, from a machine nobody here can see."""
+
+    def test_it_never_raises_however_broken_the_machine(self):
+        """A diagnostic that dies on the first missing import diagnoses nothing.
+
+        This suite runs with neither torch nor huggingface_hub installed,
+        which is exactly the shape of machine it exists for.
+        """
+        lines = model_store.diagnose()
+        assert isinstance(lines, list) and lines
+
+    def test_it_names_what_is_missing_rather_than_only_that_it_is(self):
+        report = "\n".join(model_store.diagnose())
+        assert "timesfm3" in report
+        assert "huggingface_hub" in report
+        assert "torch" in report
+
+    def test_it_says_the_token_is_not_needed_for_the_default(self):
+        report = "\n".join(model_store.diagnose())
+        assert "non serve per il checkpoint predefinito" in report
+
+    def test_it_reports_the_python_it_is_running_on(self):
+        """Half the "it does not work here" reports are a second interpreter."""
+        import sys
+
+        assert sys.version.split()[0] in "\n".join(model_store.diagnose())
+
+
 # ── the display names ────────────────────────────────────────
 class TestMethodNames:
     def test_every_identifier_has_a_display_name(self):

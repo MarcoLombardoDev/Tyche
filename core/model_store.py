@@ -40,6 +40,7 @@ bare ``42%`` that becomes ``31%`` looks like a bug.
 from __future__ import annotations
 
 import importlib.util
+import pathlib
 import time
 from dataclasses import dataclass
 
@@ -94,7 +95,12 @@ def _has_module(name: str) -> bool:
 
 # What a snapshot has to contain before Tyche will call it usable. Any one of
 # them: the format depends on the checkpoint and on which loader wrote it.
-_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt", ".msgpack")
+#
+# No ``.msgpack``: that is Flax, and it was here until a test noticed that the
+# same suffix sat in SKIPPABLE. Counting a format the download deliberately
+# skips as evidence that the download worked is the kind of contradiction that
+# ends in a cache the program calls ready forever and cannot load.
+_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
 
 
 def _checkpoint_cached(checkpoint: str) -> bool:
@@ -112,8 +118,6 @@ def _checkpoint_cached(checkpoint: str) -> bool:
     cannot load. That is exactly the state a user reported: ready on one
     screen, "non si è caricato" on the next.
     """
-    import pathlib
-
     from huggingface_hub import snapshot_download
 
     try:
@@ -302,22 +306,50 @@ def download_failure_message(checkpoint: str, error: str) -> str:
     )
 
 
+# Formats a PyTorch loader can never use. The repository carries the same
+# weights several ways so that every framework finds its own, and fetching all
+# of them is how "1,3 GB" turns into a great deal more than 1,3 GB.
+#
+# Chosen as an exclusion rather than an allow-list on purpose: an allow-list
+# that misses one file the loader wants produces a download that looks
+# complete and fails on the first forecast, which is the worst of the
+# available failures. Excluding formats no torch build reads cannot do that.
+SKIPPABLE = (
+    "*.h5",             # TensorFlow
+    "*.msgpack",        # Flax
+    "*.onnx",
+    "*.onnx_data",
+    "*.tflite",
+    "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.pdf",
+)
+
+
 def download_checkpoint(
     checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
     token: str = "",
     progress=None,
+    slim: bool = True,
 ) -> str:
     """Fetch the weights, reporting progress. Returns the local path.
 
-    The whole repository, because Tyche does not know which files this
-    checkpoint's loader will ask for and guessing wrong produces a download
-    that looks complete and then fails on the first forecast. The `forecast`
-    CI job prints what actually landed, so that guess can become a measurement
-    rather than staying an assumption.
+    ``slim`` leaves out the formats in :data:`SKIPPABLE`, which no PyTorch
+    loader reads. **And then it checks that weights actually landed**: if the
+    exclusion took everything usable — because this checkpoint ships in a
+    format the list did not anticipate — the whole repository is fetched
+    instead. A slimmer download that cannot be loaded is not an improvement,
+    and the retry is what makes the exclusion safe to have guessed.
 
     Resumable by huggingface_hub itself: a second call after a broken
     connection continues rather than restarting.
     """
+    path = _snapshot(checkpoint, token, progress, ignore=SKIPPABLE if slim else ())
+    if slim and not _has_weights(path):
+        _report(progress, "Nessun file di pesi nella selezione: riscarico tutto.")
+        path = _snapshot(checkpoint, token, progress, ignore=())
+    return path
+
+
+def _snapshot(checkpoint: str, token: str, progress, ignore) -> str:
     from huggingface_hub import snapshot_download
 
     tracker = DownloadProgress(progress)
@@ -325,12 +357,115 @@ def download_checkpoint(
         path = snapshot_download(
             repo_id=checkpoint,
             token=token or None,
+            ignore_patterns=list(ignore) or None,
             tqdm_class=tracking_tqdm(tracker),
         )
     except Exception as exc:  # noqa: BLE001 — every failure becomes a sentence
         raise RuntimeError(download_failure_message(checkpoint, str(exc))) from exc
     tracker.finish()
     return str(path)
+
+
+def _has_weights(path: str) -> bool:
+    """Whether a downloaded snapshot holds anything a loader could open."""
+    return any(
+        item.suffix in _WEIGHT_SUFFIXES
+        for item in pathlib.Path(path).rglob("*")
+        if item.is_file()
+    )
+
+
+def _report(progress, message: str, fraction: float = 0.0) -> None:
+    if progress is not None:
+        progress(message, fraction)
+
+
+def diagnose(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, token: str = "") -> list[str]:
+    """Everything that decides whether TimesFM can run, as printable lines.
+
+    Written for the case this module was not built for: the user says the
+    download does not work and neither of us knows why. ``availability`` gives
+    one word; this gives the interpreter, the two packages and their versions,
+    where the cache is, what is in it, how much room the disk has, and what
+    the Hub says when asked — each one a thing that has actually broken a
+    download somewhere.
+
+    Never raises. A diagnostic that dies on the first missing import diagnoses
+    nothing, and the machine it runs on is by definition the odd one.
+    """
+    import platform
+    import shutil
+    import sys
+
+    lines = [
+        f"Tyche su Python {sys.version.split()[0]}, {platform.platform()}",
+        f"checkpoint richiesto: {checkpoint}",
+        f"token configurato: {'sì' if token else 'no'} "
+        "(non serve per il checkpoint predefinito)",
+        "",
+    ]
+
+    for name in ("timesfm3", "huggingface_hub", "torch"):
+        try:
+            module = __import__(name)
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"{name:<16} NON importabile — {type(exc).__name__}: {exc}")
+        else:
+            version = getattr(module, "__version__", "versione ignota")
+            lines.append(f"{name:<16} {version}")
+
+    lines.append("")
+    try:
+        from huggingface_hub import constants
+
+        cache = pathlib.Path(constants.HF_HUB_CACHE)
+        lines.append(f"cache: {cache}")
+        lines.append(f"       esiste: {'sì' if cache.exists() else 'no'}")
+        if cache.exists():
+            files = [f for f in cache.rglob("*") if f.is_file()]
+            size = sum(f.stat().st_size for f in files)
+            lines.append(
+                f"       {len(files)} file, {it_bytes(size)} in totale"
+            )
+            weights = [f for f in files if f.suffix in _WEIGHT_SUFFIXES]
+            lines.append(f"       di cui {len(weights)} file di pesi")
+            for item in sorted(weights, key=lambda f: -f.stat().st_size)[:5]:
+                lines.append(f"         {it_bytes(item.stat().st_size):>10}  {item.name}")
+        usage = shutil.disk_usage(cache.parent if cache.exists() else pathlib.Path.home())
+        lines.append(f"       spazio libero sul disco: {it_bytes(usage.free)}")
+    except Exception as exc:  # noqa: BLE001
+        lines.append(f"cache non ispezionabile — {type(exc).__name__}: {exc}")
+
+    lines.append("")
+    state = availability(checkpoint)
+    lines.append(f"stato: {state.state} — {state.detail}")
+
+    lines.append("")
+    lines.append("Interrogo l'Hub (serve rete):")
+    try:
+        from huggingface_hub import HfApi
+
+        info = HfApi().model_info(checkpoint, files_metadata=True, token=token or None)
+        siblings = list(getattr(info, "siblings", []) or [])
+        total = sum(s.size or 0 for s in siblings)
+        lines.append(f"  raggiunto. {len(siblings)} file, {it_bytes(total)} in totale.")
+        lines.append(f"  accesso ristretto (gated): {getattr(info, 'gated', 'ignoto')}")
+        skipped = [
+            s for s in siblings
+            if any(s.rfilename.endswith(p.lstrip('*')) for p in SKIPPABLE)
+        ]
+        if skipped:
+            saved = sum(s.size or 0 for s in skipped)
+            lines.append(
+                f"  di cui {len(skipped)} in formati che Tyche non scarica "
+                f"({it_bytes(saved)} risparmiati)."
+            )
+        for item in sorted(siblings, key=lambda s: -(s.size or 0))[:10]:
+            lines.append(f"    {it_bytes(item.size or 0):>10}  {item.rfilename}")
+    except Exception as exc:  # noqa: BLE001
+        lines.append(f"  non raggiunto — {type(exc).__name__}: {exc}")
+
+    return lines
 
 
 def ensure_checkpoint(

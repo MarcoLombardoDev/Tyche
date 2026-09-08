@@ -82,6 +82,10 @@ def _parse_args():
         ),
     )
     parser.add_argument(
+        "--model-check", action="store_true",
+        help="dice perché TimesFM non parte: pacchetti, cache, spazio, Hub. Poi esce",
+    )
+    parser.add_argument(
         "--self-check", action="store_true",
         help="verifica che il pacchetto compilato avvii Tk ed esegua l'analisi, poi esce",
     )
@@ -101,6 +105,26 @@ def _parse_args():
     if unknown:
         parser.error(f"argomenti non riconosciuti: {' '.join(unknown)}")
     return args
+
+
+def _run_model_check() -> int:
+    """Print why TimesFM can or cannot run. Always exits 0.
+
+    Zero even when nothing works: this is a report, and a diagnostic that
+    exits non-zero because the thing it diagnoses is broken cannot be told
+    apart from a diagnostic that itself failed.
+    """
+    from core.data_manager import load_settings
+    from core.model_store import diagnose
+    from core.version import DEFAULT_TIMESFM_CHECKPOINT
+
+    settings = load_settings()
+    for line in diagnose(
+        settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT,
+        settings.get("hf_token", ""),
+    ):
+        print(line)
+    return 0
 
 
 # The opening of the "there is nothing to analyse" message, and a contract
@@ -406,6 +430,8 @@ def main() -> int:
         from core import selfcheck
 
         return selfcheck.run(args.self_check_report)
+    if args.model_check:
+        return _run_model_check()
     if args.check:
         return _run_check()
     if args.validate is not None:

@@ -12,6 +12,54 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.1] — 2026-09-08
+
+Scoprire perché TimesFM non parte, e scaricare meno roba.
+
+### Aggiunto
+
+- **Un pulsante «Diagnosi» al passo 2 del Percorso, e `--model-check` da riga
+  di comando.** Dice quello che serve per capire perché il modello non parte e
+  che finora nessuno dei due poteva sapere: quale Python sta girando, se
+  `timesfm3`, `huggingface_hub` e `torch` sono importabili e in che versione,
+  dov'è la cache e che cosa contiene, quanti file di pesi ci sono e quanto
+  sono grandi, quanto spazio libero c'è sul disco, e che cosa risponde l'Hub
+  quando gli si chiede del checkpoint. Scrive tutto in
+  `data/diagnosi-timesfm.txt`.
+
+  Il pulsante c'è perché il pacchetto Windows non ha una console: lì
+  `--model-check` è irraggiungibile, e un rapporto che si può ottenere solo
+  dalla riga di comando su una macchina che non ce l'ha non è un rapporto.
+
+- **Uno step della CI che elenca il contenuto del repository dei pesi** con le
+  dimensioni, e quanto risparmia l'esclusione. Era una domanda a cui da qui
+  non si poteva rispondere — huggingface.co risponde 403 attraverso il proxy
+  di questo ambiente — e adesso la risposta è stampata invece che supposta.
+
+### Modificato
+
+- **Il download salta i formati che PyTorch non legge**: TensorFlow (`.h5`),
+  Flax (`.msgpack`), ONNX, TFLite e le immagini. Un repository di modelli
+  porta gli stessi pesi in più formati perché ogni framework trovi il suo, e
+  prenderli tutti è come «1,3 GB» diventa parecchio più di 1,3 GB.
+
+  **Ed è un'esclusione, non una lista di cose da prendere**, di proposito: una
+  lista che dimentica un file che al caricatore serve produce un download che
+  sembra completo e fallisce alla prima previsione. Se l'esclusione dovesse
+  comunque portare via tutti i pesi, il download viene rifatto per intero:
+  è quello che rende sicuro l'aver tirato a indovinare.
+
+- **L'aiuto del campo Token dice come ottenerlo**, in due righe, e ripete che
+  per il checkpoint predefinito non serve.
+
+### Corretto
+
+- **`.msgpack` era contemporaneamente un formato di pesi accettato e uno
+  escluso dal download.** L'ha trovato un test nuovo. Contare come prova che
+  il download è riuscito un formato che il download salta di proposito è il
+  genere di contraddizione che finisce in una cache che il programma dichiara
+  pronta per sempre e non riesce a caricare.
+
 ## [1.0.0] — 2026-09-08 — `bc7cf6f`
 
 La prima versione che si legge senza spiegazioni.

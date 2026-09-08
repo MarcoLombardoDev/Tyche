@@ -245,6 +245,38 @@ jobs:
       # It also prints what the snapshot actually fetched. Tyche downloads the
       # whole repository because it does not know which files the loader will
       # want, and this is the measurement that says how much that costs.
+      # What is actually in that repository, and what Tyche's exclusion list
+      # saves. The owner reported "thousands of files" after a download and
+      # neither of us could check it from a sandbox where huggingface.co
+      # answers 403 through the proxy. This step is the answer, printed rather
+      # than guessed, and it is what SKIPPABLE should be chosen from.
+      - name: What the checkpoint repository holds
+        run: |
+          python - <<'PY'
+          from huggingface_hub import HfApi
+
+          from core.model_store import SKIPPABLE
+          from core.version import DEFAULT_TIMESFM_CHECKPOINT
+
+          info = HfApi().model_info(DEFAULT_TIMESFM_CHECKPOINT, files_metadata=True)
+          files = list(info.siblings or [])
+          total = sum(f.size or 0 for f in files)
+          print(f"{len(files)} files, {total:,} bytes total")
+          print(f"gated: {getattr(info, 'gated', 'unknown')}")
+
+          skipped = [
+              f for f in files
+              if any(f.rfilename.endswith(p.lstrip("*")) for p in SKIPPABLE)
+          ]
+          saved = sum(f.size or 0 for f in skipped)
+          print(f"Tyche skips {len(skipped)} of them, {saved:,} bytes")
+          print(f"so it fetches {len(files) - len(skipped)} files, {total - saved:,} bytes")
+
+          for f in sorted(files, key=lambda s: -(s.size or 0))[:25]:
+              mark = "skip" if f in skipped else "    "
+              print(f"  {mark} {f.size or 0:>13,}  {f.rfilename}")
+          PY
+
       - name: The download reports a real percentage
         run: |
           python - <<'PY'

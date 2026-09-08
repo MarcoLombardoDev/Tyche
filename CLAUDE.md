@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 350, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 399, GUI included
+python -m pytest tests/ -q                                   # 358, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 407, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`350 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`358 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -888,6 +888,41 @@ Throttled to one report per whole percent or half-second, with an injected
 clock so the test does not wait. Unthrottled, every tqdm update becomes a
 closure queued onto the Tk main thread and the download makes the window
 unresponsive while reporting how smoothly it is going.
+
+**TimesFM is not something Hugging Face will run for you, and the interface
+must not suggest it is.** The owner asked to switch to a mode where the model
+runs "online from Hugging Face", on the reasonable assumption that a token
+would then be what unlocks it. There is no such mode for this model: the
+serverless Inference API serves a catalogue of standard task pipelines, and a
+time-series foundation model taking a 90×1024 context is not in it. The only
+hosted option is a dedicated Inference Endpoint — a GPU instance the user
+rents by the hour and deploys themselves — which is a different product, costs
+money continuously, and would still need every line of `core/forecaster.py`
+around it. **Do not build a token gate on the strength of it.** The default
+checkpoint is not gated; a step that checked for a token would be checking for
+something the download does not want and the forecast cannot use.
+
+That claim is from knowledge rather than from a probe: huggingface.co answers
+403 through this environment's proxy, so it could not be checked from here. If
+it is ever worth settling, the `forecast` job has the network.
+
+**The download skips what PyTorch cannot read** — TensorFlow, Flax, ONNX,
+TFLite and images — because a model repository carries the same weights in
+several formats so that every framework finds its own. It is an *exclusion*
+and not an allow-list on purpose: a list that misses one file the loader wants
+produces a download that looks complete and fails on the first forecast, which
+is the worst failure available. And if the exclusion should ever take the
+weights with it, the whole repository is fetched instead; that retry is what
+makes the guess safe to have made, since nobody here can list the repository.
+The `forecast` job prints the listing and what the exclusion saves, so the
+next change to `SKIPPABLE` comes from evidence.
+
+**`--model-check` and the Diagnosi button exist because the packaged build has
+no console.** `console=False` on Windows means a CLI diagnostic is unreachable
+exactly where the owner runs the program, so the report is obtainable from the
+window and written to `data/diagnosi-timesfm.txt`. It never raises: a
+diagnostic that dies on the first missing import diagnoses nothing, and the
+machine it runs on is by definition the odd one.
 
 **What no test here has ever seen is huggingface_hub emitting a bar.** The
 arithmetic is driven by hand; whether hf_hub honours `tqdm_class` at all is a

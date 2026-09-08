@@ -188,6 +188,16 @@ class HomePanel(ctk.CTkFrame):
         button.pack(anchor="e", pady=(6, 0))
         self._buttons[key] = button
 
+        if key == "model":
+            # The one screen where "it does not work and I cannot tell you
+            # why" is a real outcome. A packaged Windows build has no console,
+            # so --model-check is unreachable there and the report has to be
+            # obtainable from the window or not at all.
+            ctk.CTkButton(
+                right, text="Diagnosi", width=170, fg_color=BG_ROW,
+                text_color=TEXT, command=self._diagnose,
+            ).pack(anchor="e", pady=(6, 0))
+
     # ── acting ───────────────────────────────────────────────
     def _act(self, key: str) -> None:
         """Step 2 does its own work; the other two open the panel that does.
@@ -200,6 +210,32 @@ class HomePanel(ctk.CTkFrame):
             self.app.download_model(on_done=self.refresh)
             return
         self.app.show(key)
+
+    def _diagnose(self) -> None:
+        """Write the TimesFM report to a file and say where it is.
+
+        A file rather than a dialog: it is forty lines, the useful thing to do
+        with it is send it to somebody, and a message box is the one place
+        text cannot be copied out of comfortably.
+        """
+        checkpoint = self._checkpoint()
+        token = self.app.settings.get("hf_token", "")
+
+        def work(report):
+            from core.data_manager import DATA_DIR
+            from core.model_store import diagnose
+
+            report("interrogo pacchetti, cache e Hub…", 0.0)
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            path = DATA_DIR / "diagnosi-timesfm.txt"
+            path.write_text("\n".join(diagnose(checkpoint, token)), encoding="utf-8")
+            return path
+
+        self.app.run_worker(
+            "Diagnosi TimesFM",
+            work,
+            lambda path: self.app.set_status(f"Diagnosi scritta in {path}"),
+        )
 
     # ── state ────────────────────────────────────────────────
     def refresh(self) -> None:

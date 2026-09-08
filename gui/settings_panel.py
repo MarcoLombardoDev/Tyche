@@ -36,7 +36,10 @@ FIELDS = [
      "cuda richiede una build di PyTorch corrispondente; cpu impiega qualche secondo "
      "per previsione."),
     ("hf_token", "Token Hugging Face", "secret",
-     "Serve solo per un checkpoint ad accesso ristretto. Salvato in "
+     "Serve solo per un checkpoint ad accesso ristretto: quello predefinito "
+     "non lo è, e senza token si scarica lo stesso. Se ti serve: huggingface.co "
+     "→ crea un account → Settings → Access Tokens → New token, tipo «Read», e "
+     "incolla qui la stringa che comincia con hf_. Salvato in "
      "config/settings.json, che git ignora."),
     ("representation", "Serie data al modello", ("frequenza", "presenza", "ritardo"),
      "«frequenza» è lisciata e offre una pendenza da seguire; «presenza» è il dato "
