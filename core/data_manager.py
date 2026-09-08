@@ -61,10 +61,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "context_length": 1024,
 
     # --- Sources ---
-    "bulk_archive_url": "https://downloads.sourceforge.net/project/superenalotto/EnalStorico.CSV",
-    "html_archive_url": (
-        "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}"
-    ),
+    # No URLs here since 0.11.0. estrazioni.it is the one source with a button
+    # and its address is a constant in core/sources/estrazioni_it.py; the bulk
+    # mirror and the page scraper are --update fallbacks and carry their own
+    # defaults. A setting exists so a user can change something, and nobody
+    # was going to hand-edit a scraper URL template.
     # Whether the bulk mirror's nine mislabelled 1999 draws are put back
     # where they belong on import. On, because they really are mislabelled
     # and the repair agrees with an independent record of the same nine.

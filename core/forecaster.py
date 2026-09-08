@@ -87,6 +87,11 @@ class TimesFMForecaster:
         self.window = window
         self.hf_token = hf_token
         self._model = None
+        # Why the last load_model() said no. Without it the caller has a False
+        # and nothing else, and the reason — a missing torch, a corrupt cache,
+        # an API that moved — reaches the status bar for a fraction of a second
+        # before the next message overwrites it, which is where this went.
+        self.last_error = ""
 
     @property
     def loaded(self) -> bool:
@@ -102,12 +107,12 @@ class TimesFMForecaster:
         """
         if self._model is not None:
             return True
+        self.last_error = ""
         _report(progress, "Importo timesfm…", 0.05)
         try:
             from timesfm3 import ModelConfig, TimesFM3Evaluator
         except ImportError as exc:
-            _report(progress, f"timesfm non è installato: {exc}", 0.0)
-            return False
+            return self._failed(progress, f"timesfm non è installato: {exc}")
 
         # The download happens here, with a percentage, rather than inside the
         # evaluator's constructor where it is 1.3 GB of silence. No-op when the
@@ -115,10 +120,18 @@ class TimesFMForecaster:
         try:
             ensure_checkpoint(self.checkpoint, token=self.hf_token, progress=progress)
         except Exception as exc:  # noqa: BLE001 — the caller wants a sentence
-            _report(progress, str(exc), 0.0)
-            return False
+            return self._failed(progress, str(exc))
 
-        _report(progress, f"Carico {self.checkpoint}…", 0.2)
+        # Says what the wait is for. The weights are on disk by this point, so
+        # nothing is downloading and there is no percentage to show — what
+        # takes the time is torch reading 1.3 GB into memory, and a line that
+        # said only "Carico …" left the user watching an unexplained pause.
+        _report(
+            progress,
+            f"Carico {self.checkpoint} in memoria: circa 1,3 GB dal disco, "
+            "può richiedere un minuto…",
+            0.2,
+        )
         try:
             config = ModelConfig(
                 checkpoint_path=self.checkpoint,
@@ -130,11 +143,26 @@ class TimesFMForecaster:
                 token=self.hf_token or None,
             )
             self._model = TimesFM3Evaluator(config)
-        except Exception as exc:
-            _report(progress, f"Checkpoint non caricato: {exc}", 0.0)
-            return False
+        except Exception as exc:  # noqa: BLE001 — every failure becomes a sentence
+            return self._failed(
+                progress,
+                f"{type(exc).__name__}: {exc}",
+                prefix="I pesi sono su disco ma il modello non si è caricato",
+            )
         _report(progress, "TimesFM 3.0 pronto.", 1.0)
         return True
+
+    def _failed(self, progress, detail: str, prefix: str = "") -> bool:
+        """Record the reason, report it, and answer False.
+
+        One place, so that every failure path leaves ``last_error`` set. The
+        caller displays it: a message that only reaches the status bar is one
+        the next status message erases, which is exactly how a user came to
+        see "TimesFM non si è caricato" and nothing about why.
+        """
+        self.last_error = f"{prefix}. {detail}" if prefix else detail
+        _report(progress, self.last_error, 0.0)
+        return False
 
     def score_numbers(self, draws: list[Draw], progress=None) -> dict[int, float]:
         """One score per number for the draw after ``draws``.

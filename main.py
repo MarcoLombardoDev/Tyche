@@ -274,7 +274,6 @@ def _run_update(write: bool) -> int:
         print("Nessun archivio — parto dal mirror storico.")
         try:
             incoming += BulkArchiveSource(
-                settings["bulk_archive_url"],
                 repair_labels=bool(settings.get("auto_repair_labels", True)),
             ).fetch(report)
         except SourceError as exc:
@@ -289,7 +288,7 @@ def _run_update(write: bool) -> int:
     years = list(range(last_year, date.today().year + 1))
     print(f"Scansione delle pagine {years[0]}–{years[-1]}.")
     try:
-        incoming += HtmlTableSource(settings["html_archive_url"], years).fetch(report)
+        incoming += HtmlTableSource(years=years).fetch(report)
     except SourceError as exc:
         print(f"  scansione fallita: {exc}")
 

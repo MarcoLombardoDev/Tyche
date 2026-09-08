@@ -92,22 +92,39 @@ def _has_module(name: str) -> bool:
         return False
 
 
+# What a snapshot has to contain before Tyche will call it usable. Any one of
+# them: the format depends on the checkpoint and on which loader wrote it.
+_WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt", ".msgpack")
+
+
 def _checkpoint_cached(checkpoint: str) -> bool:
-    """Whether the weights are already in the Hugging Face cache.
+    """Whether usable weights are already in the Hugging Face cache.
 
     ``local_files_only`` makes ``snapshot_download`` a cache query: it returns
-    the path when every file is present and raises when anything is missing,
-    without touching the network. Asking the cache directory ourselves would
-    mean hard-coding the ``models--org--name/snapshots`` layout, which is
+    a path without touching the network. Asking the cache directory ourselves
+    would mean hard-coding the ``models--org--name/snapshots`` layout, which is
     huggingface_hub's to change.
+
+    **And then the snapshot is checked for weights**, which the query alone
+    does not do. Offline it can only compare against the file list it already
+    has, so an interrupted download that left a config and a tokeniser behind
+    resolves happily — and the path panel then says "pronto" over a model that
+    cannot load. That is exactly the state a user reported: ready on one
+    screen, "non si è caricato" on the next.
     """
+    import pathlib
+
     from huggingface_hub import snapshot_download
 
     try:
-        snapshot_download(repo_id=checkpoint, local_files_only=True)
+        path = snapshot_download(repo_id=checkpoint, local_files_only=True)
     except Exception:  # noqa: BLE001 — every miss is "not cached"
         return False
-    return True
+    return any(
+        item.suffix in _WEIGHT_SUFFIXES
+        for item in pathlib.Path(path).rglob("*")
+        if item.is_file()
+    )
 
 
 def availability(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT) -> Availability:

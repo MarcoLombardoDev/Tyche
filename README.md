@@ -38,14 +38,15 @@ sistemarlo.
 
 | | Passo | La condizione |
 |---|---|---|
-| 1 | **L'archivio** | C'è, ed è aggiornato? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
+| 1 | **L'archivio** | C'è, ed è aggiornato? Scarica, importa e ispeziona lo storico, dice che cosa non va e lo mostra in cifre. |
 | 2 | **Il modello TimesFM** | I pesi sono su questo computer? Se no, il pulsante li scarica, con la percentuale nella barra in basso. |
 | 3 | **La previsione** | Il punto di arrivo: tutti e quattro i metodi insieme, con quanto costa la giocata e quanto vale. |
 
-Fuori percorso ci sono **Statistiche** — frequenze, ritardi, decine e coppie,
-ogni tabella con accanto il valore che produrrebbe il caso — e
-**Impostazioni**, con checkpoint, dispositivo, token Hugging Face, numeri
-per combinazione, SuperStar, prezzi e indirizzi delle sorgenti.
+Fuori percorso c'è **Impostazioni**: checkpoint, dispositivo, token Hugging
+Face, numeri per combinazione, SuperStar e prezzi. Le frequenze, i ritardi, le
+decine e le coppie — ogni tabella con accanto il valore che produrrebbe il caso
+— stanno nella colonna destra della scheda **Archivio**, dove dalla 0.11.0 sono
+state portate: erano una scheda a sé, che si apriva una volta e mai più.
 
 **Nella Previsione non si sceglie il metodo: girano tutti e quattro e ognuno
 prende un quarto della pagina.** È l'argomento del programma, messo dove non
@@ -55,7 +56,7 @@ ottieni i suoi numeri, e non scopri mai che gli altri tre — generatore casuale
 compreso — producono una schedina altrettanto convincente e che vale
 esattamente lo stesso.
 
-![Previsione](docs/screenshots/04_previsione.png)
+![Previsione](docs/screenshots/03_previsione.png)
 
 *Il punto di arrivo. Le palline viola hanno lo stesso aspetto sicuro qualunque
 metodo le abbia prodotte, e il riquadro in basso a destra è un generatore
@@ -455,8 +456,8 @@ come unica fonte, e che `--version` stampa.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 344 test core, 2 saltati
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 386, GUI compresa
+python -m pytest tests/ -q                                    # 350 test core, 2 saltati
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 398, GUI compresa
 python -m ruff check .
 ```
 

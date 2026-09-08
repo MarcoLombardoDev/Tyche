@@ -36,6 +36,7 @@ import customtkinter as ctk
 
 from core.data_manager import log_prediction
 from core.features import DEFAULT_WINDOW
+from core.fonts import ui_font_family
 from core.forecaster import TimesFMForecaster
 from core.localise import it_count, it_date, it_number
 from core.predictor import (
@@ -52,8 +53,8 @@ from core.predictor import (
 )
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.model_status import ModelStatus
-from gui.theme import ACCENT, BG_ROOT, MUTED, TEXT, WARN
-from gui.widgets import ReportBox, ball_row, section
+from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, TEXT, WARN
+from gui.widgets import ReportBox, ball_row, fit_text, section
 
 _METHOD_LABELS = {
     "timesfm": "TimesFM 3.0 (modello fondazionale da 330M)",
@@ -61,6 +62,10 @@ _METHOD_LABELS = {
     "ritardo": "Ritardo (assenti da più tempo)",
     "casuale": "Casuale (la condizione di controllo)",
 }
+
+# The height of one cell's report box. Doubled in 0.11.0: at 120 the boxes
+# showed three lines of a table and the page read as noise.
+CELL_HEIGHT = 240
 
 # What each cell says under the method's name. Short: the cell is a quarter of
 # the window and the numbers are the point.
@@ -163,12 +168,20 @@ class _MethodCell(ctk.CTkFrame):
     """One quarter of the page: a method's combinations and its scores."""
 
     def __init__(self, parent, method: str):
-        super().__init__(parent, fg_color=BG_ROOT)
+        # A frame with Tyche's own colour round it. Four cells on one dark
+        # background read as one continuous page of text, which is what the
+        # owner saw: the borders are what say "these are four separate
+        # answers to the same question".
+        super().__init__(
+            parent, fg_color=BG_PANEL, border_color=ACCENT, border_width=1,
+            corner_radius=8,
+        )
         self.method = method
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x")
+        header.pack(fill="x", padx=10, pady=(8, 0))
         ctk.CTkLabel(
             header, text=method_name(method), anchor="w", text_color=ACCENT,
+            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
         ).pack(side="left")
         ctk.CTkLabel(
             header, text=f" — {_METHOD_BLURBS[method]}", anchor="w", text_color=MUTED,
@@ -178,13 +191,16 @@ class _MethodCell(ctk.CTkFrame):
         # method produced nothing would reserve 200px for the balls it does not
         # have — the same default that once made every path card 200px tall.
         self.balls = ctk.CTkFrame(self, fg_color="transparent", height=0)
-        self.balls.pack(fill="x", pady=(4, 0))
-        self.state = ctk.CTkLabel(
+        self.balls.pack(fill="x", padx=10, pady=(6, 0))
+        self.state = fit_text(ctk.CTkLabel(
             self, text="", anchor="w", justify="left", text_color=MUTED, wraplength=520,
-        )
-        self.state.pack(fill="x")
-        self.box = ReportBox(self, height=120)
-        self.box.pack(fill="both", expand=True, pady=(4, 0))
+        ))
+        self.state.pack(fill="x", padx=10)
+        # Twice what it was. Four boxes showing three rows each is four
+        # boxes nobody can read; CELL_HEIGHT is what makes the grid taller
+        # than the window, and the scrollable frame is what makes that fine.
+        self.box = ReportBox(self, height=CELL_HEIGHT)
+        self.box.pack(fill="both", expand=True, padx=10, pady=(4, 10))
 
     def clear(self, message: str, colour: str = MUTED) -> None:
         for child in self.balls.winfo_children():
@@ -277,10 +293,10 @@ class PredictionPanel(ctk.CTkFrame):
         # One line here and the rest below the grid: what the four tickets
         # have in common must not push the four tickets off the screen, which
         # is what the first version of this layout did.
-        self.note = ctk.CTkLabel(
+        self.note = fit_text(ctk.CTkLabel(
             controls.body, text="", anchor="w", justify="left",
             text_color=TEXT, wraplength=1180,
-        )
+        ))
         self.note.pack(fill="x", pady=(8, 0))
 
         # Packed before the grid and to the bottom: pack gives the expanding
@@ -290,12 +306,16 @@ class PredictionPanel(ctk.CTkFrame):
         self.detail.pack(side="bottom", fill="x", padx=22, pady=(4, 14))
         self.detail.set_text(_wrap(value_note()))
 
-        grid = ctk.CTkFrame(self, fg_color=BG_ROOT)
+        # Scrollable, because the cells are now taller than a 840px window can
+        # show two rows of. Given the choice between four readable cells that
+        # scroll and four unreadable ones that fit, the owner asked for the
+        # first — twice the height, and a border so the four read as four.
+        grid = ctk.CTkScrollableFrame(self, fg_color=BG_ROOT)
         grid.pack(fill="both", expand=True, padx=16, pady=(0, 0))
         for column in (0, 1):
             grid.grid_columnconfigure(column, weight=1, uniform="method")
         for line in (0, 1):
-            grid.grid_rowconfigure(line, weight=1, uniform="method")
+            grid.grid_rowconfigure(line, weight=1, uniform="method", minsize=CELL_HEIGHT)
         for index, method in enumerate(METHODS):
             cell = _MethodCell(grid, method)
             cell.grid(
@@ -338,9 +358,12 @@ class PredictionPanel(ctk.CTkFrame):
                     self.app.forecaster = forecaster
                 else:
                     # The other three still have something to say, so a model
-                    # that will not load costs its own cell and nothing else.
+                    # that will not load costs its own cell and nothing else —
+                    # and it costs it *with the reason*, which used to be
+                    # thrown away here and left the user with a bare "non si è
+                    # caricato" under a path panel saying it was ready.
+                    skipped = forecaster.last_error or "TimesFM non si è caricato."
                     forecaster = None
-                    skipped = "TimesFM non si è caricato."
             results = {}
             for method in METHODS:
                 if method == "timesfm" and forecaster is None:
@@ -374,8 +397,7 @@ class PredictionPanel(ctk.CTkFrame):
                 cell.clear(
                     skipped
                     or "TimesFM non è disponibile: mancano i pesi, oppure il "
-                    "pacchetto non è installato in questa copia. Vedi la riga "
-                    "qui sopra.",
+                    "pacchetto non è installato in questa copia.",
                     WARN,
                 )
             else:

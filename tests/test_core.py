@@ -1040,7 +1040,9 @@ def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeyp
             raise sources.SourceError("blocked")
 
     class FakeBulk:
-        def __init__(self, url, repair_labels=True):
+        # No URL argument since 0.11.0: the fallbacks carry their own address
+        # now that the two URL settings are gone.
+        def __init__(self, repair_labels=True):
             pass
 
         def fetch(self, progress=None):
@@ -1050,7 +1052,7 @@ def test_update_scrapes_from_the_bootstrap_year_not_from_today(tmp_path, monkeyp
             ]
 
     class FakeHtml:
-        def __init__(self, template, years, **kwargs):
+        def __init__(self, years=None, **kwargs):
             requested["years"] = years
 
         def fetch(self, progress=None):
@@ -2144,3 +2146,38 @@ def test_the_weights_licence_is_stated_where_a_recipient_would_look():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_a_forecaster_that_will_not_load_says_why(monkeypatch):
+    """The reason has to outlive the status bar.
+
+    A user reported the path panel saying TimesFM was ready and the Prediction
+    panel answering "non si è caricato", with nothing about the cause: the
+    message went to the status bar and the next status message erased it. The
+    forecaster keeps it now, and the cell that failed prints it.
+    """
+    from core.forecaster import TimesFMForecaster
+
+    forecaster = TimesFMForecaster()
+    assert forecaster.last_error == ""
+    if forecaster.load_model(lambda *_: None):
+        pytest.skip("timesfm is installed in this environment")
+    assert forecaster.last_error, "a failed load must record its reason"
+    assert "timesfm" in forecaster.last_error.lower()
+
+
+def test_a_second_attempt_does_not_inherit_the_first_reason(monkeypatch):
+    """Otherwise a load that succeeds leaves a stale explanation behind."""
+    from core.forecaster import TimesFMForecaster
+
+    forecaster = TimesFMForecaster()
+    forecaster.last_error = "qualcosa di vecchio"
+    forecaster._model = object()          # already loaded: returns immediately
+    assert forecaster.load_model(lambda *_: None) is True
+    assert forecaster.last_error == "qualcosa di vecchio", (
+        "an early return must not clear a reason it did not produce"
+    )
+
+    forecaster._model = None
+    forecaster.load_model(lambda *_: None)
+    assert forecaster.last_error != "qualcosa di vecchio"

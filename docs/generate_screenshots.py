@@ -98,9 +98,8 @@ app.update()
 SHOTS = [
     ("home", "01_percorso"),
     ("archive", "02_archivio"),
-    ("statistics", "03_statistiche"),
-    ("prediction", "04_previsione"),
-    ("settings", "05_impostazioni"),
+    ("prediction", "03_previsione"),
+    ("settings", "04_impostazioni"),
 ]
 state = {"i": 0}
 

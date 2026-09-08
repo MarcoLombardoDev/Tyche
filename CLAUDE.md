@@ -18,6 +18,8 @@ core/         archive, sources, features, statistics, scoring, power,
               forecasting — no GUI imports below this line
 core/sources/ the three ways draw history gets in
 gui/          one module per panel; home_panel.py is the path the app opens on
+              (four panels since 0.11.0: Percorso, Archivio, Previsione,
+              Impostazioni — Statistiche folded into Archivio)
 tests/        test_core.py, test_gui_smoke.py, test_release_workflow.py
 ```
 
@@ -52,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 344, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 386, GUI included
+python -m pytest tests/ -q                                   # 350, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 398, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`344 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`350 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -425,7 +427,15 @@ rather than reported, because the address is still legible on screen and a
 dialog would tell the reader nothing they cannot see.
 
 Packed *before* the status footer so it ends up below it: with
-`side="bottom"`, Tk stacks each new widget above the last.
+`side="bottom"`, Tk stacks each new widget above the last — **and both of them
+before the body**, which expands. `pack` hands the expanding widget whatever
+is left and clips anything packed after it, so with the body first these two
+disappeared on exactly the two tabs whose content is tallest. That is
+tab-dependent and therefore easy to miss;
+`test_the_status_bar_and_the_licence_line_are_on_every_tab` walks all four.
+
+The text colour is `MUTED`, not `SEP`. `SEP` is the colour of a hairline rule
+and the strip was, in the owner's words, invisible.
 
 ## Screenshots
 
@@ -929,10 +939,39 @@ panel and looking at it, not by a test and not by reading the code. The
 0.10.0 grid took three renders to get right and no test would have found any
 of the three.
 
+## A wraplength in pixels is a guess about somebody else's screen
+
+Tk labels do not wrap without one, so every panel here carried a number
+written by hand — 760, 780, 1000, 1080 — and on a maximised window the prose
+stopped less than halfway across. `gui.widgets.fit_text` sets it from the
+width the widget actually got.
+
+**Two versions of it hung the whole GUI suite**, and the way they failed is
+the thing to remember. Both bound `<Configure>` on the label itself and read
+`event.width`: a narrower wraplength makes the label *request* a different
+width, pack propagation grants some of it, and the next Configure reports 621
+where the last reported 660 — forever. It never raised. `update()` simply
+never returned, so `pytest` sat there until it was killed, which reads like a
+hung machine rather than a bug in a helper.
+
+The working version binds on the **toplevel** and measures the label's
+**parent**, whose width is imposed from above and cannot answer back. Guard on
+the last applied width, `add="+"` on the bind because every label shares that
+toplevel, and one `after_idle` so the first frame is right.
+
+`test_prose_wraps_to_the_window_and_not_to_a_number` resizes the window to
+1600 and asserts the wraplength exceeds 1100 — bigger than any of the four
+hardcoded numbers, so a label that merely kept its constructor value fails.
+An earlier version of the test asserted `> 200` and passed with the helper
+removed entirely.
+
 ## Where the explanatory notes go, and why it is not a style question
 
-Every table in `gui/statistics_panel.py` carries a note saying what its
-columns mean; so did the validation tables, until 0.10.0 removed that panel.
+Every one of the three tables carries a note saying what its columns mean.
+They live in `core/statistics.py` as `number_report`, `decade_report` and
+`pairs_report` since 0.11.0 — the panel that draws them has moved twice now,
+and text that lives in a panel moves with it and gets rewritten on the way. A
+report built in `core/` also has a test that needs no display.
 Until 0.3.2 those notes were printed
 *after* the rows, and the screenshots are what showed the problem: the
 frequency table is ninety rows in a box that holds about twenty-two, so its

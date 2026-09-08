@@ -23,7 +23,7 @@ import customtkinter as ctk
 from core.fonts import ui_font_family
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import BG_ROOT, MUTED
-from gui.widgets import section
+from gui.widgets import fit_text, section
 
 # (key, label, kind, help). kind is "text", "secret", "bool", or a tuple of
 # choices. Every key in DEFAULT_SETTINGS that a user can meaningfully set
@@ -48,11 +48,6 @@ FIELDS = [
     ("context_length", "Lunghezza del contesto (estrazioni)", "text",
      "Quanto storico vede TimesFM. La 3.0 accetta fino a 16k; 1024 tiene corta "
      "un'esecuzione su CPU."),
-    ("bulk_archive_url", "Indirizzo del mirror storico", "text",
-     "Una richiesta, tutto lo storico fino a gennaio 2020."),
-    ("html_archive_url", "Indirizzo dell'archivio per anno", "text",
-     "{year} viene sostituito. Modificabile perché la scansione non è mai stata "
-     "provata sul sito reale e il percorso potrebbe essere sbagliato."),
     ("auto_repair_labels", "Correggi le etichette del mirror", "bool",
      "Il mirror storico etichetta 1998 le prime nove estrazioni del 1999. Con "
      "questa attiva vengono rimesse a posto durante l'import; disattivandola si "
@@ -115,11 +110,11 @@ class SettingsPanel(ctk.CTkFrame):
                 widget.insert(0, value)
             widget.pack(side="left")
             self._widgets[key] = widget
-            ctk.CTkLabel(
+            fit_text(ctk.CTkLabel(
                 scroll, text=helptext, anchor="w", justify="left",
                 text_color=MUTED, wraplength=900,
                 font=ctk.CTkFont(family=ui_font_family(), size=11),
-            ).pack(fill="x", padx=(200, 0), pady=(0, 10))
+            )).pack(fill="x", padx=(200, 0), pady=(0, 10))
 
         ctk.CTkButton(block.body, text="Salva", width=120, command=self._save).pack(
             anchor="w", pady=(12, 0)

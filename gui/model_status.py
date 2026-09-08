@@ -26,6 +26,7 @@ import customtkinter as ctk
 from core.model_store import availability
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import GOOD, MUTED, WARN
+from gui.widgets import fit_text
 
 
 class ModelStatus(ctk.CTkFrame):
@@ -42,11 +43,11 @@ class ModelStatus(ctk.CTkFrame):
         self._on_change = on_change
         self._state = None
 
-        self.label = ctk.CTkLabel(
+        self.label = fit_text(ctk.CTkLabel(
             self, text="", anchor="w", justify="left",
             text_color=MUTED, wraplength=760,
-        )
-        self.label.pack(side="left")
+        ))
+        self.label.pack(side="left", fill="x", expand=True)
 
         # Built once and packed or forgotten, rather than created per refresh:
         # a widget rebuilt on every tab switch is a widget whose command can

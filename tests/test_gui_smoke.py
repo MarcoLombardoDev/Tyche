@@ -318,6 +318,87 @@ def test_the_method_is_written_TimesFM_where_the_user_reads_it(app):
     assert set(shown.values()) == set(METHOD_NAMES.values())
 
 
+def test_the_status_bar_and_the_licence_line_are_on_every_tab(app):
+    """They were packed after the body, which expands — so pack clipped them.
+
+    The symptom was tab-dependent and therefore easy to miss: they showed on
+    the short panels and vanished on Archivio and Previsione, which are the
+    two whose content is tallest.
+    """
+    from gui.app import VIEWS
+
+    for key, _, _ in VIEWS:
+        app.show(key)
+        app.update()
+        assert app._status.winfo_ismapped(), f"status bar missing on {key}"
+        assert app._licence_label.winfo_ismapped(), f"licence line missing on {key}"
+        assert app._licence_email.winfo_ismapped(), f"contact missing on {key}"
+
+
+def test_the_licence_line_is_not_the_colour_of_a_hairline_rule(app):
+    """It was SEP, the separator colour, and could not be read."""
+    from gui.theme import SEP
+
+    assert app._licence_label.cget("text_color") != SEP
+
+
+def test_prose_wraps_to_the_window_and_not_to_a_number(app):
+    """A wraplength in pixels is a guess about somebody else's screen.
+
+    Also the regression guard for the hang: the first two attempts at this
+    bound Configure on the label and read its own width, which oscillates —
+    update() never returned and the whole suite stopped rather than failing.
+    """
+    home = app._panels["home"]
+    app.show("home")
+    app.update()
+    app.geometry("1600x900")
+    app.update_idletasks()
+    app.update()
+    widths = [label.cget("wraplength") for label in home._state_labels.values()]
+    # Bigger than any of the numbers that used to be hardcoded (760, 780,
+    # 1000, 1080), so a label that simply kept its constructor value fails.
+    assert all(w > 1100 for w in widths), widths
+
+
+def test_the_archive_tab_carries_the_figures_that_had_their_own_tab(app):
+    """Statistics folded into Archivio in 0.11.0; the tab is gone."""
+    from gui.app import VIEWS
+
+    assert "statistics" not in [key for key, *_ in VIEWS]
+    panel = app._panels["archive"]
+    app.show("archive")
+    app.update()
+    assert panel.summary.cget("text").strip()
+    assert "uscite" in panel.freq_box.get("1.0", "end")
+    assert "decina" in panel.decade_box.get("1.0", "end")
+    assert "coppia" in panel.pairs_box.get("1.0", "end")
+
+
+def test_the_archive_tab_offers_one_source_and_a_file(app):
+    """The mirror and the scraper were traps beside a button that works."""
+    panel = app._panels["archive"]
+    app.show("archive")
+    app.update()
+    assert not hasattr(panel, "_fetch_bulk")
+    assert not hasattr(panel, "_fetch_html")
+    assert not hasattr(panel, "debug_html")
+    assert hasattr(panel, "_fetch_export") and hasattr(panel, "_import_file")
+
+
+def test_the_method_cells_are_bordered_and_tall_enough_to_read(app):
+    """Four boxes showing three rows each are four boxes nobody reads."""
+    from gui.prediction_panel import CELL_HEIGHT
+    from gui.theme import ACCENT
+
+    panel = app._panels["prediction"]
+    for cell in panel._cells.values():
+        assert cell.cget("border_width") >= 1
+        assert cell.cget("border_color") == ACCENT
+        assert cell.box.cget("height") == CELL_HEIGHT
+    assert CELL_HEIGHT >= 240
+
+
 def test_the_window_carries_the_application_icon(app):
     """Argus shipped none for a while and ran under the bare Tk feather.
 

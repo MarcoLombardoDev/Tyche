@@ -5,8 +5,6 @@
   "representation": "frequenza",
   "frequency_window": 150,
   "context_length": 1024,
-  "bulk_archive_url": "https://downloads.sourceforge.net/project/superenalotto/EnalStorico.CSV",
-  "html_archive_url": "https://www.estrazionedellotto.it/superenalotto/risultati/archivio-superenalotto-{year}",
   "auto_repair_labels": true,
   "combinations": 1,
   "prediction_size": 6,

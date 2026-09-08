@@ -12,6 +12,57 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.11.0] — 2026-09-08
+
+Una scheda in meno, due colonne in più, e il motivo per cui TimesFM non partiva.
+
+### Corretto
+
+- **«TimesFM è pronto» nel Percorso e «non si è caricato» nella Previsione,
+  senza una parola sul perché.** Due difetti sovrapposti, entrambi risolti.
+  Il motivo del fallimento finiva nella barra di stato e il messaggio
+  successivo lo cancellava: ora il forecaster se lo tiene e il riquadro di
+  TimesFM lo stampa, con il nome dell'eccezione. E il controllo della cache
+  diceva «pronto» anche su uno scaricamento interrotto — offline
+  `snapshot_download` confronta solo con l'elenco di file che ha già, quindi
+  una cartella con la configurazione e senza pesi passava. Adesso deve
+  contenere almeno un file di pesi.
+- **La barra di stato e la riga del copyright mancavano in Archivio e
+  Previsione.** Erano impacchettate dopo il corpo della finestra, che si
+  espande, e `pack` taglia via quello che viene dopo: sparivano esattamente
+  sulle due schede con più contenuto. Ora sono le prime a essere riservate e
+  ci sono su tutte.
+- **La riga del copyright aveva il colore di un filetto di separazione** e non
+  si leggeva. Ora è quello del testo secondario, un punto più grande.
+- **I testi andavano a capo a metà finestra.** Ogni pannello portava una
+  larghezza fissa scritta a mano — 760, 780, 1000, 1080 — quindi su uno
+  schermo grande la prosa si fermava a metà riga. Ora si adatta alla finestra.
+- **Il messaggio durante il caricamento dice che cosa sta aspettando**: i pesi
+  sono già su disco, non c'è niente da scaricare e nessuna percentuale da
+  mostrare — quello che impiega tempo è torch che legge 1,3 GB dal disco.
+
+### Modificato
+
+- **La scheda Statistiche non c'è più: è la colonna destra dell'Archivio.**
+  A sinistra che cosa non va nell'archivio e le ultime estrazioni, a destra
+  l'archivio in cifre con le tre tabelle. Sono metà della stessa domanda, e
+  come scheda separata era un posto dove si andava una volta sola.
+- **I quattro riquadri della Previsione sono alti il doppio e hanno un bordo
+  viola.** A 120 pixel mostravano tre righe di tabella e la pagina si leggeva
+  come rumore. Sono più alti della finestra, quindi la griglia scorre.
+- **Tolto «— che valgono esattamente quanto lui»** dal passo 2 del Percorso.
+
+### Rimosso
+
+- **I pulsanti «Mirror storico» e «Scansiona le pagine».** Il mirror si ferma
+  a gennaio 2020 e non è d'accordo con estrazioni.it su dodici estrazioni; la
+  scansione non ha mai letto una pagina vera e i suoi indirizzi sono
+  congetture. Stavano accanto a un pulsante che scarica l'archivio giusto in
+  una richiesta, il che li rendeva trappole più che alternative. Restano come
+  ripieghi dentro `--update`, dove nessuno deve sceglierli.
+- **Con loro se ne vanno due impostazioni**, `bulk_archive_url` e
+  `html_archive_url`, e la casella «salva le pagine scaricate».
+
 ## [0.10.0] — 2026-09-08 — `a4f5f16`
 
 Meno schede, e i quattro metodi tutti insieme.

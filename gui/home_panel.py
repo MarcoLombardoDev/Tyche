@@ -63,6 +63,7 @@ from gui.theme import (
     TEXT,
     WARN,
 )
+from gui.widgets import fit_text
 
 # (key, number, title, what the step is for, the button's label)
 STEPS = [
@@ -72,8 +73,7 @@ STEPS = [
      "Vai all'archivio"),
     ("model", "2", "Il modello TimesFM",
      "Circa 1,3 GB di pesi, scaricati una volta sola e poi eseguiti sul tuo "
-     "computer. Senza, restano gli altri tre metodi — che valgono esattamente "
-     "quanto lui.",
+     "computer. Senza, restano gli altri tre metodi.",
      "Scarica il modello"),
     ("prediction", "3", "La previsione",
      "Il punto di arrivo: tutti e quattro i metodi, uno accanto all'altro, con "
@@ -101,7 +101,7 @@ class HomePanel(ctk.CTkFrame):
             head, text="Che cosa fa Tyche", anchor="w", text_color=TEXT,
             font=ctk.CTkFont(family=ui_font_family(), size=16, weight="bold"),
         ).pack(fill="x", padx=16, pady=(14, 2))
-        ctk.CTkLabel(
+        fit_text(ctk.CTkLabel(
             head,
             text=(
                 "Scarica lo storico del SuperEnalotto dal 1997 e genera delle "
@@ -115,7 +115,7 @@ class HomePanel(ctk.CTkFrame):
             ),
             anchor="w", justify="left", text_color=MUTED, wraplength=1080,
             font=ctk.CTkFont(family=ui_font_family(), size=12),
-        ).pack(fill="x", padx=16, pady=(0, 14))
+        )).pack(fill="x", padx=16, pady=(0, 14))
 
         for key, number, title, description, action in STEPS:
             self._step_card(key, number, title, description, action)
@@ -128,23 +128,20 @@ class HomePanel(ctk.CTkFrame):
         ).pack(fill="x", padx=16, pady=(12, 2))
         row = ctk.CTkFrame(extra, fg_color="transparent")
         row.pack(fill="x", padx=16, pady=(4, 14))
-        ctk.CTkLabel(
-            row,
-            text=(
-                "Statistiche — l'archivio in cifre, numero per numero. "
-                "Impostazioni — modello, token e sorgenti."
-            ),
-            anchor="w", justify="left", text_color=MUTED, wraplength=760,
-            font=ctk.CTkFont(family=ui_font_family(), size=12),
-        ).pack(side="left")
         ctk.CTkButton(
-            row, text="Statistiche", width=120, fg_color=BG_ROW, text_color=TEXT,
-            command=lambda: self.app.show("statistics"),
-        ).pack(side="right", padx=(8, 0))
-        ctk.CTkButton(
-            row, text="Impostazioni", width=120, fg_color=BG_ROW, text_color=TEXT,
+            row, text="Impostazioni", width=140, fg_color=BG_ROW, text_color=TEXT,
             command=lambda: self.app.show("settings"),
         ).pack(side="right")
+        fit_text(ctk.CTkLabel(
+            row,
+            text=(
+                "Impostazioni — modello, token, numeri per combinazione, SuperStar "
+                "e prezzi. L'archivio in cifre, numero per numero, sta nella scheda "
+                "Archivio."
+            ),
+            anchor="w", justify="left", text_color=MUTED,
+            font=ctk.CTkFont(family=ui_font_family(), size=12),
+        )).pack(side="left", fill="x", expand=True)
 
     def _step_card(
         self, key: str, number: str, title: str, description: str, action: str
@@ -167,16 +164,16 @@ class HomePanel(ctk.CTkFrame):
             middle, text=title, anchor="w", text_color=TEXT,
             font=ctk.CTkFont(family=ui_font_family(), size=15, weight="bold"),
         ).pack(fill="x")
-        ctk.CTkLabel(
+        fit_text(ctk.CTkLabel(
             middle, text=description, anchor="w", justify="left",
             text_color=MUTED, wraplength=780,
             font=ctk.CTkFont(family=ui_font_family(), size=12),
-        ).pack(fill="x", pady=(1, 0))
+        )).pack(fill="x", pady=(1, 0))
         # What this step's state actually is, filled in by refresh().
-        state = ctk.CTkLabel(
+        state = fit_text(ctk.CTkLabel(
             middle, text="", anchor="w", justify="left", text_color=MUTED,
             wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
-        )
+        ))
         state.pack(fill="x", pady=(5, 0))
         self._state_labels[key] = state
 

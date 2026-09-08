@@ -24,6 +24,41 @@ from core.fonts import ui_font_family
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, TEXT
 
 
+def fit_text(label, margin: int = 32):
+    """Make a label wrap to the window's width instead of a number from 2026.
+
+    Tk labels do not wrap at all without ``wraplength``, and a ``wraplength``
+    in pixels is a guess about the window: every panel here carried one — 760,
+    780, 1000, 1080 — so on a maximised screen the prose broke less than
+    halfway across and left the rest of the row empty.
+
+    **Bound to the toplevel, and measuring the label's parent — not the label.**
+    Two earlier versions bound ``<Configure>`` on the label itself and set the
+    wraplength from ``event.width``, which oscillates: a narrower wraplength
+    makes the label *request* a different width, pack propagation grants some
+    of it, and the next Configure sees 621 where the last saw 660, forever.
+    That did not fail, it hung — ``update()`` never returned and the whole GUI
+    suite stopped dead. The parent's width is imposed by the window above it
+    and does not answer back.
+    """
+    applied = {"width": 0}
+
+    def resize(event=None):
+        width = label.master.winfo_width()
+        if abs(width - applied["width"]) < 4:
+            return
+        applied["width"] = width
+        label.configure(wraplength=max(width - margin, 200))
+
+    # ``add="+"`` because every label bound this way shares the toplevel, and
+    # a plain bind would leave only the last one working.
+    label.winfo_toplevel().bind("<Configure>", resize, add="+")
+    # And once on the way in, so the first frame is right rather than waiting
+    # for the user to resize something.
+    label.after_idle(resize)
+    return label
+
+
 def section(parent, title: str, subtitle: str = "") -> ctk.CTkFrame:
     """A titled block. Returns the frame callers put their content in."""
     wrapper = ctk.CTkFrame(parent, fg_color=BG_PANEL, corner_radius=8)
@@ -33,10 +68,10 @@ def section(parent, title: str, subtitle: str = "") -> ctk.CTkFrame:
     )
     header.pack(fill="x", padx=14, pady=(12, 0))
     if subtitle:
-        ctk.CTkLabel(
+        fit_text(ctk.CTkLabel(
             wrapper, text=subtitle, anchor="w", justify="left", text_color=MUTED,
             font=ctk.CTkFont(family=ui_font_family(), size=12), wraplength=900,
-        ).pack(fill="x", padx=14, pady=(2, 0))
+        )).pack(fill="x", padx=14, pady=(2, 0))
     body = ctk.CTkFrame(wrapper, fg_color="transparent")
     body.pack(fill="both", expand=True, padx=14, pady=12)
     wrapper.body = body          # type: ignore[attr-defined]

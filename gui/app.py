@@ -7,11 +7,11 @@
 """
 app.py — Tyche
 
-The main window: a top bar, five panels, and the worker-thread plumbing.
+The main window: a top bar, four panels, and the worker-thread plumbing.
 
     ┌──────────────────────────────────────────────────────────────┐
-    │ TYCHE   · status   [Percorso] [Archivio] [Statistiche]        │
-    │                    [Previsione] [Impostazioni]                │
+    │ TYCHE   · status   [Percorso] [Archivio] [Previsione]         │
+    │                    [Impostazioni]                             │
     │──────────────────────────────────────────────────────────────│
     │                                                              │
     │  the selected panel                                          │
@@ -65,7 +65,6 @@ from gui.archive_panel import ArchivePanel
 from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
 from gui.settings_panel import SettingsPanel
-from gui.statistics_panel import StatisticsPanel
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT, WARN, apply_theme
 
 ctk.set_appearance_mode("dark")
@@ -75,7 +74,6 @@ apply_theme()
 VIEWS = [
     ("home", "Percorso", HomePanel),
     ("archive", "Archivio", ArchivePanel),
-    ("statistics", "Statistiche", StatisticsPanel),
     ("prediction", "Previsione", PredictionPanel),
     ("settings", "Impostazioni", SettingsPanel),
 ]
@@ -216,8 +214,14 @@ class TycheApp(ctk.CTk):
             button.pack(side="left", padx=3)
             self._nav[key] = button
 
-        self.body = ctk.CTkFrame(self, fg_color=BG_ROOT)
-        self.body.pack(fill="both", expand=True)
+        # The licence bar and the status footer are built and packed BEFORE the
+        # body, and both to the bottom. `pack` hands the expanding widget
+        # whatever is left and simply clips anything packed after it, so with
+        # the body first these two vanished on exactly the tabs whose content
+        # is tallest — Archivio and Previsione — which is where a user is most
+        # likely to want to read the status line. Packed first they reserve
+        # their height and are on every tab.
+        self._build_licence_bar()
 
         footer = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=0, height=34)
         footer.pack(fill="x", side="bottom")
@@ -227,7 +231,8 @@ class TycheApp(ctk.CTk):
         self._archive_label = ctk.CTkLabel(footer, text="", anchor="e", text_color=MUTED)
         self._archive_label.pack(side="right", padx=16)
 
-        self._build_licence_bar()
+        self.body = ctk.CTkFrame(self, fg_color=BG_ROOT)
+        self.body.pack(fill="both", expand=True)
 
         for key, _, panel_class in VIEWS:
             self._panels[key] = panel_class(self.body, self)
@@ -249,14 +254,16 @@ class TycheApp(ctk.CTk):
         user reads something. ``AGPL-3.0`` is left alone: it is an SPDX
         identifier, not a phrase.
 
-        Packed before the status footer, so it sits below it: with
-        ``side="bottom"`` Tk stacks each new widget above the last.
+        Packed first of the three and to the bottom, so it sits below the
+        status footer: with ``side="bottom"`` Tk stacks each new widget above
+        the last. Both go in before the body, which expands — otherwise pack
+        gives the body everything and clips these two off the window.
 
         Whoever is running the program is exactly the person who might have a
         question about licensing, security or contributing, so the address is
         written out and clickable rather than promised on request.
         """
-        bar = ctk.CTkFrame(self, fg_color=BG_ROOT, corner_radius=0, height=22)
+        bar = ctk.CTkFrame(self, fg_color=BG_ROOT, corner_radius=0, height=24)
         bar.pack(fill="x", side="bottom")
         bar.pack_propagate(False)
 
@@ -272,15 +279,17 @@ class TycheApp(ctk.CTk):
                 f"© 2026 Marco Lombardo — {APP_NAME}  |  "
                 "Distribuito con licenza AGPL-3.0  |  Contatti:"
             ),
-            font=ctk.CTkFont(family=ui_font_family(), size=9),
-            text_color=SEP,
+            font=ctk.CTkFont(family=ui_font_family(), size=11),
+            # MUTED, not SEP: SEP is the colour of a hairline rule and the
+            # strip was effectively invisible against the background.
+            text_color=MUTED,
         )
         self._licence_label.pack(side="left")
 
         self._licence_email = ctk.CTkLabel(
             centre,
             text=CONTACT_EMAIL,
-            font=ctk.CTkFont(family=ui_font_family(), size=9, underline=True),
+            font=ctk.CTkFont(family=ui_font_family(), size=11, underline=True),
             text_color=ACCENT,
             cursor="hand2",
         )

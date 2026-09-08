@@ -235,6 +235,56 @@ class TestAvailability:
         assert state.ready is False
 
 
+class TestTheCacheCheck:
+    """A snapshot without weights in it is not a usable checkpoint."""
+
+    def _fake_snapshot(self, monkeypatch, tmp_path, names):
+        import sys
+        import types
+
+        for name in names:
+            (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+            (tmp_path / name).write_bytes(b"x")
+        module = types.ModuleType("huggingface_hub")
+        module.snapshot_download = lambda **kwargs: str(tmp_path)
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+
+    def test_a_snapshot_with_weights_is_cached(self, monkeypatch, tmp_path):
+        self._fake_snapshot(
+            monkeypatch, tmp_path, ["config.json", "model.safetensors"]
+        )
+        assert model_store._checkpoint_cached("org/model") is True
+
+    def test_an_interrupted_download_is_not_cached(self, monkeypatch, tmp_path):
+        """Config and tokeniser but no weights: the state the user hit.
+
+        Offline, ``snapshot_download`` can only compare against the file list
+        it already has, so a half-finished download resolves happily and the
+        path panel said "pronto" over a model that could not load.
+        """
+        self._fake_snapshot(
+            monkeypatch, tmp_path, ["config.json", "tokenizer.json"]
+        )
+        assert model_store._checkpoint_cached("org/model") is False
+
+    def test_weights_in_a_subdirectory_still_count(self, monkeypatch, tmp_path):
+        self._fake_snapshot(monkeypatch, tmp_path, ["torch/model.bin"])
+        assert model_store._checkpoint_cached("org/model") is True
+
+    def test_a_miss_is_not_cached(self, monkeypatch, tmp_path):
+        import sys
+        import types
+
+        module = types.ModuleType("huggingface_hub")
+
+        def raise_it(**kwargs):
+            raise OSError("not in the cache")
+
+        module.snapshot_download = raise_it
+        monkeypatch.setitem(sys.modules, "huggingface_hub", module)
+        assert model_store._checkpoint_cached("org/model") is False
+
+
 class TestDownloadFailures:
     def test_an_authorisation_failure_names_the_token_and_the_setting(self):
         message = download_failure_message(
