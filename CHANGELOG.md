@@ -12,6 +12,31 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.9.1] — 2026-09-08
+
+Ripubblicare una versione già rilasciata non funzionava.
+
+### Corretto
+
+- **Cancellare un tag e ricrearlo faceva fallire la release**, con
+  «CHANGELOG.md has no section for 0.9.0» su un changelog che quella sezione
+  ce l'aveva. Il difetto è che **il workflow scriveva un'intestazione che il
+  suo stesso lettore non sapeva rileggere**: dopo aver pubblicato, registra
+  nell'intestazione della versione il commit da cui gli archivi sono stati
+  costruiti — `## [0.9.0] — 2026-09-07 — ⟨commit⟩` — e l'espressione regolare
+  di `tools/release_notes.py` ammetteva la data e nient'altro dopo di essa.
+  Alla prima pubblicazione non si vede, perché la lettura avviene prima della
+  riscrittura; si vede alla seconda.
+
+  È costato la 0.9.0: la sua pagina è rimasta senza note e senza archivi. Chi
+  scrive un file deve saperlo rileggere, e ora tre test lo verificano —
+  compreso uno che confronta la forma attesa con quella che il workflow
+  compone davvero, perché un test che si inventasse la propria ortografia
+  passerebbe mentre la release continua a fallire.
+
+  La data non può più iniziare con un backtick, così un'intestazione che porta
+  il commit e non la data non spaccia il commit per una data.
+
 ## [0.9.0] — 2026-09-07 — `f1cec1f`
 
 TimesFM dice se può funzionare prima che tu glielo chieda.

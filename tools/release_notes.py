@@ -41,7 +41,24 @@ CHANGELOG = REPO / "CHANGELOG.md"
 
 # "## [0.1.0] — 2026-09-04", and the looser spellings a hand-edited file grows:
 # a plain hyphen instead of an em dash, no date at all, no brackets.
-_HEADING = re.compile(r"^##\s+\[?v?(?P<version>[0-9][^\]\s]*)\]?\s*(?:[—–-]\s*(?P<date>\S+))?\s*$")
+#
+# **And the build commit the release workflow stamps on afterwards**, which is
+# the trailing "— `f1cec1f`". Leaving that out of this pattern was a real
+# defect and it cost a release: the workflow rewrites the heading of the
+# version it has just published, so re-tagging that version — deleting v0.9.0
+# and pushing it again — fed this parser a heading it no longer recognised and
+# the run died on "CHANGELOG.md has no section for 0.9.0". The first run never
+# saw it, because the parse happens before the rewrite. Whatever this file
+# writes, it has to be able to read back.
+#
+# The date deliberately cannot start with a backtick, so a heading that
+# carries a hash and no date reports no date rather than reporting the hash
+# as one.
+_HEADING = re.compile(
+    r"^##\s+\[?v?(?P<version>[0-9][^\]\s]*)\]?\s*"
+    r"(?:[—–-]\s*(?P<date>[^\s`][^\s]*))?"
+    r"(?:\s*[—–-]\s*(?:`[0-9a-f]{7,40}`|commit[^\n]*))?\s*$"
+)
 
 
 def changelog_section(version: str, text: str) -> tuple[str, str | None]:

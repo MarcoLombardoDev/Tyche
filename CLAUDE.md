@@ -50,15 +50,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 341, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 387, GUI included
+python -m pytest tests/ -q                                   # 344, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 390, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`341 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`344 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -220,6 +220,18 @@ them has a test:
   leave the older release standing rather than deleting it and losing the
   pointer in the same run, which is the opposite of Argus's ordering because
   Argus keeps every release.
+
+**Whatever the workflow writes into the changelog, `tools/release_notes.py`
+has to be able to read back.** It did not, and it cost the 0.9.0 release. The
+record step stamps the build commit onto that version's heading —
+`## [0.9.0] — 2026-09-07 — ⟨commit⟩` — and `_HEADING` allowed a date and
+nothing after it. A first release never notices, because the parse happens
+before the rewrite; deleting the tag and pushing it again fed the parser the
+stamped heading, the run died on "CHANGELOG.md has no section for 0.9.0", and
+the release page was left with no notes and no archives. Three tests hold it
+now, one of which reads the workflow's own composing line rather than
+inventing a spelling of its own — a test that guesses the format passes while
+the release still fails.
 
 **Three archives**, built by the `build` matrix after the tests pass — Windows,
 macOS and Linux, each on its own runner, because PyInstaller does not

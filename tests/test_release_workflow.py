@@ -225,6 +225,59 @@ def test_the_changelog_parser_stops_at_the_next_version_heading():
     assert changelog_section("1.0.0", text)[0] == "first"
 
 
+def test_a_heading_stamped_with_the_build_commit_still_parses():
+    """The workflow rewrites the heading of the version it just published.
+
+    It appends the commit the archives were built from, and until 0.9.1 this
+    parser could not read what that step wrote. Nothing caught it on a first
+    release, because the parse happens before the rewrite — it took deleting
+    the tag and pushing it again, at which point the run died on "CHANGELOG.md
+    has no section for 0.9.0" and the release went out empty.
+    """
+    from tools.release_notes import changelog_section
+
+    text = (
+        "# Changelog\n\n"
+        "## [2.0.0] — 2026-01-01 — `f1cec1f`\n\nsecond\n\n"
+        "## [1.0.0] — 2025-01-01\n\nfirst\n"
+    )
+    body, date = changelog_section("2.0.0", text)
+    assert body == "second"
+    assert date == "2026-01-01", "the build commit must not be read as the date"
+
+
+def test_the_stamped_heading_is_the_shape_the_workflow_writes():
+    """Pins the two together, since they are edited in different files.
+
+    The workflow composes ``f"{heading} — `{short}`"`` with a seven-character
+    short hash. A test that invented its own spelling would pass while the
+    real one still failed.
+    """
+    import re
+
+    from tools.release_notes import _HEADING
+
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert 'wanted = f"{match.group(1)} — `{short}`"' in workflow
+    assert "--short=7" in workflow
+    assert _HEADING.match("## [1.2.3] — 2026-01-01 — `0123abc`")
+    # And the longest hash git would hand it, in case --short ever grows.
+    assert _HEADING.match("## [1.2.3] — 2026-01-01 — `" + "0" * 40 + "`")
+    assert re.search(r"short=\$\(git rev-parse --short=7", workflow)
+
+
+def test_the_recorded_heading_survives_a_second_release_of_the_same_version():
+    """Re-tagging must not stack a second hash on the heading.
+
+    The record step matches on the version alone precisely so that a heading
+    which already carries one is replaced rather than appended to.
+    """
+    from tools.release_notes import changelog_section
+
+    text = "# Changelog\n\n## [1.0.0] — 2026-01-01 — `aaaaaaa`\n\nbody\n"
+    assert changelog_section("1.0.0", text)[0] == "body"
+
+
 def test_the_release_body_says_what_was_verified():
     """The page has to say what the badge on it means."""
     body = BODY.read_text(encoding="utf-8")

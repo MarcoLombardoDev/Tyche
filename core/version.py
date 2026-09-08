@@ -27,7 +27,7 @@ APP_TITLE = "Tyche — Analisi e previsione SuperEnalotto"
 
 # Bump by hand on a release. A frozen executable has no .py sources on disk
 # to derive a date from — the same reasoning as Argus's version.py.
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 # google/timesfm-3.0-pytorch, released 31 August 2026: 330M parameters, native
 # multivariate forecasting, and the reason Tyche can hand TimesFM all 90
