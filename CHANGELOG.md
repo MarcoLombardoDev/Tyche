@@ -12,6 +12,47 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [0.10.0] — 2026-09-08
+
+Meno schede, e i quattro metodi tutti insieme.
+
+### Rimosso
+
+- **Le schede «Prova del nove» e «Validazione» non ci sono più.** Erano
+  incomprensibili a chi usa il programma, ed è un difetto della scheda, non
+  della misura: cinque test di indipendenza e un backtest walk-forward sono
+  la cosa giusta da fare e la cosa sbagliata da mettere davanti a chi voleva
+  una giocata.
+- **La misura però è rimasta, fuori dalla finestra.** `python main.py
+  --validate` fa ancora il backtest di ogni metodo contro il caso e
+  `--power` ne misura la sensibilità. Le tabelle del README si rifanno da lì.
+- **Tre impostazioni sparite perché non le legge più nessuno**:
+  `prediction_method`, `validation_draws`, `validation_baselines`. Un vecchio
+  `settings.json` che le contiene continua a funzionare — vengono
+  semplicemente ignorate.
+
+### Modificato
+
+- **Nella Previsione non si sceglie più il metodo: girano tutti e quattro e
+  ognuno prende un quarto della pagina**, con le sue combinazioni e i suoi
+  punteggi. Scegliere significava vederne uno, e vederne uno solo trasforma
+  quattro misure in una preferenza: prendi quello di cui ti fidi, ottieni i
+  suoi numeri, e non scopri mai che gli altri tre — generatore casuale
+  compreso — producono una schedina altrettanto convincente e che vale
+  esattamente lo stesso. Affiancati, si vede senza bisogno di un avviso.
+- **Quello che i quattro hanno in comune è scritto una volta sola**: forma
+  della giocata, costo e probabilità stanno sopra e sotto la griglia, non
+  ripetuti quattro volte. E il costo dice esplicitamente di essere quello di
+  **una** delle quattro proposte, che sono alternative e non una giocata da
+  moltiplicare per quattro.
+- **Il Percorso ha tre passi invece di quattro**, e sono condizioni anziché
+  domande: archivio aggiornato, modello scaricato, previsione. Il passo 2 è
+  l'unico che agisce invece di aprire una scheda — il download dei pesi non
+  appartiene a nessuna scheda — e il pulsante si spegne quando non c'è niente
+  da scaricare.
+- **`--forecast` non è cambiato.** Dalla riga di comando il metodo si sceglie
+  ancora, perché lì il metodo è l'argomento del comando.
+
 ## [0.9.1] — 2026-09-08 — `9293f24`
 
 Ripubblicare una versione già rilasciata non funzionava.

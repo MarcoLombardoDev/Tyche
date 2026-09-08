@@ -10,8 +10,8 @@ app.py — Tyche
 The main window: a top bar, five panels, and the worker-thread plumbing.
 
     ┌──────────────────────────────────────────────────────────────┐
-    │ TYCHE   · status       [Percorso] [Prova] [Archivio] [Stats]  │
-    │                        [Previsione] [Validazione] [⚙]         │
+    │ TYCHE   · status   [Percorso] [Archivio] [Statistiche]        │
+    │                    [Previsione] [Impostazioni]                │
     │──────────────────────────────────────────────────────────────│
     │                                                              │
     │  the selected panel                                          │
@@ -24,11 +24,12 @@ opening on its output. The argument was right and the execution was not: six
 independent tabs, each explaining itself and none explaining the order, and
 the owner's verdict on the built application was that it was incomprehensible.
 
-:mod:`gui.home_panel` replaces that with a route — archive, fairness,
-validation, prediction — which reaches the combinations *through* the
-evidence rather than instead of it. The reality check has not been demoted;
-it is step 2 of 4 on the way to the thing the user came for, which is a
-better place for it than a tab that can be skipped.
+:mod:`gui.home_panel` replaces that with a route — archive, model,
+prediction — the three conditions that have to hold before a forecast can
+run. The evidence tabs it used to pass through were removed in 0.10.0 on the
+owner's instruction; what carries their argument now is the Prediction panel
+running all four methods at once, with the random control beside TimesFM at
+the same size.
 
 Threading follows the one rule Tk imposes: widgets are touched from the main
 thread only. Workers put callables on a queue and :meth:`TycheApp._poll_queue`
@@ -52,15 +53,20 @@ from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
 from core.fonts import ui_font_family
 from core.localise import it_date, it_number
-from core.version import APP_NAME, APP_TITLE, CONTACT_EMAIL, __version__
+from core.model_store import download_checkpoint
+from core.version import (
+    APP_NAME,
+    APP_TITLE,
+    CONTACT_EMAIL,
+    DEFAULT_TIMESFM_CHECKPOINT,
+    __version__,
+)
 from gui.archive_panel import ArchivePanel
 from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
-from gui.reality_panel import RealityPanel
 from gui.settings_panel import SettingsPanel
 from gui.statistics_panel import StatisticsPanel
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT, WARN, apply_theme
-from gui.validation_panel import ValidationPanel
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -68,11 +74,9 @@ apply_theme()
 
 VIEWS = [
     ("home", "Percorso", HomePanel),
-    ("reality", "Prova del nove", RealityPanel),
     ("archive", "Archivio", ArchivePanel),
     ("statistics", "Statistiche", StatisticsPanel),
     ("prediction", "Previsione", PredictionPanel),
-    ("validation", "Validazione", ValidationPanel),
     ("settings", "Impostazioni", SettingsPanel),
 ]
 
@@ -85,12 +89,10 @@ class TycheApp(ctk.CTk):
         self.settings = load_settings()
         self.draws = load_archive(ARCHIVE_PATH)
         self.forecaster = None
-        # What each step has produced this session. The path panel reads
-        # these to say where the user is; nothing else depends on them, so
-        # a panel that never runs simply leaves its entry None.
-        self.last_reality = None
-        self.last_validation = None
-        self.last_prediction = None
+        # What the prediction panel last produced, as {method: Prediction}.
+        # The path panel reads it to say where the user is; nothing else
+        # depends on it, so a session that never generates leaves it None.
+        self.last_predictions = None
         self._queue: queue.Queue = queue.Queue()
         self._panels: dict[str, ctk.CTkFrame] = {}
         self._active = "home"
@@ -384,6 +386,32 @@ class TycheApp(ctk.CTk):
                 self._queue.put(self._clear_busy)
 
         threading.Thread(target=run, daemon=True, name=label).start()
+
+    def download_model(self, on_done=None) -> None:
+        """Fetch the TimesFM weights, reporting the percentage in the footer.
+
+        Here rather than in a panel because two of them offer the download —
+        the path's step 2 and the strip on the Prediction tab — and two copies
+        would be two places for "which checkpoint, with which token" to be
+        decided. The worker reports through :meth:`run_worker`, so the
+        percentage lands in the status bar like every other long job.
+        """
+        checkpoint = (
+            self.settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
+        )
+        token = self.settings.get("hf_token", "")
+
+        def work(report):
+            return download_checkpoint(checkpoint, token=token, progress=report)
+
+        def done(path):
+            self.set_status(f"Pesi di {checkpoint} scaricati in {path}.")
+            if on_done is not None:
+                on_done()
+            with contextlib.suppress(Exception):
+                self._panels[self._active].refresh()
+
+        self.run_worker("TimesFM", work, done)
 
     def _clear_busy(self) -> None:
         self._busy = False

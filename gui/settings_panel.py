@@ -74,8 +74,6 @@ FIELDS = [
     ("superstar_price", "Costo del SuperStar (euro)", "text",
      "Si aggiunge per ogni colonna, non una volta sola: su un sistema il "
      "SuperStar costa quanto il sistema moltiplicato per questo prezzo."),
-    ("validation_draws", "Estrazioni per la validazione", "text",
-     "Quante estrazioni recenti valuta il backtest walk-forward."),
 ]
 
 

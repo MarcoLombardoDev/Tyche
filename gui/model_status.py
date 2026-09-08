@@ -9,25 +9,21 @@ model_status.py — Tyche
 
 The strip that says whether TimesFM can run, and offers the download if not.
 
-One widget, used by both panels that can start a forecast. Two copies of this
-would be two places for the rule "do not offer a method that cannot run" to be
-stated, and the second copy is the one that gets forgotten — which is exactly
-how the defect this fixes arrived: the Prediction panel and the Validation
-panel each built their own TimesFM branch, and both of them reported a missing
-checkpoint as a failed run.
-
 The state is read before the user can act on it, never as the result of
-acting. :func:`core.model_store.availability` imports nothing heavy, so
-:meth:`ModelStatus.refresh` is cheap enough to run on every tab switch — and
-tab switch is when it has to run, because the download that made TimesFM
-available may have happened on the other tab.
+acting — which is the defect this replaces. The Prediction panel used to build
+a forecaster, import timesfm, let Hugging Face download or fail, and turn the
+exception into a sentence, so "the weights are not here yet" arrived as a
+failed run. :func:`core.model_store.availability` imports nothing heavy, so
+:meth:`refresh` is cheap enough to call on every tab switch — and tab switch
+is when it has to run, because the download may have been started from the
+path panel's step 2.
 """
 
 from __future__ import annotations
 
 import customtkinter as ctk
 
-from core.model_store import availability, download_checkpoint
+from core.model_store import availability
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import GOOD, MUTED, WARN
 
@@ -100,14 +96,9 @@ class ModelStatus(ctk.CTkFrame):
 
     # ── the download ─────────────────────────────────────────
     def _download(self) -> None:
-        checkpoint = self._checkpoint()
-        token = self.app.settings.get("hf_token", "")
+        """Hand off to the app, which owns the one implementation.
 
-        def work(report):
-            return download_checkpoint(checkpoint, token=token, progress=report)
-
-        self.app.run_worker("TimesFM", work, self._downloaded)
-
-    def _downloaded(self, path: str) -> None:
-        self.refresh()
-        self.app.set_status(f"Pesi di {self._checkpoint()} scaricati in {path}.")
+        The path panel's step 2 offers the same download, and two copies would
+        be two places deciding which checkpoint and which token to use.
+        """
+        self.app.download_model(on_done=self.refresh)

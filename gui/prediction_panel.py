@@ -7,15 +7,30 @@
 """
 prediction_panel.py — Tyche
 
-Generates combinations and shows what they are worth.
+Generates the combinations, with all four methods side by side.
 
-The method selector offers ``random`` alongside TimesFM, at the same size, in
-the same list. That is the design: a user who can pick the control condition
-from the same menu, and watch it produce equally confident-looking balls, has
-been told something no warning banner conveys.
+**There is no method selector, and that is the change 0.10.0 made.** Choosing
+one meant seeing one, which quietly turned the four methods into a preference:
+pick the one you trust, get its numbers, and never find out that the other
+three — the random control included — produce a ticket that looks exactly as
+convincing and scores exactly the same. Running all four every time and
+showing them in one window makes that visible without a word of warning text.
+
+It is also why the random baseline keeps its quarter of the screen, at the
+same size as TimesFM's, and why a change that hides it would take the panel's
+argument with it. A user who can see 330 million parameters and a random
+number generator disagree about which six numbers to play, and knows both are
+worth the same, has been told something no banner conveys.
+
+The four cells hold what actually differs between methods: the combinations
+and the scores behind them. What does not differ — the cost, the shape of the
+ticket, the odds — is printed once above them, because four identical copies
+of the same paragraph is noise, not symmetry.
 """
 
 from __future__ import annotations
+
+import textwrap
 
 import customtkinter as ctk
 
@@ -37,7 +52,7 @@ from core.predictor import (
 )
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.model_status import ModelStatus
-from gui.theme import BG_ROOT, MUTED
+from gui.theme import ACCENT, BG_ROOT, MUTED, TEXT, WARN
 from gui.widgets import ReportBox, ball_row, section
 
 _METHOD_LABELS = {
@@ -46,6 +61,25 @@ _METHOD_LABELS = {
     "ritardo": "Ritardo (assenti da più tempo)",
     "casuale": "Casuale (la condizione di controllo)",
 }
+
+# What each cell says under the method's name. Short: the cell is a quarter of
+# the window and the numbers are the point.
+_METHOD_BLURBS = {
+    "timesfm": "prevede la serie di ogni numero",
+    "frequenza": "i più estratti di recente",
+    "ritardo": "assenti da più tempo",
+    "casuale": "condizione di controllo",
+}
+
+
+def _wrap(text: str, width: int = 116) -> str:
+    """Fold a paragraph for the fixed-width strip, which does not wrap itself.
+
+    ``ReportBox`` is monospaced with ``wrap="none"`` because it holds tables.
+    A paragraph dropped into it becomes one very long line and a horizontal
+    scrollbar under everything else.
+    """
+    return "\n".join(textwrap.wrap(text, width=width))
 
 
 def _cost_lines(prediction, cost) -> list[str]:
@@ -83,9 +117,9 @@ def _cost_lines(prediction, cost) -> list[str]:
 def _ticket_lines(prediction) -> list[str]:
     """What the ticket on screen actually is, in columns and in odds.
 
-    Printed under every prediction because the two settings that shape it —
-    the system size and the SuperStar — live on another tab, and a user who
-    set them last week should not have to go back and check what they chose.
+    Printed once for the whole page rather than per method: the size and the
+    SuperStar come from the settings, so every one of the four tickets has the
+    same shape and the same price.
     """
     size = prediction.size
     lines = []
@@ -118,10 +152,88 @@ def _ticket_lines(prediction) -> list[str]:
     if prediction.superstar is not None:
         lines += [
             "",
-            f"SuperStar giocato: {prediction.superstar}. Esce da un'urna separata, "
-            f"quindi indovinarlo è 1 su {SUPERSTAR_ODDS} qualunque numero si scelga "
-            "e qualunque cosa facciano i sei.",
+            f"Il SuperStar esce da un'urna separata, quindi indovinarlo è 1 su "
+            f"{SUPERSTAR_ODDS} qualunque numero si scelga e qualunque cosa "
+            "facciano i sei.",
         ]
+    return lines
+
+
+class _MethodCell(ctk.CTkFrame):
+    """One quarter of the page: a method's combinations and its scores."""
+
+    def __init__(self, parent, method: str):
+        super().__init__(parent, fg_color=BG_ROOT)
+        self.method = method
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x")
+        ctk.CTkLabel(
+            header, text=method_name(method), anchor="w", text_color=ACCENT,
+        ).pack(side="left")
+        ctk.CTkLabel(
+            header, text=f" — {_METHOD_BLURBS[method]}", anchor="w", text_color=MUTED,
+        ).pack(side="left")
+
+        # height=0 because an empty CTkFrame requests 200x200, and a cell whose
+        # method produced nothing would reserve 200px for the balls it does not
+        # have — the same default that once made every path card 200px tall.
+        self.balls = ctk.CTkFrame(self, fg_color="transparent", height=0)
+        self.balls.pack(fill="x", pady=(4, 0))
+        self.state = ctk.CTkLabel(
+            self, text="", anchor="w", justify="left", text_color=MUTED, wraplength=520,
+        )
+        self.state.pack(fill="x")
+        self.box = ReportBox(self, height=120)
+        self.box.pack(fill="both", expand=True, pady=(4, 0))
+
+    def clear(self, message: str, colour: str = MUTED) -> None:
+        for child in self.balls.winfo_children():
+            child.destroy()
+        self.state.configure(text=message, text_color=colour)
+        self.box.set_text("")
+
+    def show(self, prediction) -> None:
+        for child in self.balls.winfo_children():
+            child.destroy()
+        self.state.configure(text="")
+        for i, combination in enumerate(prediction.combinations, 1):
+            line = ctk.CTkFrame(self.balls, fg_color="transparent")
+            line.pack(fill="x", pady=2)
+            ctk.CTkLabel(line, text=f"{i}.", width=20, text_color=MUTED).pack(side="left")
+            ball_row(line, combination, size=30).pack(side="left")
+        if prediction.superstar is not None:
+            line = ctk.CTkFrame(self.balls, fg_color="transparent")
+            line.pack(fill="x", pady=(6, 2))
+            ctk.CTkLabel(
+                line, text="SuperStar", width=72, anchor="w", text_color=MUTED,
+            ).pack(side="left")
+            ball_row(line, (prediction.superstar,), size=30).pack(side="left")
+        self.box.set_text("\n".join(_score_lines(prediction)))
+
+
+def _score_lines(prediction) -> list[str]:
+    """The part of a prediction that really is the method's own."""
+    ranked = prediction.ranked
+    spread = prediction.scores[ranked[0]] - prediction.scores[ranked[-1]]
+    # The spread leads, because it is the one number that says how much this
+    # method actually distinguishes between the ninety — and reading TimesFM's
+    # against the frequency baseline's is how you find out they agree.
+    lines = [
+        f"Escursione sui novanta numeri: {spread:.6f}",
+        "",
+        f"{'pos.':>5} {'n':>3} {'punteggio':>14}",
+        "─" * 25,
+    ]
+    for rank, n in enumerate(ranked[:10], 1):
+        lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
+    lines += [
+        "  …",
+        f"{'':>5} {'':>3} {'':>14}".rstrip(),
+        "gli ultimi tre, per avere la scala",
+    ]
+    for rank, n in enumerate(ranked[-3:], len(ranked) - 2):
+        lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
+    lines += ["", prediction.note]
     return lines
 
 
@@ -129,210 +241,180 @@ class PredictionPanel(ctk.CTkFrame):
     def __init__(self, parent, app):
         super().__init__(parent, fg_color=BG_ROOT)
         self.app = app
-        self._prediction = None
+        self._predictions: dict = {}
+        self._cells: dict[str, _MethodCell] = {}
         self._build()
 
     def _build(self) -> None:
         controls = section(
-            self, "Passo 4 di 4 · Genera le combinazioni",
-            "Il punto di arrivo. Scegli un metodo, quante combinazioni vuoi, e premi "
-            "«Genera».\n"
-            "Ogni metodo qui sotto ha lo stesso punteggio atteso, perché "
-            "l'estrazione da prevedere è indipendente da tutto ciò che guardano. "
-            "Il passo 3 lo misura sui dati veri.\n"
-            "Quanti numeri per combinazione e se giocare il SuperStar si scelgono "
-            "nelle Impostazioni.\n"
-            "Una combinazione sola è quasi sempre la scelta giusta: la seconda è la "
-            "settima scelta del metodo al posto della sesta, la terza l'ottava, e "
-            "così via scendendo lungo la graduatoria.",
+            self, "Genera le combinazioni",
+            "Premi «Genera»: i quattro metodi girano insieme, uno per riquadro. "
+            "Sono affiancati di proposito — hanno tutti lo stesso punteggio atteso, "
+            "compreso quello casuale, che è lì per questo.\n"
+            "Numeri per combinazione e SuperStar si scelgono nelle Impostazioni.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
+
         row = ctk.CTkFrame(controls.body, fg_color="transparent")
         row.pack(fill="x")
-
-        ctk.CTkLabel(row, text="Metodo", text_color=MUTED).pack(side="left", padx=(0, 6))
-        # TimesFM is added to the list by :meth:`_set_timesfm_available` once
-        # the weights are known to be there. An option menu has no per-entry
-        # disabled state, so "not offered" is how a method that cannot run is
-        # kept out of reach.
-        self.method = ctk.CTkOptionMenu(
-            row, width=330,
-            values=[_METHOD_LABELS[m] for m in METHODS if m != "timesfm"],
-        )
-        chosen = self.app.settings.get("prediction_method", "frequenza")
-        self.method.set(_METHOD_LABELS.get(chosen if chosen != "timesfm" else "frequenza"))
-        self.method.pack(side="left", padx=(0, 16))
-
         ctk.CTkLabel(row, text="Combinazioni", text_color=MUTED).pack(side="left", padx=(0, 6))
         self.count = ctk.CTkOptionMenu(row, width=70, values=[str(i) for i in range(1, 11)])
         self.count.set(str(self.app.settings.get("combinations", 1)))
         self.count.pack(side="left", padx=(0, 16))
-
         ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")
+        ctk.CTkLabel(
+            row,
+            text=(
+                "Una combinazione sola è quasi sempre la scelta giusta: la seconda è "
+                "la settima scelta del metodo al posto della sesta, e così via."
+            ),
+            text_color=MUTED,
+        ).pack(side="left", padx=14)
 
-        self.model_status = ModelStatus(
-            controls.body, self.app, on_change=self._set_timesfm_available,
-        )
-        self.model_status.pack(fill="x", pady=(10, 0))
+        self.model_status = ModelStatus(controls.body, self.app)
+        self.model_status.pack(fill="x", pady=(8, 0))
 
+        # One line here and the rest below the grid: what the four tickets
+        # have in common must not push the four tickets off the screen, which
+        # is what the first version of this layout did.
         self.note = ctk.CTkLabel(
-            controls.body, text="", anchor="w", justify="left", text_color=MUTED, wraplength=1000
+            controls.body, text="", anchor="w", justify="left",
+            text_color=TEXT, wraplength=1180,
         )
-        self.note.pack(fill="x", pady=(10, 0))
+        self.note.pack(fill="x", pady=(8, 0))
 
-        self.output = section(self, "Combinazioni")
-        self.output.pack(fill="x", padx=16, pady=8)
-        self.balls = ctk.CTkFrame(self.output.body, fg_color="transparent")
-        self.balls.pack(fill="x")
+        # Packed before the grid and to the bottom: pack gives the expanding
+        # widget whatever is left, and a strip packed after it is simply
+        # clipped off the window when the four cells are hungry.
+        self.detail = ReportBox(self, height=104)
+        self.detail.pack(side="bottom", fill="x", padx=22, pady=(4, 14))
+        self.detail.set_text(_wrap(value_note()))
 
-        detail = section(self, "Punteggi e probabilità")
-        detail.pack(fill="both", expand=True, padx=16, pady=(8, 16))
-        self.box = ReportBox(detail.body, height=240)
-        self.box.pack(fill="both", expand=True)
-        self.box.set_text(value_note())
+        grid = ctk.CTkFrame(self, fg_color=BG_ROOT)
+        grid.pack(fill="both", expand=True, padx=16, pady=(0, 0))
+        for column in (0, 1):
+            grid.grid_columnconfigure(column, weight=1, uniform="method")
+        for line in (0, 1):
+            grid.grid_rowconfigure(line, weight=1, uniform="method")
+        for index, method in enumerate(METHODS):
+            cell = _MethodCell(grid, method)
+            cell.grid(
+                row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6,
+            )
+            self._cells[method] = cell
+            cell.clear("Non ancora generate.")
 
-    def _selected_method(self) -> str:
-        label = self.method.get()
-        for key, text in _METHOD_LABELS.items():
-            if text == label:
-                return key
-        return "frequenza"
-
+    # ── running ──────────────────────────────────────────────
     def _generate(self) -> None:
         draws = self.app.draws
         if not draws:
             self.app.set_status("Ancora nessun archivio — scaricalo dalla scheda Archivio.")
             return
-        method = self._selected_method()
         count = int(self.count.get())
         settings = self.app.settings
-        settings["prediction_method"] = method
         settings["combinations"] = count
         self.app.save_settings()
 
         size = int(settings.get("prediction_size", 6))
         star = bool(settings.get("predict_superstar", False))
-
-        if method != "timesfm":
-            self._show(predict(draws, method=method, combinations=count, size=size,
-                               superstar=star,
-                               window=settings.get("frequency_window", DEFAULT_WINDOW)))
-            return
+        window = int(settings.get("frequency_window", DEFAULT_WINDOW))
+        with_model = self.model_status.available
 
         def work(report):
-            forecaster = self.app.forecaster or TimesFMForecaster(
-                checkpoint=(
-                    settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
-                ),
-                device=settings.get("timesfm_device", "cpu"),
-                context_length=int(settings.get("context_length", 1024)),
-                representation=settings.get("representation", "frequenza"),
-                window=int(settings.get("frequency_window", DEFAULT_WINDOW)),
-                hf_token=settings.get("hf_token", ""),
-            )
-            if not forecaster.load_model(report):
-                raise RuntimeError(
-                    "TimesFM non si è caricato. Scegli un altro metodo: "
-                    "ottengono tutti lo stesso punteggio."
+            forecaster = None
+            skipped = ""
+            if with_model:
+                forecaster = self.app.forecaster or TimesFMForecaster(
+                    checkpoint=(
+                        settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
+                    ),
+                    device=settings.get("timesfm_device", "cpu"),
+                    context_length=int(settings.get("context_length", 1024)),
+                    representation=settings.get("representation", "frequenza"),
+                    window=window,
+                    hf_token=settings.get("hf_token", ""),
                 )
-            self.app.forecaster = forecaster
-            return predict(draws, method="timesfm", combinations=count, size=size,
-                           superstar=star, forecaster=forecaster, progress=report)
+                if forecaster.load_model(report):
+                    self.app.forecaster = forecaster
+                else:
+                    # The other three still have something to say, so a model
+                    # that will not load costs its own cell and nothing else.
+                    forecaster = None
+                    skipped = "TimesFM non si è caricato."
+            results = {}
+            for method in METHODS:
+                if method == "timesfm" and forecaster is None:
+                    continue
+                report(f"{method_name(method)}…", 0.0)
+                results[method] = predict(
+                    draws, method=method, combinations=count, size=size,
+                    superstar=star, window=window,
+                    forecaster=forecaster if method == "timesfm" else None,
+                    progress=report if method == "timesfm" else None,
+                )
+            return results, skipped
 
-        self.app.run_worker("TimesFM forecast", work, self._show)
+        self.app.run_worker("Previsione", work, self._show)
 
-    def _show(self, prediction) -> None:
-        self._prediction = prediction
-        self.app.last_prediction = prediction          # step 4, for the path panel
-        log_prediction(prediction.to_log_entry())
-        for child in self.balls.winfo_children():
-            child.destroy()
-        for i, combination in enumerate(prediction.combinations, 1):
-            line = ctk.CTkFrame(self.balls, fg_color="transparent")
-            line.pack(fill="x", pady=3)
-            ctk.CTkLabel(line, text=f"{i}.", width=24, text_color=MUTED).pack(side="left")
-            ball_row(line, combination).pack(side="left")
-        if prediction.superstar is not None:
-            line = ctk.CTkFrame(self.balls, fg_color="transparent")
-            line.pack(fill="x", pady=(8, 3))
-            ctk.CTkLabel(
-                line, text="SuperStar", width=90, anchor="w", text_color=MUTED,
-            ).pack(side="left")
-            ball_row(line, (prediction.superstar,)).pack(side="left")
-        shape = f"{prediction.size} numeri per combinazione"
-        if prediction.size > 6:
-            shape += f" — sistema da {it_number(system_columns(prediction.size))} colonne"
-        if prediction.superstar is not None:
-            shape += ", SuperStar compreso"
+    # ── output ───────────────────────────────────────────────
+    def _show(self, result) -> None:
+        predictions, skipped = result
+        self._predictions = predictions
+        self.app.last_predictions = predictions
+        for prediction in predictions.values():
+            log_prediction(prediction.to_log_entry())
+
+        for method, cell in self._cells.items():
+            if method in predictions:
+                cell.show(predictions[method])
+            elif method == "timesfm":
+                # Its own sentence, not the strip's: that label is empty until
+                # the tab has been shown once, and the first version of this
+                # left the cell blank on a machine without the weights.
+                cell.clear(
+                    skipped
+                    or "TimesFM non è disponibile: mancano i pesi, oppure il "
+                    "pacchetto non è installato in questa copia. Vedi la riga "
+                    "qui sopra.",
+                    WARN,
+                )
+            else:
+                cell.clear("Non generata.")
+
+        if not predictions:
+            self.note.configure(text="")
+            self.app.set_status("Nessun metodo ha prodotto una previsione.")
+            return
+
+        any_prediction = next(iter(predictions.values()))
         cost = ticket_cost(
-            prediction.combinations,
-            superstar=prediction.superstar is not None,
+            any_prediction.combinations,
+            superstar=any_prediction.superstar is not None,
             column_price=float(self.app.settings.get("column_price", 1.0)),
             superstar_price=float(self.app.settings.get("superstar_price", 0.5)),
         )
         self.note.configure(
-            text=f"{prediction.note}  ·  {shape}. "
-            f"Costo: {it_number(cost.total, 2)} euro. "
-            f"Punteggio atteso dal caso: {expected_hits(prediction.size):.3f} "
-            "numeri indovinati per estrazione."
+            text=(
+                f"Archivio: {it_number(any_prediction.archive_size)} estrazioni fino "
+                f"al {it_date(any_prediction.archive_last_date)}.  ·  "
+                f"Costo: {it_number(cost.total, 2)} euro — quello di UNA delle "
+                "quattro proposte qui sotto, che sono alternative e non una giocata "
+                "da moltiplicare per quattro.  ·  "
+                f"Punteggio atteso dal caso, per tutte e quattro: "
+                f"{expected_hits(any_prediction.size):.3f} numeri indovinati "
+                "per estrazione."
+            )
         )
-
-        ranked = prediction.ranked
-        lines = [
-            f"Metodo: {method_name(prediction.method)}   Archivio: "
-            f"{it_number(prediction.archive_size)} estrazioni fino al "
-            f"{it_date(prediction.archive_last_date)}",
-            "",
-            "I 15 col punteggio più alto",
-            f"{'pos.':>5} {'n':>3} {'punteggio':>14}",
-            "─" * 25,
-        ]
-        for rank, n in enumerate(ranked[:15], 1):
-            lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
-        lines += [
-            "",
-            "Gli ultimi 5, per avere la scala",
-            f"{'pos.':>5} {'n':>3} {'punteggio':>14}",
-            "─" * 25,
-        ]
-        for rank, n in enumerate(ranked[-5:], len(ranked) - 4):
-            lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
-        spread = prediction.scores[ranked[0]] - prediction.scores[ranked[-1]]
-        lines += [
-            "",
-            f"Escursione dei punteggi sui novanta numeri: {spread:.6f}.",
-            "",
-        ]
-        lines += _ticket_lines(prediction)
-        settings = self.app.settings
-        cost = ticket_cost(
-            prediction.combinations,
-            superstar=prediction.superstar is not None,
-            column_price=float(settings.get("column_price", 1.0)),
-            superstar_price=float(settings.get("superstar_price", 0.5)),
-        )
-        lines += ["", *_cost_lines(prediction, cost)]
-        lines += ["", value_note()]
-        self.box.set_text("\n".join(lines))
+        lines = _ticket_lines(any_prediction)
+        lines += ["", *_cost_lines(any_prediction, cost)]
+        lines += ["", _wrap(value_note())]
+        self.detail.set_text("\n".join(lines))
         self.app.set_status(
-            f"{len(prediction.combinations)} combinazioni dal metodo "
-            f"{method_name(prediction.method)}."
+            f"{it_count(len(predictions), 'metodo', 'metodi')} a confronto, "
+            f"{it_count(len(any_prediction.combinations), 'combinazione', 'combinazioni')} "
+            "ciascuno."
         )
-
-    def _set_timesfm_available(self, available: bool) -> None:
-        """Add TimesFM to the method menu, or take it back out.
-
-        Rebuilding ``values`` rather than juggling a disabled state, which
-        CTkOptionMenu has only for the whole control. When TimesFM disappears
-        while selected — it cannot, today, but a changed checkpoint would do
-        it — the selection falls back to the cheapest method rather than
-        leaving a label the menu no longer contains.
-        """
-        offered = [m for m in METHODS if m != "timesfm" or available]
-        self.method.configure(values=[_METHOD_LABELS[m] for m in offered])
-        if self._selected_method() not in offered:
-            self.method.set(_METHOD_LABELS["frequenza"])
 
     def refresh(self) -> None:
-        # Every tab switch: the weights may have arrived from the other panel.
+        # Every tab switch: the weights may have arrived from the path panel.
         self.model_status.refresh()

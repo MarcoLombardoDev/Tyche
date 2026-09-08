@@ -72,7 +72,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_repair_labels": True,
 
     # --- Prediction ---
-    "prediction_method": "timesfm",   # "timesfm" | "frequenza" | "ritardo" | "casuale"
+    # No method setting: 0.10.0 runs all four every time and shows them side
+    # by side, so there is nothing to choose and nothing to remember.
     # One, and the default is the argument. Combination 2 is the method's 7th
     # choice instead of its 6th, 3 its 8th, and so on down the ranking. If a
     # method knows nothing they all score the same and each is another euro
@@ -91,17 +92,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # arithmetic, so they are settings: if either changes, edit the number.
     "column_price": 1.00,
     "superstar_price": 0.50,
-
-    # --- Validation ---
-    # How many of the most recent draws the walk-forward backtest scores. 300
-    # is about two years and takes a couple of minutes with TimesFM on a CPU;
-    # the statistics module needs a few hundred before its error bars mean
-    # anything.
-    "validation_draws": 300,
-    # Which methods the Validate tab starts with ticked, and where a run's
-    # selection is remembered. TimesFM stays out of the default: one model
-    # call per scored draw is not what a first click should cost.
-    "validation_baselines": ["casuale", "frequenza", "ritardo"],
 }
 
 
@@ -125,11 +115,12 @@ def load_settings() -> dict:
     return _translate_names(settings)
 
 
-# 0.1.0 wrote the method and representation names in English. 0.2.0 renamed
-# them, and a settings file from the older version would otherwise reach
-# ``build_context`` as an unknown representation and raise where the user
-# expects a forecast. Reading is where the two vocabularies meet, so this is
-# the only place that has to know both.
+# 0.1.0 wrote the representation name in English. 0.2.0 renamed it, and a
+# settings file from the older version would otherwise reach ``build_context``
+# as an unknown representation and raise where the user expects a forecast.
+# Reading is where the two vocabularies meet, so this is the only place that
+# has to know both. The method names were translated here too until 0.10.0,
+# when the two settings that stored one were removed.
 _RENAMED = {
     "presence": "presenza",
     "frequency": "frequenza",
@@ -144,12 +135,6 @@ def _translate_names(settings: dict) -> dict:
     if isinstance(representation, str):
         settings["representation"] = _RENAMED.get(representation, representation)
 
-    baselines = settings.get("validation_baselines")
-    if isinstance(baselines, list):
-        settings["validation_baselines"] = [
-            _RENAMED.get(name, name) if isinstance(name, str) else name
-            for name in baselines
-        ]
     return settings
 
 

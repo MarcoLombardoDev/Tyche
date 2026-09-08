@@ -76,24 +76,19 @@ def _archive():
 _archive()
 
 from gui.app import TycheApp  # noqa: E402
-from gui.prediction_panel import _METHOD_LABELS  # noqa: E402
 
 app = TycheApp()
 app.geometry("1280x840")
 app.update()
 
-# Fill the panels that are empty until something is run.
-app._panels["reality"].run_tests()
+# Fill the one panel that is empty until something is run. The four methods
+# go off-thread together, so the loop below waits for the worker rather than
+# assuming one update() is enough.
 prediction = app._panels["prediction"]
-prediction.method.set(_METHOD_LABELS["ritardo"])
 prediction._generate()
-validation = app._panels["validation"]
-validation.n_draws.delete(0, "end")
-validation.n_draws.insert(0, "400")
-validation._run()
-for _ in range(200):                      # let the validation worker finish
+for _ in range(200):
     app.update()
-    if validation.verdict.cget("text"):
+    if prediction._predictions:
         break
     time.sleep(0.05)
 app.update()
@@ -102,12 +97,10 @@ app.update()
 # thing a reader of the README needs to see before any individual panel.
 SHOTS = [
     ("home", "01_percorso"),
-    ("reality", "02_prova_del_nove"),
-    ("archive", "03_archivio"),
-    ("statistics", "04_statistiche"),
-    ("prediction", "05_previsione"),
-    ("validation", "06_validazione"),
-    ("settings", "07_impostazioni"),
+    ("archive", "02_archivio"),
+    ("statistics", "03_statistiche"),
+    ("prediction", "04_previsione"),
+    ("settings", "05_impostazioni"),
 ]
 state = {"i": 0}
 

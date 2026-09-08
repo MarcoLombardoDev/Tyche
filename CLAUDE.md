@@ -12,6 +12,8 @@ archive and forecasts it with TimesFM 3.0. Same shape as Argus: logic in
 ```
 main.py       entry point, plus the headless modes: --check, --validate,
               --power, --update, --import, --forecast, --export-sqlite
+              (--check, --validate and --power are the measurement, and since
+              0.10.0 the command line is the only place it lives)
 core/         archive, sources, features, statistics, scoring, power,
               forecasting — no GUI imports below this line
 core/sources/ the three ways draw history gets in
@@ -51,7 +53,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 344, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 390, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 386, GUI included
 python -m ruff check .
 ```
 
@@ -487,30 +489,39 @@ page for whatever the caller runs next.
 ## Things worth knowing before changing code
 
 - **The point of the program is the measurement, and the prediction is what
-  the user came for.** Those are not in conflict, and 0.4.0 is where the
-  distinction got settled. Until then the Reality-check tab was first on the
-  argument that a program should open on its caveats rather than its output.
-  The argument was right; the execution was not. Six independent tabs, each
-  explaining itself and none explaining the order, and the owner's verdict on
-  the built application was that it was incomprehensible — he could not tell
-  what the sections were for or which to open first.
+  the user came for.** 0.4.0 settled that with an order: a path running
+  archive → fairness → validation → prediction, reaching the combinations
+  *through* the evidence. **0.10.0 removed the two evidence tabs**, on the
+  owner's instruction, after he said he could not understand either of them.
 
-  `gui/home_panel.py` is the answer: a path, archive → fairness → validation →
-  prediction, that reaches the combinations *through* the evidence. The
-  reality check was not demoted, it became step 2 of 4 on the way to the thing
-  the user wants, which is a better place for it than a tab that can be
-  skipped. **What must not happen is the other repair**: hiding the baselines,
-  dropping the random control, or letting the path skip to step 4. The random
-  baseline still sits in the same menu as TimesFM at the same size, the
-  validation report still prints every method, and the forecaster is still
-  built properly so that "it might have worked with a better implementation"
-  is not available as an excuse.
+  Read that as what it is. It is not a retreat from the measurement, and the
+  measurement did not change: `--validate` and `--power` still run the
+  walk-forward backtest and its calibration, `--check` still runs the five
+  independence tests, and every table in the README is still reproducible from
+  the command line. What went is a *screen*, and the complaint was about the
+  screen.
 
-  The path panel owns no analysis. Every step opens the panel that does the
-  work and reports what that panel last produced, through `app.last_reality`,
-  `app.last_validation` and `app.last_prediction`. Giving it its own "run"
-  buttons would create two places to run one thing and no rule about which
-  counts.
+  **What carries the argument now is the Prediction panel, and it must keep
+  carrying it.** All four methods run on every press and each takes a quarter
+  of the window, so the random control sits beside TimesFM at the same size,
+  in front of a reader who never asked to see it. That is a stronger
+  demonstration than the tab it replaced, because it cannot be skipped — and
+  it is the reason the following are not cosmetic decisions:
+
+  - the random baseline keeps its cell, at the size of the others;
+  - the four cells are built from `METHODS`, so a method cannot be quietly
+    dropped from the display without being dropped from the program;
+  - `test_the_random_control_keeps_its_quarter_of_the_screen` fails if any of
+    that changes.
+
+  **Do not remove `--validate` and `--power` too.** They are what makes "no
+  method beats chance" a claim somebody can re-run rather than a slogan the
+  program asserts about itself.
+
+  The path panel owns no analysis, with one deliberate exception: step 2
+  downloads the weights, because that job belongs to no tab. Everything else
+  opens the panel that does the work and reports what it produced, through
+  `app.last_predictions`.
 
 - **The bulk mirror is wrong, and the way it is wrong is instructive.** Every
   one of its 3,076 SuperEnalotto rows validates individually, and nine of them
@@ -836,16 +847,12 @@ Four things about it that are decisions rather than details:
 - **`UNKNOWN` is usable.** timesfm present, huggingface_hub not, so the cache
   cannot be inspected. Refusing to offer the method there would turn "I could
   not check" into "it does not work", and the attempt speaks for itself.
-- **The panel is not the only guard.** `_run` checks availability again, the
-  checkbox being disabled notwithstanding, and
-  `test_running_an_unavailable_method_explains_rather_than_starts_a_worker`
-  forces past the disabled state to prove it. A build where the availability
-  check is itself wrong must still explain itself.
-- **Prediction hides the method; Validation greys it out.** Not an
-  inconsistency — `CTkOptionMenu` has no per-entry disabled state, so "not
-  offered" is the only way to put an entry out of reach. Rebuilding `values`
-  also means the selection has to be caught when it disappears, which
-  `_set_timesfm_available` does.
+- **There is no longer a method to disable.** Until 0.10.0 the Prediction
+  panel dropped TimesFM from its option menu and the Validation panel greyed
+  out its checkbox; now all four always run and a missing model costs its own
+  cell and nothing else. `test_timesfm_without_the_model_says_so_in_its_own_cell`
+  is the guard, and it also asserts that the other three still produced
+  something — a model that will not load must not take the page down with it.
 
 **No Hugging Face token is required, and the interface must not imply one is.**
 The `checkpoint-licence` job asked the three model cards: none is gated. The
@@ -904,14 +911,29 @@ The number is now a label packed straight into the card with `width=42`. If a
 fixed-size frame is ever genuinely needed, pass `height=` explicitly rather
 than relying on the content to shrink it — with propagation off, it will not.
 
-**Look at the screenshot before believing a layout.** Both times this class of
-bug has been caught here, it was caught by rendering the panel and looking at
-it, not by a test and not by reading the code.
+**And an *empty* frame keeps the default even with propagation on**, which is
+how 0.10.0 met this a third time. Each method cell holds a `balls` frame that
+is filled after a run; before one, and in TimesFM's cell on a machine without
+the weights, it has no children and therefore reserves 200 pixels for balls it
+does not have. `height=0` at construction is the fix.
+
+**A second pack lesson from the same screen.** `pack` hands the expanding
+widget whatever is left and simply clips anything packed after it, so the
+shared cost strip below the grid vanished off the bottom of the window. It is
+packed *before* the grid with `side="bottom"`, which reserves its height
+first. Same class of mistake as the licence bar's ordering, opposite symptom.
+
+**Look at the screenshot before believing a layout.** Every time this class of
+bug has been caught here — three times now — it was caught by rendering the
+panel and looking at it, not by a test and not by reading the code. The
+0.10.0 grid took three renders to get right and no test would have found any
+of the three.
 
 ## Where the explanatory notes go, and why it is not a style question
 
-Every table in `gui/statistics_panel.py` and `gui/validation_panel.py` carries
-a note saying what its columns mean. Until 0.3.2 those notes were printed
+Every table in `gui/statistics_panel.py` carries a note saying what its
+columns mean; so did the validation tables, until 0.10.0 removed that panel.
+Until 0.3.2 those notes were printed
 *after* the rows, and the screenshots are what showed the problem: the
 frequency table is ninety rows in a box that holds about twenty-two, so its
 note — the one explaining the `<` marker used on every flagged row — was

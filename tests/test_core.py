@@ -1174,27 +1174,26 @@ def test_a_0_1_0_settings_file_is_read_with_the_new_names(tmp_path, monkeypatch)
     An unmapped ``"frequency"`` raises "rappresentazione sconosciuta" the first
     time a forecast is asked for, which is a long way from where the stale
     file is.
+
+    Only the representation is left to translate: 0.10.0 removed the two
+    settings that stored a method name, and a key that no longer exists comes
+    back untouched rather than renamed, which is right — nothing reads it.
     """
     import json
 
     import core.data_manager as dm
     from core.features import build_context
-    from core.predictor import METHODS
 
     path = tmp_path / "settings.json"
     path.write_text(
-        json.dumps({"representation": "frequency",
-                    "validation_baselines": ["random", "frequency", "gap"]}),
-        encoding="utf-8",
+        json.dumps({"representation": "frequency"}), encoding="utf-8",
     )
     monkeypatch.setattr(dm, "SETTINGS_PATH", path)
 
     settings = dm.load_settings()
     assert settings["representation"] == "frequenza"
-    assert settings["validation_baselines"] == ["casuale", "frequenza", "ritardo"]
     # Not just renamed — renamed to something the rest of the program accepts.
     build_context(random_archive(60), representation=settings["representation"])
-    assert set(settings["validation_baselines"]) <= set(METHODS)
 
 
 def test_prediction_log_round_trip(tmp_path, monkeypatch):
@@ -1506,11 +1505,9 @@ def test_the_settings_panel_offers_every_setting_a_user_should_set():
     from core.data_manager import DEFAULT_SETTINGS
     from gui.settings_panel import FIELDS
 
-    # Set from the tab that uses them, and deliberately not repeated here:
-    # two places to set one thing needs a rule about which wins, and there is
-    # none. validation_draws is the exception — the panel and the Validate tab
-    # edit the same key and the tab reads it back, so they agree.
-    owned_elsewhere = {"prediction_method", "combinations", "validation_baselines"}
+    # Set from the tab that uses it, and deliberately not repeated here: two
+    # places to set one thing needs a rule about which wins, and there is none.
+    owned_elsewhere = {"combinations"}
     shown = {key for key, *_ in FIELDS}
     assert shown | owned_elsewhere >= set(DEFAULT_SETTINGS)
     assert not (shown & owned_elsewhere), "a setting with two homes"

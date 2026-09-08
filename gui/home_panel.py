@@ -7,38 +7,41 @@
 """
 home_panel.py — Tyche
 
-The guided path: four numbered steps from an empty archive to six numbers.
+The path: three things that have to be true before six numbers appear.
 
 Why this panel exists
 ---------------------
 
 Every other panel explained itself well and none of them explained the
-*order*. Six independent tabs, each a competent screen, and nothing saying
-which one to open first, what depends on what, or where the thing the user
-came for actually is. The owner's verdict on the built application was that
-it was incomprehensible — not that any single screen was wrong, but that the
-sequence was invisible.
+*order*. Independent tabs, each a competent screen, and nothing saying which
+one to open first, what depends on what, or where the thing the user came for
+actually is. The owner's verdict on the built application was that it was
+incomprehensible — not that any single screen was wrong, but that the sequence
+was invisible.
 
-So this is a map, not a new feature. It owns no analysis of its own: every
-step points at the panel that does the work, and reports what that panel last
-produced. Adding work here would give two places to run the same thing and no
-rule about which one counts.
+So this is a map, not a new feature. It owns no analysis: every step points at
+the panel that does the work and reports what that panel last produced.
 
-The order is the argument
--------------------------
+Three steps, not four
+---------------------
 
-The steps run archive, fairness, validation, prediction, and that is
-deliberately the order in which the answers stop mattering. Step 2 says the
-draws are independent; step 3 says no method beats chance; step 4 hands over
-six numbers anyway, because that is what the program is for. A user who walks
-the path reaches the combinations having already been told what they are
-worth, which is a better place to say it than a tab they might never open.
+Until 0.10.0 the path ran archive → fairness → validation → prediction, and
+the two middle steps were the evidence: the independence tests, and the
+walk-forward backtest measuring every method against chance. The owner could
+not follow either of them and asked for both to go.
 
-That is also why the path does not skip to the end. Tyche's design note is
-that the measurement is the point and the prediction is its demonstration;
-the owner's instruction is that the prediction is the purpose. Both are
-satisfied by a route that leads to the combinations and passes through the
-evidence on the way — and neither would be by hiding one or the other.
+What replaced them is not a shorter version of the same argument, it is a
+different one. The steps are now the three things that must be *true* before a
+forecast can run — the archive is current, the model is on disk, then generate
+— which is a checklist rather than a case. The case moved to where it cannot
+be skipped: the Prediction panel runs all four methods at once and puts the
+random control beside TimesFM at the same size, every time, so the reader sees
+them disagree without having to open anything.
+
+The measurement itself did not go away, it left the window: ``--validate`` and
+``--power`` still run the backtest and its calibration from the command line,
+and the README's central claim is still checkable. Do not quietly drop those
+too; a claim nobody can re-run is a slogan.
 """
 
 from __future__ import annotations
@@ -47,8 +50,9 @@ import customtkinter as ctk
 
 from core.archive import describe_archive, freshness
 from core.fonts import ui_font_family
-from core.localise import it_date, it_number
-from core.predictor import method_name
+from core.localise import it_count, it_date, it_number
+from core.model_store import availability
+from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.theme import (
     ACCENT,
     BG_PANEL,
@@ -60,30 +64,33 @@ from gui.theme import (
     WARN,
 )
 
-# (key of the panel it opens, number, title, the question it answers)
+# (key, number, title, what the step is for, the button's label)
 STEPS = [
-    ("archive", "1", "Porta i dati",
-     "Serve lo storico delle estrazioni. Senza, non c'è niente da analizzare."),
-    ("reality", "2", "Guarda se c'è qualcosa da prevedere",
-     "Cinque test dicono se le estrazioni sono davvero indipendenti e uniformi, "
-     "cioè se esiste una struttura da sfruttare."),
-    ("validation", "3", "Metti alla prova i metodi",
-     "Ogni metodo viene fatto girare sulle estrazioni passate, vedendo solo il "
-     "passato, e confrontato con il caso."),
-    ("prediction", "4", "Genera le combinazioni",
-     "Il punto di arrivo: sei numeri, con accanto quello che i passi precedenti "
-     "hanno stabilito che valgono."),
+    ("archive", "1", "L'archivio",
+     "Lo storico delle estrazioni dal 1997. Senza, non c'è niente da elaborare; "
+     "se è indietro, i numeri qui dentro descrivono un altro anno.",
+     "Vai all'archivio"),
+    ("model", "2", "Il modello TimesFM",
+     "Circa 1,3 GB di pesi, scaricati una volta sola e poi eseguiti sul tuo "
+     "computer. Senza, restano gli altri tre metodi — che valgono esattamente "
+     "quanto lui.",
+     "Scarica il modello"),
+    ("prediction", "3", "La previsione",
+     "Il punto di arrivo: tutti e quattro i metodi, uno accanto all'altro, con "
+     "quanto costa la giocata e quanto vale.",
+     "Genera le combinazioni"),
 ]
 
 
 class HomePanel(ctk.CTkFrame):
-    """Four steps, their current state, and a way into each."""
+    """Three steps, their current state, and a way into each."""
 
     def __init__(self, parent, app):
         super().__init__(parent, fg_color=BG_ROOT)
         self.app = app
         self._state_labels: dict[str, ctk.CTkLabel] = {}
         self._marks: dict[str, ctk.CTkLabel] = {}
+        self._buttons: dict[str, ctk.CTkButton] = {}
         self._build()
 
     # ── layout ───────────────────────────────────────────────
@@ -97,18 +104,21 @@ class HomePanel(ctk.CTkFrame):
         ctk.CTkLabel(
             head,
             text=(
-                "Scarica lo storico del SuperEnalotto dal 1997, verifica se contiene "
-                "una struttura sfruttabile, mette alla prova ogni metodo di previsione "
-                "sulle estrazioni già avvenute e infine genera delle combinazioni.\n"
-                "Segui i quattro passi qui sotto nell'ordine: ognuno risponde a una "
-                "domanda e prepara il successivo."
+                "Scarica lo storico del SuperEnalotto dal 1997 e genera delle "
+                "combinazioni con quattro metodi diversi, mostrandoli affiancati.\n"
+                "Uno dei quattro è un generatore casuale, ed è lì di proposito: "
+                "hanno tutti lo stesso punteggio atteso, 0,4 numeri indovinati su "
+                "sei, perché l'estrazione da prevedere non dipende da niente di ciò "
+                "che guardano.\n"
+                "I tre passi qui sotto sono le condizioni: archivio aggiornato, "
+                "modello scaricato, e poi la previsione."
             ),
             anchor="w", justify="left", text_color=MUTED, wraplength=1080,
             font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(fill="x", padx=16, pady=(0, 14))
 
-        for key, number, title, description in STEPS:
-            self._step_card(key, number, title, description)
+        for key, number, title, description, action in STEPS:
+            self._step_card(key, number, title, description, action)
 
         extra = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=8)
         extra.pack(fill="x", padx=16, pady=(8, 16))
@@ -136,75 +146,103 @@ class HomePanel(ctk.CTkFrame):
             command=lambda: self.app.show("settings"),
         ).pack(side="right")
 
-    def _step_card(self, key: str, number: str, title: str, description: str) -> None:
+    def _step_card(
+        self, key: str, number: str, title: str, description: str, action: str
+    ) -> None:
         card = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=8)
-        card.pack(fill="x", padx=16, pady=3)
+        card.pack(fill="x", padx=16, pady=4)
 
         # The number goes straight into the card. Wrapping it in a frame with
         # pack_propagate(False) — the obvious way to fix its width — pins that
         # frame at CTkFrame's default 200px height, which made every card 200px
-        # tall and pushed step 4, the destination, below the fold.
+        # tall and pushed the last step, the destination, below the fold.
         ctk.CTkLabel(
             card, text=number, width=42, text_color=ACCENT,
             font=ctk.CTkFont(family=ui_font_family(), size=22, weight="bold"),
-        ).pack(side="left", padx=(16, 0), pady=(10, 0), anchor="n")
+        ).pack(side="left", padx=(16, 0), pady=(12, 0), anchor="n")
 
         middle = ctk.CTkFrame(card, fg_color="transparent")
-        middle.pack(side="left", fill="both", expand=True, pady=10)
+        middle.pack(side="left", fill="both", expand=True, pady=12)
         ctk.CTkLabel(
             middle, text=title, anchor="w", text_color=TEXT,
-            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
+            font=ctk.CTkFont(family=ui_font_family(), size=15, weight="bold"),
         ).pack(fill="x")
         ctk.CTkLabel(
             middle, text=description, anchor="w", justify="left",
-            text_color=MUTED, wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
+            text_color=MUTED, wraplength=780,
+            font=ctk.CTkFont(family=ui_font_family(), size=12),
         ).pack(fill="x", pady=(1, 0))
-        # What this step has actually produced, filled in by refresh().
+        # What this step's state actually is, filled in by refresh().
         state = ctk.CTkLabel(
             middle, text="", anchor="w", justify="left", text_color=MUTED,
             wraplength=780, font=ctk.CTkFont(family=ui_font_family(), size=12),
         )
-        state.pack(fill="x", pady=(4, 0))
+        state.pack(fill="x", pady=(5, 0))
         self._state_labels[key] = state
 
         right = ctk.CTkFrame(card, fg_color="transparent")
-        right.pack(side="right", padx=16, pady=10)
+        right.pack(side="right", padx=16, pady=12)
         mark = ctk.CTkLabel(
             right, text="", text_color=MUTED,
             font=ctk.CTkFont(family=ui_font_family(), size=18, weight="bold"),
         )
         mark.pack(anchor="e", pady=(0, 2))
         self._marks[key] = mark
-        ctk.CTkButton(
-            right, text="Vai", width=110,
-            command=lambda k=key: self.app.show(k),
-        ).pack(anchor="e", pady=(6, 0))
+        button = ctk.CTkButton(
+            right, text=action, width=170,
+            command=lambda k=key: self._act(k),
+        )
+        button.pack(anchor="e", pady=(6, 0))
+        self._buttons[key] = button
+
+    # ── acting ───────────────────────────────────────────────
+    def _act(self, key: str) -> None:
+        """Step 2 does its own work; the other two open the panel that does.
+
+        The download is the one thing on this page with nowhere else to go —
+        it belongs to no tab — so the path owns it and the Prediction panel's
+        own strip picks up the result on the next refresh.
+        """
+        if key == "model":
+            self.app.download_model(on_done=self.refresh)
+            return
+        self.app.show(key)
 
     # ── state ────────────────────────────────────────────────
     def refresh(self) -> None:
-        """Re-read what each step has produced. Called on every tab switch."""
-        for key, (text, colour, mark) in self._states().items():
+        """Re-read every step. Called on each tab switch."""
+        states = self._states()
+        for key, (text, colour, mark) in states.items():
             self._state_labels[key].configure(text=text, text_color=colour)
             self._marks[key].configure(text=mark, text_color=colour)
+        # Nothing to download when the weights are there, or when no download
+        # would help — a missing package is not fixed by fetching a checkpoint.
+        model = availability(self._checkpoint())
+        self._buttons["model"].configure(
+            state="normal" if model.can_download else "disabled",
+            text="Scarica il modello" if model.can_download else "Niente da scaricare",
+        )
+
+    def _checkpoint(self) -> str:
+        return self.app.settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
 
     def _states(self) -> dict[str, tuple[str, str, str]]:
-        """``{step: (state text, colour, mark)}`` for the four steps.
+        """``{step: (state text, colour, mark)}``.
 
-        Kept as one function returning plain data so the smoke tests can read
-        the same answers the labels show, rather than scraping widgets.
+        One function returning plain data, so the smoke tests read the same
+        answers the labels show rather than scraping widgets.
         """
         return {
             "archive": self._archive_state(),
-            "reality": self._reality_state(),
-            "validation": self._validation_state(),
+            "model": self._model_state(),
             "prediction": self._prediction_state(),
         }
 
     def _archive_state(self) -> tuple[str, str, str]:
         draws = self.app.draws
         if not draws:
-            return ("Nessun archivio. Apri il passo 1 e scaricalo: è una richiesta "
-                    "sola.", WARN, "!")
+            return ("Nessun archivio. Aprilo e scaricalo: è una richiesta sola.",
+                    WARN, "!")
         info = describe_archive(draws)
         summary = (
             f"{it_number(info['count'])} estrazioni, dal {it_date(info['first'])} "
@@ -214,66 +252,34 @@ class HomePanel(ctk.CTkFrame):
         if state.stale:
             return (
                 f"{summary} Mancano circa {it_number(state.estimated_missing)} "
-                "estrazioni: aggiornalo prima di fidarti dei numeri qui sotto.",
+                "estrazioni: da aggiornare.",
                 WARN, "!",
             )
         return (f"{summary} Aggiornato.", GOOD, "✓")
 
-    def _reality_state(self) -> tuple[str, str, str]:
-        results = getattr(self.app, "last_reality", None)
-        if not self.app.draws:
-            return ("Serve prima l'archivio.", MUTED, "·")
-        if not results:
-            return ("Non ancora eseguito.", MUTED, "·")
-        flagged = [r for r in results if r.significant]
-        if not flagged:
-            return (
-                f"Eseguito: tutti e {len(results)} i test sono compatibili con "
-                "estrazioni indipendenti. Non c'è struttura da sfruttare.",
-                GOOD, "✓",
-            )
-        names = ", ".join(r.name for r in flagged)
-        return (
-            f"Eseguito: {len(flagged)} test su {len(results)} si discosta "
-            f"({names}). Leggi la scheda prima di trarne qualcosa.",
-            WARN, "✓",
-        )
-
-    def _validation_state(self) -> tuple[str, str, str]:
-        report = getattr(self.app, "last_validation", None)
-        if not self.app.draws:
-            return ("Serve prima l'archivio.", MUTED, "·")
-        if not report or not report.results:
-            return ("Non ancora eseguito.", MUTED, "·")
-        best = report.best()
-        beat = [r for r in report.results if r.p_value < 0.05 and r.z > 0]
-        if not beat:
-            return (
-                f"Eseguito su {it_number(report.draws_scored)} estrazioni: nessun "
-                f"metodo batte il caso. Il migliore è {method_name(best.method)} con "
-                f"{best.mean_hits:.4f} centri per estrazione, contro "
-                f"{best.expected_mean:.4f} del caso.",
-                GOOD, "✓",
-            )
-        return (
-            f"Eseguito su {it_number(report.draws_scored)} estrazioni: "
-            f"{len(beat)} metodo/i sopra il caso al 5%. Ripeti la prova su una "
-            "porzione diversa prima di considerarlo un risultato.",
-            WARN, "✓",
-        )
+    def _model_state(self) -> tuple[str, str, str]:
+        if self.app.forecaster is not None and self.app.forecaster.loaded:
+            return ("TimesFM è caricato in memoria: le previsioni partono subito.",
+                    GOOD, "✓")
+        state = availability(self._checkpoint())
+        if state.ready:
+            return (state.detail, GOOD, "✓")
+        return (state.detail, WARN, "!")
 
     def _prediction_state(self) -> tuple[str, str, str]:
-        prediction = getattr(self.app, "last_prediction", None)
+        predictions = getattr(self.app, "last_predictions", None)
         if not self.app.draws:
             return ("Serve prima l'archivio.", MUTED, "·")
-        if not prediction:
+        if not predictions:
             return (
-                "Non ancora generate. Qualunque metodo scegli, il punteggio atteso "
-                "è lo stesso: 0,4 numeri indovinati su sei.",
+                "Non ancora generate. Qualunque metodo, il punteggio atteso è lo "
+                "stesso: 0,4 numeri indovinati su sei.",
                 MUTED, "·",
             )
+        any_prediction = next(iter(predictions.values()))
         return (
-            f"{len(prediction.combinations)} combinazioni generate con "
-            f"«{method_name(prediction.method)}».",
+            f"{it_count(len(predictions), 'metodo a confronto', 'metodi a confronto')}, "
+            f"{it_count(len(any_prediction.combinations), 'combinazione', 'combinazioni')} "
+            "ciascuno.",
             GOOD, "✓",
         )

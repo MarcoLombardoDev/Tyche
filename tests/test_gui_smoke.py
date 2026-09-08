@@ -66,7 +66,6 @@ if not os.environ.get("DISPLAY") and sys.platform.startswith("linux"):
     _unavailable("no DISPLAY; run under xvfb-run")
 
 from core.archive import Draw, save_archive  # noqa: E402
-from gui.prediction_panel import _METHOD_LABELS as _LABELS  # noqa: E402
 
 
 def _sample_archive(n: int = 600):
@@ -113,6 +112,27 @@ def app(tmp_path, monkeypatch):
     window.destroy()
 
 
+def _generate(app, count: str = "1"):
+    """Press Genera and pump the loop until the worker's result lands.
+
+    The four methods run off-thread now — TimesFM has to, and running three of
+    them inline and one in a worker would be two code paths — so a single
+    ``update()`` is not enough to see the answer.
+    """
+    import time
+
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    panel.count.set(count)
+    panel._generate()
+    for _ in range(200):
+        app.update()
+        if panel._predictions:
+            return panel
+        time.sleep(0.02)
+    raise AssertionError(f"no prediction after waiting: {app._status.cget('text')}")
+
+
 def test_window_opens_with_every_panel(app):
     from gui.app import VIEWS
 
@@ -139,69 +159,75 @@ def test_panels_survive_an_empty_archive(app):
         app.update()
 
 
-def test_reality_check_runs_and_reaches_a_verdict(app):
-    app.show("reality")
-    app._panels["reality"].run_tests()
-    app.update()
-    assert app._panels["reality"].verdict.cget("text")
+def test_every_method_runs_at_once_and_gets_its_own_quarter(app):
+    """No selector: the four run together, and the control is one of them.
+
+    Choosing a method meant seeing one, which turned four measurements into a
+    preference. Side by side, a reader can watch 330 million parameters and a
+    random number generator disagree about which six numbers to play.
+    """
+    panel = _generate(app)
+
+    # TimesFM needs weights this machine does not have; the other three are
+    # unconditional and each must have filled its own cell.
+    for method in ("frequenza", "ritardo", "casuale"):
+        assert method in panel._predictions, method
+        prediction = panel._predictions[method]
+        assert prediction.method == method
+        assert len(prediction.combinations) == 1
+        assert panel._cells[method].box.get("1.0", "end").strip()
 
 
-def test_each_baseline_method_produces_combinations(app):
-    from gui.prediction_panel import _METHOD_LABELS
+def test_the_random_control_keeps_its_quarter_of_the_screen(app):
+    """The guard the panel's whole argument rests on.
+
+    A change that quietly drops the random baseline — or shrinks it, or moves
+    it out of the grid — takes the demonstration with it and leaves four
+    methods that all look like attempts.
+    """
+    from core.predictor import METHODS
 
     panel = app._panels["prediction"]
-    app.show("prediction")
-    for method in ("frequenza", "ritardo", "casuale"):
-        panel.method.set(_METHOD_LABELS[method])
-        panel._generate()
-        app.update()
-        assert panel._prediction is not None
-        assert panel._prediction.method == method
-        assert len(panel._prediction.combinations) >= 1
+    assert set(panel._cells) == set(METHODS)
+    assert "casuale" in panel._cells
+    sizes = {m: cell.box.cget("height") for m, cell in panel._cells.items()}
+    assert len(set(sizes.values())) == 1, f"the cells are not the same size: {sizes}"
 
 
-def test_timesfm_without_the_model_reports_instead_of_crashing(app):
-    """The failure has to reach the status bar, not the worker's traceback.
-
-    The method is no longer offered when it cannot run, so this forces the
-    selection past that guard. It is the belt to the interface's braces: a
-    build where the availability check itself is wrong must still explain
-    itself rather than print a stack-trace tail.
-    """
-    import time
-
+def test_timesfm_without_the_model_says_so_in_its_own_cell(app):
+    """The other three still have something to say, so only one cell is lost."""
     from core.forecaster import TimesFMForecaster
-    from gui.prediction_panel import _METHOD_LABELS
 
     if TimesFMForecaster().load_model(lambda *_: None):
         pytest.skip("timesfm is installed in this environment")
 
-    panel = app._panels["prediction"]
-    app.show("prediction")
-    panel.method.set(_METHOD_LABELS["timesfm"])
-    panel._generate()
-    for _ in range(60):
-        app.update()
-        if "fail" in app._status.cget("text").lower():
-            break
-        time.sleep(0.05)
-    assert app._status.cget("text")
+    panel = _generate(app)
+    assert "timesfm" not in panel._predictions
+    assert panel._cells["timesfm"].state.cget("text").strip()
+    assert panel._predictions, "a missing model must not cost the other three"
 
 
 def _force_availability(monkeypatch, state):
-    """Describe a machine other than this one to both panels."""
+    """Describe a machine other than this one to both screens.
+
+    Both modules bind ``availability`` into their own namespace with a
+    ``from`` import, so patching one leaves the other reading the real
+    machine — which is how these two tests first passed on the strip and
+    failed on the path.
+    """
+    import gui.home_panel as home_panel
     import gui.model_status as model_status
 
-    monkeypatch.setattr(model_status, "availability", lambda checkpoint=None: state)
+    for module in (model_status, home_panel):
+        monkeypatch.setattr(module, "availability", lambda checkpoint=None: state)
 
 
 def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
-    """The defect this replaces: press Esegui, wait, get a generic failure.
+    """The defect this replaces: press Genera, wait, get a generic failure.
 
-    A 1.3 GB download that has not happened is not an error condition. It is
-    a fact about the machine, knowable before anything is started, and the
-    panel now says it and offers the download instead of finding out the
-    expensive way.
+    A 1.3 GB download that has not happened is not an error condition. It is a
+    fact about the machine, knowable before anything is started, and both
+    places that can start a forecast now say it and offer the download.
     """
     from core.model_store import NO_CHECKPOINT, Availability
 
@@ -209,15 +235,34 @@ def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
         monkeypatch,
         Availability(NO_CHECKPOINT, "I pesi non sono su questo computer.", True),
     )
-    panel = app._panels["validation"]
-    app.show("validation")
+    panel = app._panels["prediction"]
+    app.show("prediction")
     app.update()
-
     assert "pesi" in panel.model_status.label.cget("text")
     assert panel.model_status.button.winfo_ismapped(), "no download button offered"
-    box = panel._checks["timesfm"]
-    assert box.cget("state") == "disabled"
-    assert not box.get(), "an unusable method must not stay ticked"
+
+
+def test_the_path_offers_the_download_as_its_second_step(app, monkeypatch):
+    """Step 2 acts rather than navigating: the download belongs to no tab."""
+    from core.model_store import NO_CHECKPOINT, Availability
+
+    _force_availability(
+        monkeypatch,
+        Availability(NO_CHECKPOINT, "I pesi non sono su questo computer.", True),
+    )
+    home = app._panels["home"]
+    app.show("home")
+    app.update()
+    assert "pesi" in home._states()["model"][0]
+    assert home._states()["model"][2] == "!"
+    assert home._buttons["model"].cget("state") == "normal"
+
+    called = {}
+    monkeypatch.setattr(
+        app, "download_model", lambda on_done=None: called.setdefault("yes", True)
+    )
+    home._act("model")
+    assert called, "step 2 did not start the download"
 
 
 def test_the_download_button_is_absent_when_there_is_nothing_to_download(app, monkeypatch):
@@ -227,73 +272,50 @@ def test_the_download_button_is_absent_when_there_is_nothing_to_download(app, mo
     _force_availability(
         monkeypatch, Availability(NO_PACKAGE, "TimesFM non è installato.", False)
     )
-    app.show("validation")
+    app.show("prediction")
     app.update()
-    assert not app._panels["validation"].model_status.button.winfo_ismapped()
+    assert not app._panels["prediction"].model_status.button.winfo_ismapped()
+
+    home = app._panels["home"]
+    app.show("home")
+    app.update()
+    assert home._buttons["model"].cget("state") == "disabled"
 
 
-def test_ready_weights_re_enable_the_method_on_both_panels(app, monkeypatch):
+def test_ready_weights_are_reported_on_both_screens(app, monkeypatch):
     """Availability is read on every tab switch, not once at start-up.
 
-    The download can be started from either panel, so the other one has to
+    The download can be started from the path, so the Prediction tab has to
     notice that it happened.
     """
     from core.model_store import READY, Availability
-    from gui.prediction_panel import _METHOD_LABELS
 
-    _force_availability(monkeypatch, Availability(READY, "Pronto.", False))
-
-    app.show("validation")
-    app.update()
-    assert app._panels["validation"]._checks["timesfm"].cget("state") == "normal"
+    _force_availability(monkeypatch, Availability(READY, "TimesFM è pronto.", False))
 
     app.show("prediction")
     app.update()
-    assert _METHOD_LABELS["timesfm"] in app._panels["prediction"].method.cget("values")
+    assert "pronto" in app._panels["prediction"].model_status.label.cget("text")
 
-
-def test_an_unavailable_model_is_not_in_the_prediction_menu(app, monkeypatch):
-    from core.model_store import NO_CHECKPOINT, Availability
-    from gui.prediction_panel import _METHOD_LABELS
-
-    _force_availability(
-        monkeypatch, Availability(NO_CHECKPOINT, "Pesi assenti.", True)
-    )
-    panel = app._panels["prediction"]
-    app.show("prediction")
+    home = app._panels["home"]
+    app.show("home")
     app.update()
-    assert _METHOD_LABELS["timesfm"] not in panel.method.cget("values")
-    assert _METHOD_LABELS["frequenza"] in panel.method.cget("values")
-
-
-def test_running_an_unavailable_method_explains_rather_than_starts_a_worker(app, monkeypatch):
-    """Forced past the disabled checkbox, «Esegui» must still not fail generically."""
-    from core.model_store import NO_CHECKPOINT, Availability
-
-    _force_availability(
-        monkeypatch,
-        Availability(NO_CHECKPOINT, "I pesi di TimesFM non sono scaricati.", True),
-    )
-    panel = app._panels["validation"]
-    app.show("validation")
-    app.update()
-    panel._checks["timesfm"].configure(state="normal")
-    panel._checks["timesfm"].select()
-    panel._run()
-    app.update()
-    assert "pesi" in app._status.cget("text").lower()
-    assert not app._busy, "no worker should have been started"
+    assert home._states()["model"][2] == "✓"
 
 
 def test_the_method_is_written_TimesFM_where_the_user_reads_it(app):
     """`timesfm` is an identifier settings.json stores, not a label to show."""
-    panel = app._panels["validation"]
-    app.show("validation")
+    from core.predictor import METHOD_NAMES
+
+    panel = app._panels["prediction"]
+    app.show("prediction")
     app.update()
-    labels = {m: box.cget("text") for m, box in panel._checks.items()}
-    assert labels["timesfm"] == "TimesFM"
-    assert labels["frequenza"] == "Frequenza"
-    assert "timesfm" not in labels.values()
+    shown = {
+        method: cell.winfo_children()[0].winfo_children()[0].cget("text")
+        for method, cell in panel._cells.items()
+    }
+    assert shown["timesfm"] == "TimesFM"
+    assert shown["frequenza"] == "Frequenza"
+    assert set(shown.values()) == set(METHOD_NAMES.values())
 
 
 def test_the_window_carries_the_application_icon(app):
@@ -322,20 +344,24 @@ def test_the_app_opens_on_the_path(app):
     assert app._active == "home"
 
 
-def test_the_path_lists_the_four_steps_in_order():
-    """Archive, fairness, validation, prediction — the order is the argument."""
+def test_the_path_lists_the_three_conditions_in_order():
+    """Archive, model, prediction — the two things that must be true, then go."""
     from gui.home_panel import STEPS
 
-    assert [key for key, *_ in STEPS] == [
-        "archive", "reality", "validation", "prediction",
-    ]
+    assert [key for key, *_ in STEPS] == ["archive", "model", "prediction"]
 
 
-def test_every_step_opens_a_panel_that_exists(app):
-    """A step pointing at a missing panel would fail only when clicked."""
+def test_every_navigating_step_opens_a_panel_that_exists(app):
+    """A step pointing at a missing panel would fail only when clicked.
+
+    Step 2 is the exception and deliberately so: it downloads rather than
+    navigating, because the weights belong to no tab.
+    """
     from gui.home_panel import STEPS
 
     for key, *_ in STEPS:
+        if key == "model":
+            continue
         assert key in app._panels
         app.show(key)
         app.update()
@@ -343,111 +369,54 @@ def test_every_step_opens_a_panel_that_exists(app):
 
 
 def test_the_path_tells_a_first_time_user_to_fetch_the_archive(app, monkeypatch):
-    """Every step is blocked on step 1, and step 1 says so."""
+    """Everything is blocked on step 1, and step 1 says so."""
     monkeypatch.setattr(app, "draws", [])
     home = app._panels["home"]
     home.refresh()
     states = home._states()
     assert "Nessun archivio" in states["archive"][0]
-    for key in ("reality", "validation", "prediction"):
-        assert "Serve prima l'archivio" in states[key][0]
+    assert "Serve prima l'archivio" in states["prediction"][0]
 
 
-def test_the_path_reports_what_each_step_produced(app):
-    """The steps carry live state, not a static checklist.
-
-    Running the reality check has to change what the path says about step 2,
-    or the panel is decoration.
-    """
+def test_the_path_reports_what_the_prediction_step_produced(app):
+    """The steps carry live state, not a static checklist."""
     home = app._panels["home"]
     home.refresh()
-    assert "Non ancora eseguito" in home._states()["reality"][0]
+    assert "Non ancora generate" in home._states()["prediction"][0]
 
-    app._panels["reality"].run_tests()
+    _generate(app)
     home.refresh()
-    after = home._states()["reality"][0]
-    assert "Non ancora eseguito" not in after
-    assert "Eseguito" in after
+    after = home._states()["prediction"]
+    assert "Non ancora generate" not in after[0]
+    assert "metodi a confronto" in after[0]
+    assert after[2] == "✓", "the tick is what a user scans for"
 
 
-def test_a_step_that_has_run_is_marked_done(app):
-    """The tick is what a user scans for; it must follow the state."""
+def test_a_current_archive_is_marked_done(app):
+    """The archive card is the one indicator that was already right."""
     home = app._panels["home"]
-    app._panels["reality"].run_tests()
     home.refresh()
-    assert home._states()["reality"][2] == "✓"
-
-
-def test_validation_runs_the_baselines_to_a_verdict(app):
-    import time
-
-    panel = app._panels["validation"]
-    app.show("validation")
-    panel.n_draws.delete(0, "end")
-    panel.n_draws.insert(0, "120")
-    panel._run()
-    for _ in range(120):
-        app.update()
-        if panel.verdict.cget("text"):
-            break
-        time.sleep(0.05)
-    assert "centri per estrazione" in panel.verdict.cget("text")
-
-
-def test_validation_shows_the_whole_ranking_beside_the_hit_count(app):
-    """Both readings, or the panel has the blind spot core/power.py measures."""
-    import time
-
-    panel = app._panels["validation"]
-    app.show("validation")
-    panel.n_draws.delete(0, "end")
-    panel.n_draws.insert(0, "120")
-    panel._run()
-    for _ in range(120):
-        app.update()
-        if panel.verdict.cget("text"):
-            break
-        time.sleep(0.05)
-    text = panel.box.get("1.0", "end")
-    assert "centri/estr" in text
-    assert "rango medio" in text
-
-
-def test_the_calibration_button_reaches_a_table(app):
-    """The panel's second experiment: what edge this harness could have seen."""
-    import time
-
-    panel = app._panels["validation"]
-    app.show("validation")
-    panel.n_draws.delete(0, "end")
-    panel.n_draws.insert(0, "60")
-    # The default hundred repetitions over fifteen rows is a minute of work,
-    # which is not what a smoke test is for. This drives the same code path.
-    from core.power import calibrate
-    panel._show_calibration(calibrate(app.draws, n_draws=60, runs=2))
-    app.update()
-    time.sleep(0.01)
-    text = panel.box.get("1.0", "end")
-    assert "nascosto" in text
-    assert "soglia al" in text
+    text, _, mark = home._states()["archive"]
+    assert "estrazioni" in text
+    assert mark in ("✓", "!")
 
 
 def test_the_prediction_follows_the_system_size_and_superstar_settings(app):
-    """The two settings live on another tab, so this is the wire between them."""
-    panel = app._panels["prediction"]
-    app.show("prediction")
+    """The two settings live on another tab, so this is the wire between them.
+
+    They apply to every one of the four tickets, which is why the shape and
+    the price are stated once above the grid rather than in each cell.
+    """
     app.settings["prediction_size"] = 9
     app.settings["predict_superstar"] = True
-    panel.method.set(_LABELS["ritardo"])
-    panel._generate()
-    app.update()
+    panel = _generate(app)
 
-    prediction = app.last_prediction
-    assert prediction.size == 9
-    assert all(len(c) == 9 for c in prediction.combinations)
-    assert prediction.superstar is not None
+    for prediction in panel._predictions.values():
+        assert prediction.size == 9
+        assert all(len(c) == 9 for c in prediction.combinations)
+        assert prediction.superstar is not None
 
-    text = panel.box.get("1.0", "end")
+    text = panel.detail.get("1.0", "end")
     assert "Sistema integrale da 9 numeri" in text
     assert "84 colonne" in text
     # The honest sentence has to be on the screen, not only in the source.
@@ -456,16 +425,12 @@ def test_the_prediction_follows_the_system_size_and_superstar_settings(app):
 
 
 def test_a_plain_column_says_so_and_shows_no_system_table(app):
-    panel = app._panels["prediction"]
-    app.show("prediction")
     app.settings["prediction_size"] = 6
     app.settings["predict_superstar"] = False
-    panel.method.set(_LABELS["ritardo"])
-    panel._generate()
-    app.update()
+    panel = _generate(app)
 
-    assert app.last_prediction.superstar is None
-    text = panel.box.get("1.0", "end")
+    assert all(p.superstar is None for p in panel._predictions.values())
+    text = panel.detail.get("1.0", "end")
     assert "Colonna singola" in text
     assert "Sistema integrale" not in text
 
@@ -500,50 +465,44 @@ def test_settings_save_refuses_a_price_that_is_not_a_number(app):
 
 
 def test_the_prediction_prints_what_the_ticket_costs(app):
-    panel = app._panels["prediction"]
-    app.show("prediction")
     app.settings["prediction_size"] = 9
     app.settings["predict_superstar"] = True
     app.settings["column_price"] = 1.0
     app.settings["superstar_price"] = 0.5
-    panel.method.set(_LABELS["ritardo"])
     # Set explicitly rather than leaning on the default, which is 1 since
     # 0.6.1 — the duplication this checks only exists with several plays.
-    panel.count.set("5")
-    panel._generate()
-    app.update()
+    panel = _generate(app, count="5")
 
-    text = panel.box.get("1.0", "end")
+    text = panel.detail.get("1.0", "end")
     assert "Costo della giocata" in text
     # Five plays of 84 columns at 1.50 each.
     assert "630,00" in text
     assert "pagate due volte" in text
 
 
+def test_the_cost_is_for_one_ticket_and_not_for_four(app):
+    """Four methods on screen is four alternatives, not a stake to multiply.
+
+    The single most expensive thing this layout could get wrong: a reader who
+    reads one price under four tickets and assumes it is the total.
+    """
+    panel = _generate(app)
+    assert "quattro" in panel.note.cget("text")
+    assert "non una giocata da moltiplicare" in panel.note.cget("text")
+    # And the cost itself is on the same line as that sentence, not three
+    # paragraphs away where the two can be read apart.
+    assert "Costo:" in panel.note.cget("text")
+
+
 def test_a_single_combination_wastes_nothing_and_says_so(app):
     """The shipped default, and the reason it is the default."""
-    panel = app._panels["prediction"]
-    app.show("prediction")
     app.settings["prediction_size"] = 9
     app.settings["predict_superstar"] = False
-    panel.method.set(_LABELS["ritardo"])
-    panel.count.set("1")
-    panel._generate()
-    app.update()
+    panel = _generate(app, count="1")
 
-    text = panel.box.get("1.0", "end")
+    text = panel.detail.get("1.0", "end")
     assert "pagate due volte" not in text
     assert "scelte successive" not in text
-
-
-def test_validation_rejects_a_non_numeric_draw_count(app):
-    panel = app._panels["validation"]
-    app.show("validation")
-    panel.n_draws.delete(0, "end")
-    panel.n_draws.insert(0, "many")
-    panel._run()
-    app.update()
-    assert "numero intero" in app._status.cget("text")
 
 
 def test_settings_save_round_trips_and_keeps_integer_types(app):

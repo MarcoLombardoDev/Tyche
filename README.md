@@ -25,47 +25,50 @@ non per affermarlo.
 
 ![Percorso](docs/screenshots/01_percorso.png)
 
-*La scheda Percorso, che è quella su cui il programma si apre: quattro passi
-dall'archivio vuoto alle sei cifre, ognuno con accanto quello che ha prodotto.*
+*La scheda Percorso, che è quella su cui il programma si apre: le tre
+condizioni fra l'archivio vuoto e le sei cifre, ognuna con il suo stato.*
 
 ---
 
 ## Che cosa fa
 
-Il programma si apre sulla scheda **Percorso**, che è una mappa: quattro passi
-nell'ordine in cui vanno fatti, ognuno con la domanda a cui risponde e con
-quello che ha prodotto finora. Nessun passo fa lavoro suo — ognuno apre la
-scheda che lo fa.
+Il programma si apre sulla scheda **Percorso**, che è una mappa: tre passi
+nell'ordine in cui vanno fatti, ognuno con il suo stato e con il pulsante per
+sistemarlo.
 
-| | Passo | La domanda a cui risponde |
+| | Passo | La condizione |
 |---|---|---|
-| 1 | **Archivio** | Ci sono i dati? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
-| 2 | **Prova del nove** | C'è qualcosa da prevedere? Cinque test dell'ipotesi che le estrazioni siano indipendenti e uniformi. |
-| 3 | **Validazione** | I metodi battono il caso? Backtest walk-forward, senza che nessuno possa sbirciare il futuro. |
-| 4 | **Previsione** | Il punto di arrivo: la giocata, da TimesFM 3.0 o da tre metodi di riferimento, quello casuale incluso — con accanto quanto costa e quanto vale. |
+| 1 | **L'archivio** | C'è, ed è aggiornato? Scarica, importa e ispeziona lo storico, e dice che cosa non va. |
+| 2 | **Il modello TimesFM** | I pesi sono su questo computer? Se no, il pulsante li scarica, con la percentuale nella barra in basso. |
+| 3 | **La previsione** | Il punto di arrivo: tutti e quattro i metodi insieme, con quanto costa la giocata e quanto vale. |
 
 Fuori percorso ci sono **Statistiche** — frequenze, ritardi, decine e coppie,
 ogni tabella con accanto il valore che produrrebbe il caso — e
 **Impostazioni**, con checkpoint, dispositivo, token Hugging Face, numeri
 per combinazione, SuperStar, prezzi e indirizzi delle sorgenti.
 
-L'ordine dei passi è l'argomento del programma. Il passo 2 dice che le
-estrazioni sono indipendenti, il passo 3 che nessun metodo batte il caso, e il
-passo 4 consegna comunque la giocata — perché è quello a cui serve. Chi
-percorre la strada arriva alle combinazioni avendo già letto quanto valgono,
-che è un posto migliore per dirlo di una scheda che si può non aprire mai.
+**Nella Previsione non si sceglie il metodo: girano tutti e quattro e ognuno
+prende un quarto della pagina.** È l'argomento del programma, messo dove non
+si può saltare. Scegliere un metodo significava vederne uno, e vederne uno
+solo trasforma quattro misure in una preferenza: prendi quello di cui ti fidi,
+ottieni i suoi numeri, e non scopri mai che gli altri tre — generatore casuale
+compreso — producono una schedina altrettanto convincente e che vale
+esattamente lo stesso.
 
-![Validazione](docs/screenshots/06_validazione.png)
+![Previsione](docs/screenshots/04_previsione.png)
 
-*Il passo 3. Tre metodi, 400 estrazioni, il caso vale 0,4000 — e nessuno lo
-batte.*
+*Il punto di arrivo. Le palline viola hanno lo stesso aspetto sicuro qualunque
+metodo le abbia prodotte, e il riquadro in basso a destra è un generatore
+casuale: è esattamente il punto. Sotto ci sono il costo della giocata e le
+probabilità che nessun metodo cambia.*
 
-![Previsione](docs/screenshots/05_previsione.png)
-
-*Il passo 4, che è dove si voleva arrivare. Le palline viola hanno lo stesso
-aspetto sicuro qualunque metodo le abbia prodotte, ed è esattamente il punto:
-sotto ci sono il costo della giocata e le probabilità che nessun metodo
-cambia.*
+**La misura è rimasta, ma ha lasciato la finestra.** Fino alla 0.9.1 c'erano
+due schede di prova — cinque test di indipendenza e un backtest walk-forward
+di ogni metodo contro il caso. Sono state tolte nella 0.10.0 perché erano
+incomprensibili a chi usa il programma, il che è un difetto della scheda e non
+della misura: `--validate` e `--power` fanno ancora esattamente le stesse
+cose dalla riga di comando, ed è così che le tabelle più sotto in questo file
+si rifanno.
 
 C'è anche una riga di comando, per le parti che vale la pena automatizzare:
 
@@ -105,9 +108,9 @@ sudo apt install python3-tk
 ```
 
 La prima previsione con TimesFM scarica circa 1,3 GB di pesi da Hugging Face.
-Tutto il resto funziona senza — e finché quei pesi non sono sul computer, i
-pannelli Previsione e Validazione lo dicono e offrono il pulsante per
-scaricarli, invece di lasciartelo scoprire premendo «Esegui».
+Tutto il resto funziona senza — e finché quei pesi non sono sul computer, il
+passo 2 del Percorso e la scheda Previsione lo dicono e offrono il pulsante
+per scaricarli, invece di lasciartelo scoprire premendo «Genera».
 
 **Non serve un token Hugging Face**, né un account. Il checkpoint predefinito
 è ad accesso libero: il token in Impostazioni esiste solo per un repository
@@ -115,9 +118,9 @@ che il suo proprietario abbia messo ad accesso ristretto.
 
 **E dopo il download non c'è più rete.** Il modello gira sul tuo computer, quindi
 il costo di una previsione è tempo di CPU e nient'altro: nessun consumo, nessuna
-chiamata a un servizio, nessun limite di quota. È il motivo per cui il pannello
-Validazione dice di partire da poche estrazioni — non per risparmiare qualcosa,
-ma perché ogni estrazione valutata è una passata del modello sulla tua macchina.
+chiamata a un servizio, nessun limite di quota. Quello che costa è il tempo:
+una previsione è una passata del modello sulla tua macchina, e `--validate`
+con TimesFM ne fa una per ogni estrazione valutata.
 
 Per Windows c'è un pacchetto pronto allegato a ogni release: si scompatta in
 una sola cartella e si avvia con `start.cmd`, senza installare Python.
@@ -174,7 +177,7 @@ ma non verificata:
   indietro, misurate sulla cadenza dell'archivio stesso e non su un calendario
   scritto nel codice.
 
-![Archivio](docs/screenshots/03_archivio.png)
+![Archivio](docs/screenshots/02_archivio.png)
 
 ---
 
@@ -239,8 +242,7 @@ Sono due frasi diverse e producono lo stesso tabellone. Un esperimento che non
 trova nulla vale qualcosa solo se sappiamo che cosa sarebbe riuscito a
 trovare, quindi Tyche lo misura invece di lasciarlo intendere.
 
-`python main.py --power` — oppure il pulsante **Calibra** nella scheda
-Validazione — rifà la stessa prova contro previsori il cui vantaggio è noto,
+`python main.py --power` rifà la stessa prova contro previsori il cui vantaggio è noto,
 perché ce l'ha messo il programma. Ognuno legge di nascosto l'estrazione che
 gli si chiede di prevedere e ne rivela una parte, in una quantità che si può
 girare come una manopola: a zero è la linea di base casuale, alzandola diventa
@@ -281,8 +283,8 @@ Nelle Impostazioni si scelgono due cose che cambiano la giocata.
 
 **Quanti numeri per combinazione.** Sei è una colonna singola; da sette a
 dodici è un sistema integrale, che copre tutte le combinazioni di sei fra i
-numeri giocati. La previsione allora produce sistemi invece di colonne, e la
-Validazione misura quella stessa dimensione — nove numeri contro il caso a
+numeri giocati. La previsione allora produce sistemi invece di colonne, e
+`--validate` misura quella stessa dimensione — nove numeri contro il caso a
 0,600 centri per estrazione invece di 0,400, perché è un'altra scommessa.
 
 | Numeri | Colonne coperte | Il 6 è 1 su | Per colonna |
@@ -454,7 +456,7 @@ come unica fonte, e che `--version` stampa.
 
 ```
 python -m pytest tests/ -q                                    # 344 test core, 2 saltati
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 390, GUI compresa
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 386, GUI compresa
 python -m ruff check .
 ```
 
