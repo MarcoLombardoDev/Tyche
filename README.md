@@ -456,8 +456,8 @@ come unica fonte, e che `--version` stampa.
 ## Eseguire i test
 
 ```
-python -m pytest tests/ -q                                    # 358 test core, 2 saltati
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 407, GUI compresa
+python -m pytest tests/ -q                                    # 362 test core, 2 saltati
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q     # 411, GUI compresa
 python -m ruff check .
 ```
 

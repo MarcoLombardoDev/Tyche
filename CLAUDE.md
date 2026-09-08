@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 358, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 407, GUI included
+python -m pytest tests/ -q                                   # 362, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 411, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`358 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`362 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -873,66 +873,49 @@ prompt that asks for an account on every hiccup sends the reader to make one
 for nothing. The owner believed a token was needed; it is not, and the panel
 now says so in the sentence offering the download.
 
-**The download percentage is assembled, and the denominator is on screen for a
-reason.** huggingface_hub reports a snapshot as one tqdm bar per file plus an
-outer bar counting files, created as the workers reach them — so there is no
-single bar to read and no byte total known up front. `DownloadProgress` adds
-the byte bars (unit `B`; the file counter is deliberately excluded, and there
-is a test, because five files in the denominator of a gigabyte would be
-invisible) and prints `546 MB di 1,29 GB (42%)`. **The percentage can fall**
-when a new file's bar appears. That is honest arithmetic on incomplete
-knowledge and it reads as a bug unless the reader can watch the denominator
-grow too — which is the whole argument for the longer message.
+**The download percentage is measured off the disk, and the first version was
+measured off nothing.** It hooked huggingface_hub's `tqdm_class`, added up the
+per-file byte bars, and had ten unit tests over that arithmetic. On the
+owner's Windows machine the status bar sat on "TimesFM…" for the whole
+download and never moved: whether hf_hub honours that hook is a claim about
+somebody else's library, and no test here could check it.
+
+`DiskProgress` walks the repository's own cache folder and reports what is
+there, against a total asked of the Hub once before the download starts. Three
+consequences worth keeping:
+
+- **A resumed download opens at 72%**, because that is where it is. The
+  accumulating version would have started from zero and told the user the
+  first attempt achieved nothing.
+- **The denominator cannot move**, so the percentage cannot fall. The old one
+  grew as each file's bar appeared.
+- **It never raises on a vanishing file.** hf_hub renames an `.incomplete`
+  blob into place while the walk is running, and a progress indicator that
+  dies on that has failed at its one job.
 
 Throttled to one report per whole percent or half-second, with an injected
-clock so the test does not wait. Unthrottled, every tqdm update becomes a
-closure queued onto the Tk main thread and the download makes the window
-unresponsive while reporting how smoothly it is going.
+clock so the test does not wait. Unthrottled, every sample becomes a closure
+queued onto the Tk main thread.
 
-**TimesFM is not something Hugging Face will run for you, and the interface
-must not suggest it is.** The owner asked to switch to a mode where the model
-runs "online from Hugging Face", on the reasonable assumption that a token
-would then be what unlocks it. There is no such mode for this model: the
-serverless Inference API serves a catalogue of standard task pipelines, and a
-time-series foundation model taking a 90×1024 context is not in it. The only
-hosted option is a dedicated Inference Endpoint — a GPU instance the user
-rents by the hour and deploys themselves — which is a different product, costs
-money continuously, and would still need every line of `core/forecaster.py`
-around it. **Do not build a token gate on the strength of it.** The default
-checkpoint is not gated; a step that checked for a token would be checking for
-something the download does not want and the forecast cannot use.
+**A truncated download is the normal failure, and it used to be silent.** The
+owner's stopped at 882 MB of 1.23 GB, several times: the call returned, the
+panel moved on, and the next screen reported the weights missing with no hint
+that 72% of them were sitting in the cache. `download_checkpoint` now compares
+what landed against what the Hub said the repository weighs and resumes —
+huggingface_hub continues from what is on disk, so a second attempt costs the
+remainder and not the lot. `COMPLETE_ENOUGH` is 0.995 rather than 1.0 because
+the Hub's sizes and what lands on disk differ by metadata, and a check
+demanding the last byte would call a working download broken. When it does
+give up, the message carries both numbers and says that pressing the button
+again resumes; `availability` says the same thing on the path panel, so
+"pesi assenti" over a 72%-full cache no longer reads as "nothing happened".
 
-That claim is from knowledge rather than from a probe: huggingface.co answers
-403 through this environment's proxy, so it could not be checked from here. If
-it is ever worth settling, the `forecast` job has the network.
-
-**The download skips what PyTorch cannot read** — TensorFlow, Flax, ONNX,
-TFLite and images — because a model repository carries the same weights in
-several formats so that every framework finds its own. It is an *exclusion*
-and not an allow-list on purpose: a list that misses one file the loader wants
-produces a download that looks complete and fails on the first forecast, which
-is the worst failure available. And if the exclusion should ever take the
-weights with it, the whole repository is fetched instead; that retry is what
-makes the guess safe to have made, since nobody here can list the repository.
-The `forecast` job prints the listing and what the exclusion saves, so the
-next change to `SKIPPABLE` comes from evidence.
-
-**`--model-check` and the Diagnosi button exist because the packaged build has
-no console.** `console=False` on Windows means a CLI diagnostic is unreachable
-exactly where the owner runs the program, so the report is obtainable from the
-window and written to `data/diagnosi-timesfm.txt`. It never raises: a
-diagnostic that dies on the first missing import diagnoses nothing, and the
-machine it runs on is by definition the odd one.
-
-**What no test here has ever seen is huggingface_hub emitting a bar.** The
-arithmetic is driven by hand; whether hf_hub honours `tqdm_class` at all is a
-claim about somebody else's library. The `forecast` CI job settles it — it
-downloads the checkpoint through `core/model_store.py`, prints every progress
-line and every file that landed, and fails if the last percentage is not 100.
-That step is also the measurement for the open question in
-`download_checkpoint`: it fetches the **whole repository**, because Tyche does
-not know which files the loader will ask for, and guessing wrong produces a
-download that looks complete and fails on the first forecast.
+**On Tyche's own checkpoint, `SKIPPABLE` matches nothing.** The owner asked
+whether the thousands of files were all needed; the repository is five files —
+`model.safetensors` at 1.23 GB and four small ones — so the exclusion changes
+neither the count nor the size. It stays because the checkpoint is a setting
+and somebody may point Tyche at a repository that does carry four formats. Say
+that plainly rather than claiming a saving that was not made.
 
 **`timesfm` is an identifier; `TimesFM` is a name.** `core/predictor.METHOD_NAMES`
 is the one map, and `method_name` is what every screen goes through — the

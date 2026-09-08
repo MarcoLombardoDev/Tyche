@@ -233,14 +233,12 @@ jobs:
         # a 1.3 GB download is worth one second.
         run: python main.py --forecast frequenza
 
-      # The one place core/model_store.py meets a real huggingface_hub. Its
-      # arithmetic is unit-tested on a machine with neither torch nor the hub
-      # installed; what cannot be tested there is the tqdm subclass — whether
-      # hf_hub honours tqdm_class at all, which bars it creates, and whether
-      # the percentage that reaches the status bar is the download's. This
-      # step prints exactly that, and asserts only the two things that would
-      # make the progress bar a lie: that it saw bytes, and that it ended
-      # at the total it was counting towards.
+      # The one place core/model_store.py meets a real huggingface_hub. It
+      # used to hook hf_hub's tqdm; that was documented, unit-tested on top,
+      # and produced no progress at all on the owner's machine, so the
+      # percentage is measured off the cache directory instead. What this step
+      # checks is that the measurement tracks a real download: that it saw
+      # bytes, and that it ended at the total it was counting towards.
       #
       # It also prints what the snapshot actually fetched. Tyche downloads the
       # whole repository because it does not know which files the loader will

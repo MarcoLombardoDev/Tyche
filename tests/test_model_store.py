@@ -38,7 +38,7 @@ from core.model_store import (  # noqa: E402
     NO_PACKAGE,
     READY,
     UNKNOWN,
-    DownloadProgress,
+    DiskProgress,
     availability,
     download_failure_message,
 )
@@ -78,107 +78,112 @@ class TestByteFormatting:
 
 
 # ── the download percentage ──────────────────────────────────
-class TestDownloadProgress:
-    def test_byte_bars_add_up_across_files(self):
-        tracker = DownloadProgress()
-        tracker.register(1, 1000, "B")
-        tracker.register(2, 3000, "B")
-        tracker.advance(1, 500)
-        tracker.advance(2, 500)
-        assert tracker.total == 4000
+class TestDiskProgress:
+    """Measured from the cache, because the tqdm hook produced nothing.
+
+    The version this replaces added up huggingface_hub's progress bars through
+    ``tqdm_class``. Every piece of that arithmetic was tested here and the
+    status bar still never moved on the owner's machine: whether hf_hub honours
+    the hook was a claim about somebody else's library, and no test in this
+    file could check it. Bytes on disk are not a claim about anybody's library.
+    """
+
+    def _tree(self, tmp_path, sizes):
+        for name, size in sizes.items():
+            target = tmp_path / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"x" * size)
+        return tmp_path
+
+    def test_it_counts_what_is_on_disk(self, tmp_path):
+        self._tree(tmp_path, {"blobs/a": 300, "snapshots/x/b": 700})
+        tracker = DiskProgress(tmp_path, expected=2000)
+        tracker.sample()
         assert tracker.downloaded == 1000
-        assert tracker.fraction == 0.25
+        assert tracker.fraction == 0.5
 
-    def test_the_file_counter_is_not_counted_as_bytes(self):
-        """hf_hub's outer bar counts files; adding it to the bytes is nonsense.
+    def test_a_resumed_download_opens_where_it_stopped(self, tmp_path):
+        """72% must read as 72%, not as 0%.
 
-        Five files would put five bytes in the denominator of a gigabyte, and
-        the percentage would be right to within a rounding error — which is
-        why this is worth a test rather than an inspection.
+        The whole reason this is measured rather than accumulated: a second
+        attempt continues from the cache, and a counter that started from zero
+        would tell the user the first attempt achieved nothing.
         """
-        tracker = DownloadProgress()
-        tracker.register(1, 5, "it")          # "Fetching 5 files"
-        tracker.register(2, 1000, "B")
-        tracker.advance(1, 2)
-        tracker.advance(2, 250)
-        assert tracker.total == 1000
-        assert tracker.fraction == 0.25
-        assert "2 file su 5" in tracker.message()
+        self._tree(tmp_path, {"blobs/half": 720})
+        tracker = DiskProgress(tmp_path, expected=1000)
+        tracker.sample()
+        assert "72%" in tracker.message()
 
-    def test_the_message_always_shows_what_the_percentage_is_of(self):
-        """A percentage that can fall needs its denominator beside it.
+    def test_the_denominator_does_not_move(self, tmp_path):
+        """Asked of the Hub once, before the download, so it cannot grow.
 
-        The bars are created as the workers reach the files, so the total
-        grows during the download and the percentage can go backwards. That is
-        honest arithmetic on incomplete knowledge, and it looks like a bug
-        unless the reader can see the denominator grow too.
+        The previous version summed the per-file bars as they appeared, so its
+        total grew during the download and the percentage could fall.
         """
-        tracker = DownloadProgress()
-        tracker.register(1, 1000, "B")
-        tracker.advance(1, 800)
-        first = tracker.message()
-        assert "80%" in first and it_bytes(1000) in first
+        self._tree(tmp_path, {"a": 100})
+        tracker = DiskProgress(tmp_path, expected=1000)
+        tracker.sample()
+        first = tracker.fraction
+        self._tree(tmp_path, {"b": 400})
+        tracker.sample()
+        assert tracker.fraction > first
+        assert "di " + it_bytes(1000) in tracker.message()
 
-        tracker.register(2, 3000, "B")
-        second = tracker.message()
-        assert "20%" in second and it_bytes(4000) in second
+    def test_it_never_reports_above_a_hundred_per_cent(self, tmp_path):
+        self._tree(tmp_path, {"a": 5000})
+        tracker = DiskProgress(tmp_path, expected=1000)
+        tracker.sample()
+        assert tracker.fraction == 1.0
 
-    def test_a_closed_bar_counts_as_a_whole_file(self):
-        """tqdm updates in chunks and the last one can be missed."""
-        tracker = DownloadProgress()
-        tracker.register(1, 1000, "B")
-        tracker.advance(1, 990)
-        tracker.close(1)
-        assert tracker.downloaded == 1000
+    def test_a_vanishing_file_does_not_raise(self, tmp_path):
+        """hf_hub renames an .incomplete blob into place while this walks.
 
-    def test_it_reports_at_most_once_per_percent(self):
-        """A 1.3 GB download updates thousands of times a second.
-
-        Every call becomes a closure queued onto the Tk main thread, so an
-        unthrottled tracker makes the window unresponsive while reporting how
-        smoothly it is going.
+        A progress indicator that dies on that has failed at its one job.
         """
+        tracker = DiskProgress(tmp_path / "not-there", expected=1000)
+        tracker.sample()
+        assert tracker.downloaded == 0
+
+    def test_it_reports_at_most_once_per_percent(self, tmp_path):
+        """Every call becomes a closure queued onto the Tk main thread."""
         seen, report = _collect()
         clock = _Clock()
-        tracker = DownloadProgress(report, throttle=0.5, clock=clock)
-        tracker.register(1, 10_000, "B")
-        for _ in range(100):                       # 100 × 1 byte: 0% throughout
-            tracker.advance(1, 1)
-        assert len(seen) <= 2                      # the register, and one more
+        size = {"n": 0}
+        tracker = DiskProgress(
+            tmp_path, expected=10_000_000, report=report, throttle=0.5,
+            clock=clock, measure=lambda: size["n"],
+        )
+        for _ in range(100):
+            size["n"] += 1                   # 100 bytes of ten million: 0%
+            tracker.sample()
+        assert len(seen) == 1, seen
 
-    def test_time_alone_is_enough_to_report(self):
+    def test_time_alone_is_enough_to_report(self, tmp_path):
         """A stalled percentage still has to prove the download is alive."""
         seen, report = _collect()
         clock = _Clock()
-        tracker = DownloadProgress(report, throttle=0.5, clock=clock)
-        tracker.register(1, 10_000_000, "B")
+        tracker = DiskProgress(
+            tmp_path, expected=10_000_000, report=report, throttle=0.5,
+            clock=clock, measure=lambda: 1,
+        )
+        tracker.sample()
         before = len(seen)
-        tracker.advance(1, 1)
-        assert len(seen) == before                 # same percent, same second
+        tracker.sample()
+        assert len(seen) == before
         clock.now += 1.0
-        tracker.advance(1, 1)
+        tracker.sample()
         assert len(seen) == before + 1
 
-    def test_a_new_percent_reports_immediately(self):
-        seen, report = _collect()
-        tracker = DownloadProgress(report, throttle=99.0, clock=_Clock())
-        tracker.register(1, 100, "B")
-        before = len(seen)
-        tracker.advance(1, 40)
-        assert len(seen) == before + 1
-        assert "40%" in seen[-1][0]
+    def test_without_a_denominator_it_still_says_something(self, tmp_path):
+        """The Hub not answering must not mean a silent download."""
+        tracker = DiskProgress(tmp_path, expected=0, measure=lambda: 4096)
+        tracker.sample()
+        assert it_bytes(4096) in tracker.message()
+        assert "%" not in tracker.message()
 
-    def test_the_fraction_reaches_the_caller_and_not_only_the_words(self):
-        seen, report = _collect()
-        tracker = DownloadProgress(report, throttle=0.0, clock=_Clock())
-        tracker.register(1, 200, "B")
-        tracker.advance(1, 100)
-        assert seen[-1][1] == 0.5
-
-    def test_nothing_is_reported_when_no_callback_was_given(self):
-        tracker = DownloadProgress()
-        tracker.register(1, 100, "B")
-        assert tracker.maybe_report(force=True) is False
+    def test_nothing_is_reported_when_no_callback_was_given(self, tmp_path):
+        tracker = DiskProgress(tmp_path, expected=100, measure=lambda: 50)
+        assert tracker.sample(force=True) is False
 
 
 # ── what stands between the user and a forecast ──────────────
@@ -346,11 +351,12 @@ class TestTheSlimDownload:
         full.mkdir()
         (full / "model.safetensors").write_bytes(b"x")
 
-        def fake_snapshot(checkpoint, token, progress, ignore):
+        def fake_snapshot(checkpoint, token, progress, ignore, expected):
             calls.append(tuple(ignore))
             return str(empty if ignore else full)
 
         monkeypatch.setattr(model_store, "_snapshot", fake_snapshot)
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (0, 0))
         path = model_store.download_checkpoint("org/model")
         assert len(calls) == 2, "a weightless slim download must be retried"
         assert calls[0] and not calls[1], "the retry must exclude nothing"
@@ -362,13 +368,70 @@ class TestTheSlimDownload:
         calls = []
         (tmp_path / "model.safetensors").write_bytes(b"x")
 
-        def fake_snapshot(checkpoint, token, progress, ignore):
+        def fake_snapshot(checkpoint, token, progress, ignore, expected):
             calls.append(tuple(ignore))
             return str(tmp_path)
 
         monkeypatch.setattr(model_store, "_snapshot", fake_snapshot)
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (0, 0))
         model_store.download_checkpoint("org/model")
         assert len(calls) == 1
+
+
+class TestATruncatedDownload:
+    """The owner's actual failure: 882 MB of 1.23 GB, several times, silently.
+
+    The call returned, the panel moved on, and the next screen said the
+    weights were missing with no hint that 72% of them were in the cache.
+    """
+
+    def _snapshot_returning(self, monkeypatch, tmp_path, sizes):
+        """A fake download that writes `sizes` bytes on each attempt in turn."""
+        attempts = {"n": 0}
+        target = tmp_path / "model.safetensors"
+
+        def fake_snapshot(checkpoint, token, progress, ignore, expected):
+            target.write_bytes(b"x" * sizes[min(attempts["n"], len(sizes) - 1)])
+            attempts["n"] += 1
+            return str(tmp_path)
+
+        monkeypatch.setattr(model_store, "_snapshot", fake_snapshot)
+        return attempts
+
+    def test_a_short_download_is_resumed(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (1, 1000))
+        attempts = self._snapshot_returning(monkeypatch, tmp_path, [720, 1000])
+        model_store.download_checkpoint("org/model")
+        assert attempts["n"] == 2, "a truncated download must be tried again"
+
+    def test_a_complete_download_is_not_repeated(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (1, 1000))
+        attempts = self._snapshot_returning(monkeypatch, tmp_path, [1000])
+        model_store.download_checkpoint("org/model")
+        assert attempts["n"] == 1
+
+    def test_giving_up_says_how_far_it_got_and_that_it_resumes(
+        self, monkeypatch, tmp_path
+    ):
+        """Silence was the defect. The number and the way out both go in."""
+        import pytest
+
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (1, 1000))
+        self._snapshot_returning(monkeypatch, tmp_path, [720])
+        with pytest.raises(RuntimeError) as raised:
+            model_store.download_checkpoint("org/model", attempts=2)
+        message = str(raised.value)
+        assert it_bytes(720) in message and it_bytes(1000) in message
+        assert "riprende" in message
+
+    def test_without_a_denominator_it_does_not_retry_forever(
+        self, monkeypatch, tmp_path
+    ):
+        """The Hub not answering must not turn one download into three."""
+        monkeypatch.setattr(model_store, "expected_download", lambda *a, **k: (0, 0))
+        attempts = self._snapshot_returning(monkeypatch, tmp_path, [10])
+        model_store.download_checkpoint("org/model")
+        assert attempts["n"] == 1
 
 
 class TestTheDiagnosis:

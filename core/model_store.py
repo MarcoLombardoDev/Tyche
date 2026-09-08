@@ -154,133 +154,158 @@ def availability(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT) -> Availability:
             "computer e l'esecuzione è tutta locale.",
             can_download=False,
         )
-    return Availability(
-        NO_CHECKPOINT,
+    # How much is already there, so a download that stopped part-way says so
+    # rather than reading as "nothing has happened". The owner pressed the
+    # button several times against a cache holding 882 MB of 1.23 GB and had
+    # no way to know that from this screen.
+    return Availability(NO_CHECKPOINT, _missing_detail(checkpoint), can_download=True)
+
+
+def _missing_detail(checkpoint: str) -> str:
+    """What to say when the weights are not usable yet."""
+    partial = 0
+    expected = 0
+    try:
+        partial = _downloaded_bytes(str(repo_cache_dir(checkpoint)))
+        _, expected = expected_download(checkpoint)
+    except Exception:  # noqa: BLE001 — a detail line must not raise
+        pass
+    if partial and expected and partial < expected:
+        return (
+            f"Il download di {checkpoint} si è fermato a {it_bytes(partial)} di "
+            f"{it_bytes(expected)}. Ripremere «Scarica il modello» riprende da "
+            "lì: quello che è arrivato resta nella cache."
+        )
+    return (
         f"I pesi di {checkpoint} non sono ancora su questo computer: circa "
         "1,3 GB da scaricare una volta sola. Il checkpoint predefinito è ad "
-        "accesso libero, quindi non serve alcun token.",
-        can_download=True,
+        "accesso libero, quindi non serve alcun token."
     )
 
 
-class DownloadProgress:
-    """Adds up the progress bars huggingface_hub creates during a download.
+class DiskProgress:
+    """Reports a download by measuring the cache, not by trusting a library.
 
-    Fed by the tqdm subclass :func:`tracking_tqdm` builds. Kept separate from
-    it, and free of every huggingface_hub and tqdm import, because this is the
-    part with arithmetic in it and therefore the part worth testing — on a
-    machine with neither installed, which is every machine this suite runs on.
+    **The first version hooked huggingface_hub's tqdm and it produced nothing.**
+    ``tqdm_class`` was a documented parameter, the arithmetic on top of it was
+    unit-tested, and on the owner's Windows machine the status bar sat on
+    "TimesFM…" for the whole download and never moved. Whether hf_hub honours
+    that hook was a claim about somebody else's library that no test here
+    could check — and it was wrong, or at least not true of that version.
 
-    Byte bars (``unit`` starting with ``B``) are the download. The outer bar
-    counts files and has a different unit, so it supplies "3 di 5" and is kept
-    out of the byte total.
+    Bytes on disk are not a claim about anybody's library. This walks the
+    repository's own cache folder and reports what is actually there, which
+    also means a resumed download opens at 72% instead of 0% — because that is
+    where it is.
+
+    ``measure`` is the seam: the tests hand it a directory they built.
     """
 
-    def __init__(self, report=None, throttle: float = 0.5, clock=time.monotonic):
+    def __init__(
+        self,
+        path,
+        expected: int = 0,
+        report=None,
+        throttle: float = 0.5,
+        clock=time.monotonic,
+        measure=None,
+    ):
+        self._path = pathlib.Path(path)
+        self._expected = int(expected or 0)
         self._report = report
         self._throttle = throttle
         self._clock = clock
-        self._bytes: dict[int, list[float]] = {}      # id -> [done, total]
-        self._files: list[float] = [0.0, 0.0]         # [done, total]
-        self._last_emit = 0.0
+        self._measure = measure or self._on_disk
+        self._last_emit = -1e9
         self._last_percent = -1
+        self.downloaded = 0
 
-    # ── what the tqdm subclass calls ─────────────────────────
-    def register(self, bar_id: int, total, unit: str) -> None:
-        if str(unit).upper().startswith("B"):
-            self._bytes[bar_id] = [0.0, float(total or 0)]
-        else:
-            self._files = [0.0, float(total or 0)]
-        self.maybe_report()
+    def _on_disk(self) -> int:
+        """Bytes under the folder, ignoring what cannot be read.
 
-    def advance(self, bar_id: int, amount: float) -> None:
-        bar = self._bytes.get(bar_id)
-        if bar is None:
-            self._files[0] += float(amount or 0)
-        else:
-            bar[0] += float(amount or 0)
-        self.maybe_report()
-
-    def close(self, bar_id: int) -> None:
-        bar = self._bytes.get(bar_id)
-        # A finished file has been downloaded whole, whatever its bar last
-        # said: tqdm is updated in chunks and the final one can be missed.
-        if bar is not None and bar[1]:
-            bar[0] = bar[1]
-        self.maybe_report(force=True)
-
-    # ── what it adds up to ───────────────────────────────────
-    @property
-    def downloaded(self) -> float:
-        return sum(done for done, _ in self._bytes.values())
-
-    @property
-    def total(self) -> float:
-        return sum(total for _, total in self._bytes.values())
+        A file can vanish between the walk and the stat — hf_hub renames an
+        ``.incomplete`` blob into place as it finishes — and a progress
+        indicator that raises on that has failed at the one job it has.
+        """
+        total = 0
+        try:
+            for item in self._path.rglob("*"):
+                try:
+                    if item.is_file():
+                        total += item.stat().st_size
+                except OSError:
+                    continue
+        except OSError:
+            return self.downloaded
+        return total
 
     @property
     def fraction(self) -> float:
-        return self.downloaded / self.total if self.total else 0.0
+        return min(self.downloaded / self._expected, 1.0) if self._expected else 0.0
 
     def message(self) -> str:
-        """The line the status bar shows. Denominator always visible."""
-        if not self._bytes:
-            return "Preparo il download dei pesi…"
-        head = f"scarico i pesi: {it_bytes(self.downloaded)}"
-        if self.total:
-            head += f" di {it_bytes(self.total)} ({self.fraction:.0%})"
-        files_done, files_total = self._files
-        if files_total:
-            head += f" — {int(files_done)} file su {int(files_total)}"
-        return head
+        if self._expected:
+            return (
+                f"scaricati {it_bytes(self.downloaded)} di "
+                f"{it_bytes(self._expected)} ({self.fraction:.0%})"
+            )
+        return f"scaricati {it_bytes(self.downloaded)}"
 
-    # ── talking to the caller ────────────────────────────────
-    def maybe_report(self, force: bool = False) -> bool:
-        """Emit at most one line per whole percent, or per ``throttle`` seconds.
-
-        A 1.3 GB download updates its bars thousands of times a second, and
-        every call the GUI receives becomes a queued closure on the main
-        thread. Unthrottled, the download makes the window unresponsive while
-        reporting how well it is going.
-        """
+    def sample(self, force: bool = False) -> bool:
+        """Measure, and report if enough has changed. True when it reported."""
+        self.downloaded = self._measure()
         if self._report is None:
             return False
         percent = int(self.fraction * 100)
         now = self._clock()
-        if not force and percent == self._last_percent and now - self._last_emit < self._throttle:
+        if (
+            not force
+            and percent == self._last_percent
+            and now - self._last_emit < self._throttle
+        ):
             return False
         self._last_percent = percent
         self._last_emit = now
         self._report(self.message(), self.fraction)
         return True
 
-    def finish(self) -> None:
-        if self._report is not None:
-            self._report("pesi scaricati.", 1.0)
 
+def repo_cache_dir(checkpoint: str):
+    """Where huggingface_hub keeps one repository, or the whole cache.
 
-def tracking_tqdm(tracker: DownloadProgress):
-    """A tqdm subclass that reports into ``tracker``.
-
-    Built here rather than declared at module level because tqdm arrives with
-    huggingface_hub, and this module has to import on a machine with neither.
+    The ``models--org--name`` layout is hf_hub's to change, which is why
+    :func:`_checkpoint_cached` asks the library instead of reading it. Here it
+    is only used to point a byte counter at the right folder, and the fallback
+    when it is not there is the cache root — a progress bar that counts
+    slightly too much is a great deal better than none, which is what the
+    previous version delivered.
     """
-    from tqdm.auto import tqdm as _tqdm
+    from huggingface_hub import constants
 
-    class _TrackedTqdm(_tqdm):
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            tracker.register(id(self), self.total, getattr(self, "unit", "it"))
+    root = pathlib.Path(constants.HF_HUB_CACHE)
+    folder = root / ("models--" + checkpoint.replace("/", "--"))
+    return folder if folder.exists() else root
 
-        def update(self, n=1):
-            tracker.advance(id(self), n or 0)
-            return super().update(n)
 
-        def close(self):
-            tracker.close(id(self))
-            super().close()
+def expected_download(checkpoint: str, token: str = "", ignore=()) -> tuple[int, int]:
+    """``(files, bytes)`` the Hub says this checkpoint is, or ``(0, 0)``.
 
-    return _TrackedTqdm
+    Asked before the download so the percentage has a denominator that does
+    not move. The previous version added up the per-file progress bars as they
+    appeared, so its total grew during the download and the percentage could
+    fall — honest, and confusing.
+    """
+    try:
+        from huggingface_hub import HfApi
+
+        info = HfApi().model_info(checkpoint, files_metadata=True, token=token or None)
+        wanted = [
+            s for s in (getattr(info, "siblings", None) or [])
+            if not any(s.rfilename.endswith(p.lstrip("*")) for p in ignore)
+        ]
+        return len(wanted), sum(s.size or 0 for s in wanted)
+    except Exception:  # noqa: BLE001 — a missing denominator is not a failure
+        return 0, 0
 
 
 def download_failure_message(checkpoint: str, error: str) -> str:
@@ -314,6 +339,19 @@ def download_failure_message(checkpoint: str, error: str) -> str:
 # that misses one file the loader wants produces a download that looks
 # complete and fails on the first forecast, which is the worst of the
 # available failures. Excluding formats no torch build reads cannot do that.
+# Formats a PyTorch loader can never use. A model repository often carries
+# the same weights several ways so that every framework finds its own, and
+# fetching all of them is how "1.3 GB" turns into a great deal more.
+#
+# **On Tyche's own checkpoint this list matches nothing**, which the owner
+# noticed: the repository is five files — one 1.23 GB safetensors and four
+# small ones — so the exclusion changes neither the count nor the size. It
+# stays because the setting lets somebody point Tyche at a checkpoint that is
+# not this one, and it costs nothing when there is nothing to skip.
+#
+# An exclusion rather than an allow-list on purpose: a list that misses one
+# file the loader wants produces a download that looks complete and fails on
+# the first forecast.
 SKIPPABLE = (
     "*.h5",             # TensorFlow
     "*.msgpack",        # Flax
@@ -323,47 +361,111 @@ SKIPPABLE = (
     "*.png", "*.jpg", "*.jpeg", "*.gif", "*.svg", "*.pdf",
 )
 
+# How many times a truncated download is resumed before giving up.
+# huggingface_hub continues from what is on disk, so an attempt that stopped
+# at 72% costs the remaining 28% and not the lot.
+DOWNLOAD_ATTEMPTS = 3
+
+# How complete counts as complete. Not 1.0: the Hub's own sizes and what
+# lands on disk can differ by metadata, and a check that demands the last byte
+# would call a working download broken.
+COMPLETE_ENOUGH = 0.995
+
 
 def download_checkpoint(
     checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
     token: str = "",
     progress=None,
     slim: bool = True,
+    attempts: int = DOWNLOAD_ATTEMPTS,
 ) -> str:
-    """Fetch the weights, reporting progress. Returns the local path.
+    """Fetch the weights, reporting progress, and check that they all arrived.
 
-    ``slim`` leaves out the formats in :data:`SKIPPABLE`, which no PyTorch
-    loader reads. **And then it checks that weights actually landed**: if the
-    exclusion took everything usable — because this checkpoint ships in a
-    format the list did not anticipate — the whole repository is fetched
-    instead. A slimmer download that cannot be loaded is not an improvement,
-    and the retry is what makes the exclusion safe to have guessed.
-
-    Resumable by huggingface_hub itself: a second call after a broken
-    connection continues rather than restarting.
+    **The check is the point of this function.** The owner's download stopped
+    at 882 MB of 1.23 GB, several times, and nothing said so: the call
+    returned, the panel moved on, and the next screen reported the weights
+    missing with no hint that 72% of them were sitting in the cache. A
+    truncated download is the normal failure of a gigabyte over a domestic
+    connection, so it is handled rather than merely survived — measured
+    against what the Hub says the repository weighs, and resumed.
     """
-    path = _snapshot(checkpoint, token, progress, ignore=SKIPPABLE if slim else ())
+    ignore = SKIPPABLE if slim else ()
+    files, expected = expected_download(checkpoint, token, ignore)
+    if expected:
+        _report(
+            progress,
+            f"{files} file, {it_bytes(expected)} da scaricare da huggingface.co…",
+        )
+    else:
+        # No denominator: the Hub did not answer. The download can still work,
+        # and saying "connecting" beats saying nothing while it tries.
+        _report(progress, "contatto huggingface.co…")
+
+    path = ""
+    for attempt in range(1, attempts + 1):
+        if attempt > 1:
+            _report(
+                progress,
+                f"download incompleto, riprendo (tentativo {attempt} di {attempts})…",
+            )
+        path = _snapshot(checkpoint, token, progress, ignore, expected)
+        if not expected or _downloaded_bytes(path) >= expected * COMPLETE_ENOUGH:
+            break
+    else:
+        got = _downloaded_bytes(path)
+        raise RuntimeError(
+            f"Il download si è interrotto a {it_bytes(got)} di "
+            f"{it_bytes(expected)} dopo {attempts} tentativi. Quello che è "
+            "arrivato resta nella cache, quindi ripremere il pulsante riprende "
+            "da lì invece di ricominciare."
+        )
+
     if slim and not _has_weights(path):
-        _report(progress, "Nessun file di pesi nella selezione: riscarico tutto.")
-        path = _snapshot(checkpoint, token, progress, ignore=())
+        _report(progress, "nessun file di pesi nella selezione: riscarico tutto.")
+        path = _snapshot(checkpoint, token, progress, (), 0)
     return path
 
 
-def _snapshot(checkpoint: str, token: str, progress, ignore) -> str:
+def _snapshot(checkpoint: str, token: str, progress, ignore, expected: int) -> str:
+    """One attempt, with a thread counting the bytes as they land."""
+    import threading
+
     from huggingface_hub import snapshot_download
 
-    tracker = DownloadProgress(progress)
+    tracker = DiskProgress(repo_cache_dir(checkpoint), expected, progress)
+    done = threading.Event()
+
+    def watch():
+        while not done.wait(0.5):
+            tracker.sample()
+
+    watcher = threading.Thread(target=watch, daemon=True, name="download-progress")
+    watcher.start()
     try:
         path = snapshot_download(
             repo_id=checkpoint,
             token=token or None,
             ignore_patterns=list(ignore) or None,
-            tqdm_class=tracking_tqdm(tracker),
         )
     except Exception as exc:  # noqa: BLE001 — every failure becomes a sentence
         raise RuntimeError(download_failure_message(checkpoint, str(exc))) from exc
-    tracker.finish()
+    finally:
+        done.set()
+        watcher.join(timeout=2)
+    tracker.sample(force=True)
     return str(path)
+
+
+def _downloaded_bytes(path: str) -> int:
+    """What is in the snapshot, for comparing against what was promised."""
+    total = 0
+    for item in pathlib.Path(path).rglob("*"):
+        try:
+            if item.is_file():
+                total += item.stat().st_size
+        except OSError:
+            continue
+    return total
 
 
 def _has_weights(path: str) -> bool:
@@ -462,6 +564,19 @@ def diagnose(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, token: str = "") -> l
             )
         for item in sorted(siblings, key=lambda s: -(s.size or 0))[:10]:
             lines.append(f"    {it_bytes(item.size or 0):>10}  {item.rfilename}")
+
+        # The comparison that says "truncated" rather than leaving two
+        # numbers on the page for a reader to subtract.
+        on_disk = _downloaded_bytes(str(repo_cache_dir(checkpoint)))
+        if total and on_disk < total * COMPLETE_ENOUGH:
+            lines += [
+                "",
+                f"  INCOMPLETO: sul disco ci sono {it_bytes(on_disk)} dei "
+                f"{it_bytes(total)} attesi ({on_disk / total:.0%}). "
+                "Il download si è interrotto; ripremere il pulsante riprende.",
+            ]
+        elif total:
+            lines.append(f"  completo: {it_bytes(on_disk)} sul disco.")
     except Exception as exc:  # noqa: BLE001
         lines.append(f"  non raggiunto — {type(exc).__name__}: {exc}")
 

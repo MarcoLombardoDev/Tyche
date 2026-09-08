@@ -12,6 +12,48 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.2] — 2026-09-08
+
+Il download si interrompeva, e nessuno lo diceva.
+
+La diagnosi ha risposto a tutte e tre le domande in una volta, e nessuna delle
+risposte era quella che pensavamo.
+
+### Corretto
+
+- **Il download si fermava al 72% e il programma non se ne accorgeva.** Sul
+  computer dell'utente la cache conteneva 882 MB del `model.safetensors` da
+  1,23 GB: la chiamata tornava, il pannello proseguiva, e la schermata dopo
+  diceva «pesi assenti» senza un accenno al fatto che tre quarti erano già lì.
+  Ora quello che è arrivato viene confrontato con quello che l'Hub dice che il
+  repository pesa, e il download **riprende** — huggingface_hub continua da
+  ciò che trova, quindi un secondo tentativo costa il resto e non tutto. Se
+  rinuncia, dice a quanto è arrivato e che ripremere riprende; e anche il
+  passo 2 del Percorso adesso scrive «si è fermato a 882 MB di 1,23 GB»
+  invece di «non ancora scaricati».
+- **Non si vedeva alcun avanzamento perché non ce n'era.** La percentuale era
+  costruita agganciando `tqdm_class` di huggingface_hub — parametro
+  documentato, aritmetica coperta da dieci test — e su quella macchina la
+  barra di stato è rimasta ferma su «TimesFM…» per tutto il download. Che
+  hf_hub rispetti quell'aggancio era un'affermazione sulla libreria di
+  qualcun altro, e nessun test qui poteva verificarla.
+
+  Adesso i byte si contano **sul disco**, nella cartella di cache del
+  repository. Un download ripreso parte dal 72% perché è lì che è, il
+  denominatore viene chiesto all'Hub una volta sola e quindi non si muove, e
+  la percentuale non può più scendere.
+
+### Chiarito
+
+- **I «migliaia di file» non sono di questo repository.** L'Hub dice che
+  `google/timesfm-3.0-pytorch` sono **cinque file, 1,23 GB**:
+  `model.safetensors`, la licenza, il README, `.gitattributes` e
+  `config.json`. L'esclusione dei formati introdotta nella 1.0.1 qui non
+  corrisponde a niente, e infatti non ha cambiato né il numero né la
+  dimensione. Resta perché il checkpoint è un'impostazione e un altro
+  repository può davvero portare quattro formati — ma qui non c'era niente da
+  snellire, e dirlo è più utile che vantare un risparmio che non c'è stato.
+
 ## [1.0.1] — 2026-09-08 — `d82aaff`
 
 Scoprire perché TimesFM non parte, e scaricare meno roba.
