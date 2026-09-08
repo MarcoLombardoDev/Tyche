@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.0.0] — 2026-09-08
+## [1.0.0] — 2026-09-08 — `bc7cf6f`
 
 La prima versione che si legge senza spiegazioni.
 
