@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [0.9.1] — 2026-09-08
+## [0.9.1] — 2026-09-08 — `9293f24`
 
 Ripubblicare una versione già rilasciata non funzionava.
 
