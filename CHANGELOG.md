@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.0.8] — 2026-09-12
+## [1.0.8] — 2026-09-12 — `9cfb588`
 
 Il SuperStar dentro una stella, e i numeri della stessa misura.
 
