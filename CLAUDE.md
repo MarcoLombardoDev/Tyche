@@ -1037,6 +1037,29 @@ version asserted only "more than one distinct value", which passes with every
 method but the random control collapsed onto the frequency count — checked by
 mutation.
 
+**The SuperStar's badge is a polygon, because CustomTkinter has no star.**
+1.0.8. `CTkLabel` draws a rounded rectangle and nothing else, so the first
+attempt was a ★ character beside an ordinary purple ball — the same thing said
+twice, in two widgets to keep aligned. `gui.widgets.star_badge` draws a real
+five-pointed star on a `CTkCanvas` with the number inside it.
+
+Three things about it are not free choices:
+
+- **`_STAR_INNER` is 0.55, not the 0.382 of a regular pentagram.** The elegant
+  proportion leaves a centre too small for two digits, and the number ends up
+  across the points rather than in the shape.
+- **The badge is 50px where a ball is 30**, for the same reason: a star's
+  usable middle is a fraction of its bounding box.
+- **The canvas is opaque**, so `background` has to match what it sits on or
+  the star arrives in a grey square. That is why `star_badge` takes it rather
+  than assuming `BG_PANEL`.
+
+`test_the_superstar_is_a_purple_star_with_its_number_in_it` checks the
+polygon's *radii alternate* — five far, five near — and not merely that it has
+ten vertices. A decagon has ten too and reads as a circle; the first version
+of that assertion passed with every vertex pushed out to the same radius,
+checked by mutation.
+
 **Beside «Genera» the strip says nothing when nothing is wrong.** 1.0.7, and
 the rule generalises: a status line next to a button is read on every visit,
 so it should earn that by carrying something to act on. `ModelStatus` takes

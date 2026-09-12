@@ -18,6 +18,7 @@ undone later.
 
 from __future__ import annotations
 
+import math
 import tkinter
 
 import customtkinter as ctk
@@ -145,3 +146,58 @@ def ball_row(parent, numbers, size: int = 38) -> ctk.CTkFrame:
             font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
         ).pack(side="left", padx=3)
     return row
+
+
+
+# How deep the star's notches cut. A regular pentagram is 0.382, which is
+# elegant and leaves a centre too small to put two digits in: the number would
+# sit over the points rather than inside the shape. 0.55 is a fatter star —
+# still unmistakably a star, with a body that holds "49".
+_STAR_INNER = 0.55
+
+
+def _star_points(centre: float, outer: float, inner: float, points: int = 5) -> list[float]:
+    """Flat x,y pairs for a star with one point straight up.
+
+    ``-pi/2`` is what puts that point at the top; without it the polygon comes
+    out rotated and reads as a cog.
+    """
+    coords: list[float] = []
+    for index in range(points * 2):
+        radius = outer if index % 2 == 0 else inner
+        angle = -math.pi / 2 + index * math.pi / points
+        coords += [centre + radius * math.cos(angle), centre + radius * math.sin(angle)]
+    return coords
+
+
+def star_badge(parent, number: int, size: int = 42, background: str = BG_PANEL):
+    """The SuperStar: its number inside a star in Tyche's own purple.
+
+    **A shape rather than a glyph, and a canvas because CustomTkinter has no
+    star.** ``CTkLabel`` draws a rounded rectangle and nothing else, so the
+    first version put a ★ character beside an ordinary purple ball — which
+    said "this one is the SuperStar" in two pieces where one will do. Tk's
+    canvas draws polygons natively, so the badge is a real star with the
+    number in the middle of it and no second widget to align.
+
+    ``background`` has to match what the badge sits on: a canvas is opaque and
+    a wrong colour here shows as a grey square around the star.
+    """
+    canvas = ctk.CTkCanvas(
+        parent, width=size, height=size, bg=background,
+        highlightthickness=0, bd=0,
+    )
+    centre = size / 2
+    canvas.create_polygon(
+        _star_points(centre, centre, centre * _STAR_INNER),
+        fill=ACCENT, outline="",
+    )
+    # A point-up star carries more of its area below the centre of its
+    # bounding circle, so text placed at the geometric middle reads high. The
+    # nudge is small and it is the difference between "in the star" and
+    # "floating in it".
+    canvas.create_text(
+        centre, centre + size * 0.04, text=f"{number:02d}", fill="#ffffff",
+        font=(ui_font_family(), max(11, round(size * 0.28)), "bold"),
+    )
+    return canvas

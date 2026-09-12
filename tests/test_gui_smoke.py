@@ -137,7 +137,14 @@ def _generate(app, count: str = "1"):
         if panel._predictions:
             return panel
         time.sleep(0.02)
-    raise AssertionError(f"no prediction after waiting: {app._status.cget('text')}")
+    raise AssertionError(
+        "no prediction after waiting: "
+        f"status={app._status.cget('text')!r} busy={app._busy} "
+        f"queued={app._queue.qsize()} "
+        # Which of the two it was matters: still busy means the worker is
+        # genuinely slow, while not-busy with a full queue means the result
+        # arrived and the main loop never drained it.
+    )
 
 
 def test_window_opens_with_every_panel(app):
@@ -951,36 +958,62 @@ def test_every_settings_field_is_actually_on_the_screen(app):
         )
 
 
-def test_the_superstar_rides_on_the_numbers_row_with_a_star_and_no_label(app):
-    """One row, right-aligned, a star instead of the word.
+def test_the_superstar_is_a_purple_star_with_its_number_in_it(app):
+    """One widget on the numbers' own row, right-aligned, and star-shaped.
 
-    "SuperStar" cost seventy pixels the combinations wanted and a whole row of
-    its own; the star says the same thing in the width of a character. And it
-    is packed last so that a window too narrow for a twelve-number system
-    loses the star rather than the numbers — which is what "if there is room"
-    has to mean to be true.
+    "SuperStar" as a label cost seventy pixels the combinations wanted and a
+    row of its own. A ★ character beside an ordinary purple ball replaced it
+    and still said the same thing twice, in two widgets. CustomTkinter draws
+    rounded rectangles and nothing else, so the badge is a Tk canvas with a
+    real polygon on it — which is also what makes this test able to check the
+    *shape* rather than a character somebody's font may not have.
     """
-    import customtkinter as ctk
+    import tkinter
 
-    from gui.prediction_panel import SUPERSTAR_MARK
+    from gui.theme import ACCENT
 
     app.settings["predict_superstar"] = True
     panel = _generate(app)
 
     cell = panel._cells["frequenza"]
     first_row = cell.balls.winfo_children()[0]
-    stars = [
-        child for frame in first_row.winfo_children()
-        if isinstance(frame, ctk.CTkFrame)
-        for child in frame.winfo_children()
-        if isinstance(child, ctk.CTkLabel) and SUPERSTAR_MARK in child.cget("text")
+    canvases = [
+        child for child in first_row.winfo_children()
+        if isinstance(child, tkinter.Canvas)
     ]
-    assert stars, "the SuperStar is not on the same row as the numbers"
-    assert stars[0].cget("text_color") == "#ffffff"
+    assert canvases, "the SuperStar is not on the same row as the numbers"
+    canvas = canvases[0]
 
-    texts = _all_label_texts(cell)
-    assert not any("SuperStar" in t for t in texts), (
-        "the star is there to replace that label, not to sit beside it"
+    polygons = [i for i in canvas.find_all() if canvas.type(i) == "polygon"]
+    assert len(polygons) == 1
+    assert canvas.itemcget(polygons[0], "fill") == ACCENT
+    # Ten vertices is not enough to prove a star — a decagon has ten too, and
+    # reads as a circle. The radii have to *alternate*: five far, five near.
+    # Checked by mutation, because the first version of this assertion passed
+    # with every vertex pushed out to the same radius.
+    import math
+
+    coords = canvas.coords(polygons[0])
+    assert len(coords) == 20
+    centre = int(canvas.cget("width")) / 2
+    radii = [
+        math.hypot(x - centre, y - centre)
+        for x, y in zip(coords[::2], coords[1::2], strict=True)
+    ]
+    points, notches = radii[::2], radii[1::2]
+    assert min(points) > max(notches) * 1.4, (
+        f"the notches are not deep enough to be a star: {radii}"
+    )
+
+    texts = [i for i in canvas.find_all() if canvas.type(i) == "text"]
+    assert len(texts) == 1
+    shown = canvas.itemcget(texts[0], "text")
+    assert int(shown) == panel._predictions["frequenza"].superstar
+    assert canvas.itemcget(texts[0], "fill") == "#ffffff"
+
+    texts_in_cell = _all_label_texts(cell)
+    assert not any("SuperStar" in t for t in texts_in_cell), (
+        "the badge is there to replace that label, not to sit beside it"
     )
 
 

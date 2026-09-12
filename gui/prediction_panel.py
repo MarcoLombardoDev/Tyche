@@ -59,6 +59,7 @@ from gui.widgets import (
     fit_text,
     heading_font,
     section,
+    star_badge,
 )
 
 _METHOD_LABELS = {
@@ -68,11 +69,11 @@ _METHOD_LABELS = {
     "casuale": "Casuale (la condizione di controllo)",
 }
 
-# The star that marks the SuperStar. No label beside it: a row of six purple
-# balls and a seventh needs one thing said about the seventh, and a symbol
-# says it in the width of a character where "SuperStar" costs seventy pixels
-# the combinations want.
-SUPERSTAR_MARK = "★"
+# The SuperStar's badge, in pixels. Larger than a ball (30) because a star's
+# usable middle is a fraction of its bounding box: at 30 the number would sit
+# across the points instead of inside the shape.
+SUPERSTAR_SIZE = 50
+
 
 # What each cell says under the method's name. Short: the cell is a quarter of
 # the window and the numbers are the point.
@@ -225,22 +226,20 @@ class _MethodCell(ctk.CTkFrame):
     def _star(self, line, number: int) -> None:
         """The SuperStar, on the numbers' own row and right-aligned.
 
+        **One widget, not two.** The first version put a ★ character beside an
+        ordinary purple ball, which says "this one is the SuperStar" in two
+        pieces where one will do; the badge is now a star-shaped thing with
+        the number inside it.
+
         Packed *after* the combination and to the right, which is what makes
         "if there is room" true rather than a hope: pack hands the first
         widget its requested width and this one takes what is left, so a
         window too narrow for a twelve-number system loses the star and not
         the numbers.
         """
-        star = ctk.CTkFrame(line, fg_color="transparent")
-        star.pack(side="right")
-        # Bold, and bigger than the body, which is the one exemption the
-        # "everything a reader reads is one size" rule has — and it applies
-        # here for the reason it exists: this is a glyph doing the job of an
-        # icon beside a 30px ball, not a word in a sentence.
-        ctk.CTkLabel(
-            star, text=SUPERSTAR_MARK, text_color="#ffffff", font=heading_font(16),
-        ).pack(side="left", padx=(0, 4))
-        ball_row(star, (number,), size=30).pack(side="left")
+        star_badge(line, number, size=SUPERSTAR_SIZE, background=BG_PANEL).pack(
+            side="right", padx=(6, 0),
+        )
 
 
 def _score_lines(prediction) -> list[str]:

@@ -12,6 +12,28 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.8] — 2026-09-12
+
+Il SuperStar dentro una stella, e basta.
+
+### Modificato
+
+- **Il numero del SuperStar sta dentro una stella viola**, al posto della
+  pallina viola con una stellina di fianco. Era la stessa cosa detta due
+  volte, in due pezzi da tenere allineati: adesso la forma *è* il segnale.
+
+  CustomTkinter disegna rettangoli arrotondati e nient'altro, quindi il
+  distintivo è un poligono su una tela di Tk — il che rende anche possibile
+  *verificarne la forma* invece di verificare la presenza di un carattere che
+  il font di qualcun altro potrebbe non avere. È più grande delle palline
+  perché il centro utile di una stella è una frazione del suo ingombro: a 30
+  pixel le due cifre finirebbero a cavallo delle punte invece che dentro il
+  corpo.
+
+  Le punte sono meno affilate di un pentagramma regolare — le rientranze si
+  fermano al 55% del raggio invece che al 38% — per la stessa ragione: un
+  pentagramma è più elegante e non ha un centro in cui scrivere «49».
+
 ## [1.0.7] — 2026-09-12 — `9d4ba89`
 
 La scheda Previsione rimessa in ordine: le risposte a sinistra, i conti a
