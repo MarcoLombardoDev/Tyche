@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.0.6] — 2026-09-12
+## [1.0.6] — 2026-09-12 — `3a45422`
 
 Al modello si danno le estrazioni grezze, e basta.
 
