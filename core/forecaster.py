@@ -51,7 +51,7 @@ from __future__ import annotations
 import numpy as np
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, Draw
-from core.features import DEFAULT_WINDOW, build_context
+from core.features import DEFAULT_WINDOW, build_context, build_superstar_context
 from core.model_store import ensure_checkpoint, resolve_checkpoint
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 
@@ -211,6 +211,41 @@ class TimesFMForecaster:
             window=self.window,
             context_length=self.context_length,
         )
+        return self._forecast(context, progress)
+
+    def score_superstar(self, draws: list[Draw], progress=None) -> dict[int, float]:
+        """One score per number for the *SuperStar* of the next draw.
+
+        A second forward pass over a second set of ninety series, because the
+        SuperStar comes out of a different urn. Asking the model about the
+        wheel and then handing its answer to the SuperStar would be answering
+        a question nobody asked — which is what Tyche did until 1.0.5, where
+        every method that was not the random control printed the same
+        SuperStar.
+
+        It costs what the main forecast costs, and it only runs when the user
+        asked for a SuperStar.
+        """
+        if self._model is None:
+            raise ForecasterUnavailable(
+                "TimesFM non è caricato — chiama prima load_model()"
+            )
+        recorded = sum(1 for d in draws if d.has_superstar)
+        if recorded < MIN_CONTEXT_DRAWS:
+            raise ForecasterUnavailable(
+                f"{recorded} estrazioni con SuperStar sono troppo poche: ne "
+                f"servono almeno {MIN_CONTEXT_DRAWS}"
+            )
+        context = build_superstar_context(
+            draws,
+            representation=self.representation,
+            window=self.window,
+            context_length=self.context_length,
+        )
+        return self._forecast(context, progress)
+
+    def _forecast(self, context, progress=None) -> dict[int, float]:
+        """One forward pass over a ninety-series context, as a score per number."""
         _report(
             progress,
             f"Prevedo {context.shape[0]} serie su {context.shape[1]} estrazioni…",

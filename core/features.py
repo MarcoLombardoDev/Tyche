@@ -43,10 +43,18 @@ import numpy as np
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, Draw
 
-# Trailing window for the frequency series, in draws. Roughly a year at the
-# current schedule of three draws a week, which is long enough for the
-# smoothing to be worth anything and short enough that the series still moves.
-DEFAULT_WINDOW = 150
+# Trailing window for the frequency series, in draws: one year.
+#
+# **Counted off the archive rather than assumed, and the old value was a year
+# that stopped existing.** 150 was "roughly a year at three draws a week",
+# which the game drew until 2022 — 156, 157, 156, 157 a year through the
+# 2010s. The schedule changed: 182 draws in 2023, then **208 in 2024 and 208
+# in 2025**, which is four a week. A window of 150 is now about nine months,
+# and nothing said so.
+#
+# 208 rather than 210: fifty-two weeks times four is what the archive counts,
+# twice, exactly.
+DEFAULT_WINDOW = 208
 
 
 def presence_matrix(draws: list[Draw]) -> np.ndarray:
@@ -162,18 +170,28 @@ def decade_profile(draw: Draw) -> list[int]:
     return buckets
 
 
-def build_context(
-    draws: list[Draw],
-    representation: str = "frequenza",
-    window: int = DEFAULT_WINDOW,
-    context_length: int | None = None,
-) -> np.ndarray:
-    """``(90, context_length)`` float32 ready for TimesFM.
+def superstar_presence_matrix(draws: list[Draw]) -> np.ndarray:
+    """``(90, drawn)`` 0/1 over the SuperStar's *own* drum.
 
-    ``representation`` picks which of the three views above to hand the model.
-    ``context_length`` trims to the most recent columns; None keeps everything.
+    Only draws that carry one. The game began on 28 March 2006 and every draw
+    before it stores 0 for "not on record": including those columns would
+    teach a forecaster nine hundred draws in which no number was ever the
+    SuperStar, which is a fact about the archive and not about the drum.
     """
-    presence = presence_matrix(draws)
+    recorded = [d for d in draws if d.has_superstar]
+    matrix = np.zeros((NUMBER_MAX, len(recorded)), dtype=np.float32)
+    for column, draw in enumerate(recorded):
+        matrix[draw.superstar - 1, column] = 1.0
+    return matrix
+
+
+def _view(
+    presence: np.ndarray,
+    representation: str,
+    window: int,
+    context_length: int | None,
+) -> np.ndarray:
+    """One of the three views of a presence matrix, trimmed and ready."""
     if representation == "presenza":
         series = presence
     elif representation == "frequenza":
@@ -185,3 +203,34 @@ def build_context(
     if context_length is not None and series.shape[1] > context_length:
         series = series[:, -context_length:]
     return np.ascontiguousarray(series, dtype=np.float32)
+
+
+def build_context(
+    draws: list[Draw],
+    representation: str = "frequenza",
+    window: int = DEFAULT_WINDOW,
+    context_length: int | None = None,
+) -> np.ndarray:
+    """``(90, context_length)`` float32 ready for TimesFM.
+
+    ``representation`` picks which of the three views above to hand the model.
+    ``context_length`` trims to the most recent columns; None keeps everything.
+    """
+    return _view(presence_matrix(draws), representation, window, context_length)
+
+
+def build_superstar_context(
+    draws: list[Draw],
+    representation: str = "frequenza",
+    window: int = DEFAULT_WINDOW,
+    context_length: int | None = None,
+) -> np.ndarray:
+    """The same three views, over the SuperStar's drum instead of the wheel.
+
+    Separate from :func:`build_context` rather than a flag on it, because the
+    two answer different questions about different urns and a caller that got
+    the flag wrong would get a plausible-looking forecast of the wrong thing.
+    """
+    return _view(
+        superstar_presence_matrix(draws), representation, window, context_length
+    )

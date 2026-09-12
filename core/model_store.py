@@ -694,11 +694,40 @@ def download_checkpoint(
     return path
 
 
+def _quiet_hub() -> None:
+    """Stop huggingface_hub drawing a progress bar, and give it a stream anyway.
+
+    **Both halves, because either one alone leaves a way to fail.** A windowed
+    build has ``sys.stderr is None``, the bar writes to it, and the download
+    dies on ``'NoneType' object has no attribute 'write'`` — reported as a
+    failed download, which it is not. :mod:`core.streams` repairs the stream
+    at startup; this repeats it because a download can be the first thing that
+    ever writes and the cost of asking twice is nothing.
+
+    And the bar is turned off regardless: Tyche measures the download off the
+    disk and shows its own percentage, so hf_hub's would be drawn into the
+    null device for no one. The runtime call rather than the environment
+    variable, because the variable is read once when huggingface_hub is
+    imported and by this point it has been.
+    """
+    from core.streams import ensure_writable_streams
+
+    ensure_writable_streams()
+    try:
+        from huggingface_hub.utils import disable_progress_bars
+
+        disable_progress_bars()
+    except Exception:  # noqa: BLE001 — an unwanted progress bar is not fatal
+        pass
+
+
 def _snapshot(checkpoint: str, token: str, progress, ignore, expected: int) -> str:
     """One attempt, with a thread counting the bytes as they land."""
     import threading
 
     from huggingface_hub import snapshot_download
+
+    _quiet_hub()
 
     tracker = DiskProgress(repo_cache_dir(checkpoint), expected, progress)
     done = threading.Event()

@@ -108,10 +108,16 @@ class Prediction:
 def frequency_scores(draws: list[Draw], window: int = DEFAULT_WINDOW) -> dict[int, float]:
     """How often each number came up in the last ``window`` draws.
 
-    The "hot numbers" method. Over a window of 150 draws each number is
-    expected 10 times with a standard deviation of about 3, so the hottest
-    number in any given window is typically 6 or 7 ahead of the coldest by
-    chance alone — which is exactly as much of a pattern as this produces.
+    The "hot numbers" method. Over a window of 208 draws each number is
+    expected 13.9 times with a standard deviation of 3.6, and simulating that
+    window four thousand times puts the hottest number **18 ahead of the
+    coldest**, and 9 above its own expectation, by chance alone — which is
+    exactly as much of a pattern as this method produces.
+
+    The old wording of this said "6 or 7 ahead of the coldest" at a window of
+    150. That was wrong by half: the same simulation at 150 gives 15. Nothing
+    turns on it except how impressive the table looks, which is the reason to
+    get it right.
     """
     recent = draws[-window:] if window else draws
     tally = counts(recent)
@@ -162,6 +168,60 @@ def superstar_scores(draws: list[Draw], window: int = DEFAULT_WINDOW) -> dict[in
     total = max(len(recent), 1)
     tally = Counter(d.superstar for d in recent)
     return {n: tally[n] / total for n in ALL_NUMBERS}
+
+
+def superstar_gap_scores(draws: list[Draw]) -> dict[int, float]:
+    """Draws since each number last came out of the *SuperStar* drum.
+
+    The *ritardo* question asked of the right urn. Counted over the draws that
+    carry a SuperStar and nothing else, so a number last seen before 2006 is
+    reported as absent for the whole recorded history rather than for the
+    whole archive.
+    """
+    recorded = [d for d in draws if d.has_superstar]
+    last_seen: dict[int, int | None] = dict.fromkeys(ALL_NUMBERS)
+    for position, draw in enumerate(recorded):
+        last_seen[draw.superstar] = position
+    total = len(recorded)
+    return {
+        n: float(total - 1 - seen if seen is not None else total)
+        for n, seen in last_seen.items()
+    }
+
+
+def superstar_pick(
+    draws: list[Draw],
+    method: str,
+    window: int = DEFAULT_WINDOW,
+    forecaster=None,
+    seed: int | None = None,
+    progress=None,
+) -> int:
+    """The SuperStar each method would play, asked its own way.
+
+    **Every method used to answer this identically**, because the pick went
+    through :func:`superstar_scores` whatever the method was, and only the
+    random control differed. The owner spotted it on screen: four cells, four
+    different sets of six numbers, and the same SuperStar in three of them.
+
+    The drum is still separate — that part was right, and mixing the wheel's
+    counts into it would be an error of fact. What was wrong is that "separate
+    urn" was being read as "one fixed way of choosing", when a method *is* a
+    way of choosing. So each one now asks its own question of the SuperStar's
+    own history: frequency counts it, gap measures its absence, TimesFM
+    forecasts its series, chance draws at random.
+
+    TimesFM falls back to the frequency count when no loaded model was handed
+    in — the caller already knows the model is missing and has said so, and a
+    missing SuperStar would be a second, quieter report of the same fact.
+    """
+    if method == "casuale":
+        return rank_numbers(random_scores(seed))[0]
+    if method == "ritardo":
+        return rank_numbers(superstar_gap_scores(draws))[0]
+    if method == "timesfm" and forecaster is not None:
+        return rank_numbers(forecaster.score_superstar(draws, progress=progress))[0]
+    return rank_numbers(superstar_scores(draws, window))[0]
 
 
 def rank_numbers(scores: dict[int, float], descending: bool = True) -> list[int]:
@@ -246,15 +306,20 @@ def predict(
 
     ranked = rank_numbers(scores)
 
-    # The SuperStar is ranked by its own history, never by the main scores:
-    # separate drum, separate question. The random baseline stays random here
-    # too, so the control condition is a control on the whole ticket.
+    # The SuperStar is ranked by its own history, never by the main scores —
+    # separate drum, separate question — and by *this method's* way of asking
+    # it. The random baseline stays random here too, so the control condition
+    # is a control on the whole ticket.
     star = None
     if superstar:
-        if method == "casuale":
-            star = rank_numbers(random_scores(seed))[0]
-        else:
-            star = rank_numbers(superstar_scores(draws, window))[0]
+        star = superstar_pick(
+            draws,
+            method,
+            window=window,
+            forecaster=forecaster,
+            seed=seed,
+            progress=progress,
+        )
 
     return Prediction(
         method=method,

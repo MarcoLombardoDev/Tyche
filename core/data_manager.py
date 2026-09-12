@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from core.features import DEFAULT_WINDOW
 from core.paths import writable_base_dir
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 
@@ -59,7 +60,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # to follow; "presenza" is the honest raw series and forecasts as a flat
     # line at 0.067, which is itself worth seeing once.
     "representation": "frequenza",
-    "frequency_window": 150,
+    "frequency_window": DEFAULT_WINDOW,
     # TimesFM 3.0 accepts up to 16k context. 1024 draws is about six and a
     # half years, long enough to cover any seasonality the game could have and
     # short enough to keep a CPU forecast to a few seconds.

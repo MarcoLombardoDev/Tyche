@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.localise import it_count, it_date, it_number
 from core.predictor import METHODS
+from core.streams import ensure_writable_streams
 from core.version import APP_NAME, APP_TITLE, __version__
 
 
@@ -421,6 +422,12 @@ def _run_forecast(method: str) -> int:
 
 
 def main() -> int:
+    # First, before anything can try to write: a windowed Windows build starts
+    # with sys.stdout and sys.stderr set to None, and the first library that
+    # writes to one — huggingface_hub's download progress bar did — raises
+    # "'NoneType' object has no attribute 'write'" at the user.
+    ensure_writable_streams()
+
     args = _parse_args()
     if args.version:
         # Not argparse's own "version" action: that writes to sys.stdout

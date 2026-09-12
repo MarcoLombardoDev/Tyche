@@ -12,6 +12,48 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.5] — 2026-09-12
+
+Il download falliva per una barra di avanzamento, e il SuperStar era sempre lo
+stesso.
+
+### Corretto
+
+- **«Scarica il modello» rispondeva `'NoneType' object has no attribute
+  'write'`**, che sembra un errore di rete e non lo è. Un programma con una
+  finestra e senza console — che è come Tyche è costruito su Windows — parte
+  con `sys.stdout` e `sys.stderr` a `None`. `print()` sopravvive in silenzio,
+  quindi la cosa resta invisibile finché una libreria non scrive davvero su
+  quei canali: `huggingface_hub` disegna la percentuale del download sullo
+  standard error, e lì moriva. **È molto probabilmente anche ciò che
+  interrompeva il download da settimane**: i byte arrivavano, e a rompersi era
+  la cosa che disegnava la percentuale. Adesso i due canali esistono sempre, e
+  la barra di huggingface_hub viene spenta — Tyche misura il download dal
+  disco e la sua percentuale la stampa per conto suo.
+
+- **Il SuperStar era identico in tre metodi su quattro.** L'urna separata era
+  giusta — mescolare i conteggi della ruota sarebbe un errore di fatto — ma
+  «urna separata» era stato letto come «un solo modo di scegliere», e un
+  metodo *è* un modo di scegliere. Adesso ciascuno fa la sua domanda alla
+  storia del SuperStar: la frequenza lo conta, il ritardo ne misura l'assenza,
+  TimesFM ne prevede la serie con una seconda passata del modello, il caso lo
+  sorteggia. Solo quando chiedi il SuperStar, che di default è spento.
+
+- **La finestra mobile era un anno che non esiste più.** 150 estrazioni erano
+  «circa un anno a tre estrazioni a settimana», ed è così che il gioco ha
+  estratto fino al 2022: 156, 157, 156, 157 l'anno per tutti gli anni Dieci.
+  Poi il calendario è cambiato — 182 estrazioni nel 2023, **208 nel 2024 e 208
+  nel 2025**, cioè quattro a settimana. Il valore predefinito è ora **208**,
+  contato sull'archivio e non stimato, e la spiegazione nelle impostazioni lo
+  dice.
+
+  Nella stessa riga: la documentazione del metodo «frequenza» diceva che per
+  caso il numero più caldo sta «6 o 7 avanti al più freddo». Era sbagliato per
+  metà — simulando quella finestra quattromila volte lo scarto è **18**, e il
+  più caldo sta 9 sopra la propria attesa. Non cambia niente se non quanto
+  impressionante sembra la tabella, che è esattamente il motivo per cui deve
+  essere giusto.
+
 ## [1.0.4] — 2026-09-12 — `58c6fe6`
 
 Il modello non si caricava, e non era colpa dei pesi.

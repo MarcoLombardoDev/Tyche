@@ -53,7 +53,10 @@ FIELDS = [
      "grezzo 0/1 e produce una previsione piatta, cosa che vale la pena vedere una "
      "volta."),
     ("frequency_window", "Finestra mobile (estrazioni)", "text",
-     "Finestra all'indietro per la serie di frequenza. 150 è circa un anno."),
+     "Quante estrazioni all'indietro guarda il metodo «frequenza» (e la serie "
+     "lisciata, se è quella che dài al modello). 208 è un anno esatto alle "
+     "quattro estrazioni a settimana di oggi: l'archivio ne conta 208 nel 2024 "
+     "e 208 nel 2025. Fino al 2022 erano tre a settimana, cioè 156."),
     ("context_length", "Lunghezza del contesto (estrazioni)", "text",
      "Quanto storico vede TimesFM. La 3.0 accetta fino a 16k; 1024 tiene corta "
      "un'esecuzione su CPU."),

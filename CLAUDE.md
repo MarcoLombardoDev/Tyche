@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 383, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 435, GUI included
+python -m pytest tests/ -q                                   # 388, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 440, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`383 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`388 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -951,6 +951,55 @@ Three decisions in the same change:
   hand or missing its `refs`. It is split out of `repo_cache_dir` precisely
   because that one falls back to the *cache root*, and searching the root would
   find another model's `config.json` and report a checkpoint nobody asked for.
+
+**A windowed build has no standard streams, and a library that writes to one
+kills the download.** 1.0.5. `Tyche.spec` passes `console=False` on Windows,
+so PyInstaller starts the interpreter with `sys.stdout` and `sys.stderr` set
+to **None** — not closed files. `print()` survives that (CPython checks for
+None and does nothing), which is exactly why the absence stays invisible:
+nothing fails until some library writes to the stream itself.
+huggingface_hub's download progress bar does, and «Scarica il modello»
+answered `'NoneType' object has no attribute 'write'` — which reads like a
+network fault. It is very probably also what had been truncating that download
+for weeks: the bytes were arriving and the thing drawing the percentage was
+raising.
+
+`core/streams.ensure_writable_streams()` is the first line of `main()`, before
+`_parse_args`. It repairs `__stdout__` and `__stderr__` too, because a library
+reaching for the originals is unusual and not rare, and it keeps the null
+device open for the life of the process on purpose — ruff's SIM115 is right
+about almost every other `open()` and wrong about that one. `_quiet_hub()` in
+`model_store` then also turns hf_hub's bar off through
+`disable_progress_bars()` rather than the environment variable, because the
+variable is read when huggingface_hub is imported and by download time it has
+been. Tyche measures the download off the disk, so their bar was only ever
+going to be drawn into the null device anyway.
+
+**Each method picks its own SuperStar.** Also 1.0.5, and the owner found it by
+looking at the four cells: four different sets of six numbers and the same
+SuperStar in three of them. The separate drum was right — mixing the wheel's
+counts into it is an error of fact — but "separate urn" had been implemented
+as "one fixed way of choosing", and a method *is* a way of choosing.
+`superstar_pick` now routes each one to its own question over the SuperStar's
+own history: `superstar_scores` counts, `superstar_gap_scores` measures
+absence, `TimesFMForecaster.score_superstar` forecasts a second set of ninety
+series built by `build_superstar_context`, and the control stays random. That
+is a **second forward pass**, about as expensive as the first, and it only
+happens when `predict_superstar` is on — which it is not by default.
+`test_each_method_picks_its_own_superstar` asserts the picks are *pairwise*
+distinct and then checks each against its own scoring function: an earlier
+version asserted only "more than one distinct value", which passes with every
+method but the random control collapsed onto the frequency count — checked by
+mutation.
+
+**`DEFAULT_WINDOW` is 208, and it is counted rather than assumed.** It was
+150, "roughly a year at three draws a week", and that is what the game drew
+until 2022 — 156, 157, 156, 157 through the 2010s. The schedule changed: 182
+in 2023, then 208 in 2024 and 208 in 2025, four a week. A window of 150 had
+quietly become nine months. While correcting it, the `frequency_scores`
+docstring turned out to be wrong by half as well: simulating the window four
+thousand times puts the hottest number 18 ahead of the coldest by chance,
+where it claimed "6 or 7".
 
 **Importable is not the same as visible, and that distinction cost a
 release.** 1.0.4. The weights were complete on disk, every screen said

@@ -4,7 +4,7 @@
   "hf_token": "",
   "timesfm_local_dir": "",
   "representation": "frequenza",
-  "frequency_window": 150,
+  "frequency_window": 208,
   "context_length": 1024,
   "auto_repair_labels": true,
   "combinations": 1,

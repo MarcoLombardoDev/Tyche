@@ -100,6 +100,29 @@ def random_archive(n: int, seed: int = 0) -> list[Draw]:
     return draws
 
 
+def archive_with_superstars(n: int, seed: int = 1) -> list[Draw]:
+    """Independent draws that also carry a SuperStar from its own drum.
+
+    ``random_archive`` leaves the SuperStar at 0, which means "not on record"
+    — every draw before 28 March 2006 stores that. A test about the SuperStar
+    needs an archive that has one.
+    """
+    rng = random.Random(seed)
+    draws = []
+    start = date(2008, 1, 1)
+    for i in range(n):
+        picked = rng.sample(range(1, NUMBER_MAX + 1), 7)
+        draws.append(Draw(
+            date=start + timedelta(days=3 * i),
+            contest=i + 1,
+            numbers=tuple(picked[:6]),
+            jolly=picked[6],
+            superstar=rng.randint(1, NUMBER_MAX),
+            year=2008,
+        ))
+    return draws
+
+
 # ─────────────────────────────────────────────────────────────
 # Draw validation
 # ─────────────────────────────────────────────────────────────
@@ -2280,3 +2303,128 @@ def test_the_self_check_fails_a_bundle_whose_loader_cannot_read_weights(monkeypa
     assert not message.startswith("timesfm: nel pacchetto"), (
         "release.yml greps for that line: the broken case must not satisfy it"
     )
+
+
+def test_each_method_picks_its_own_superstar():
+    """Three of the four printed the same one, and the owner saw it on screen.
+
+    The drum being separate was right; reading that as "one fixed way of
+    choosing" was not. A method *is* a way of choosing, so each asks its own
+    question of the SuperStar's own history.
+    """
+    from core.predictor import (
+        rank_numbers,
+        superstar_gap_scores,
+        superstar_pick,
+        superstar_scores,
+    )
+
+    draws = archive_with_superstars(400)
+    picks = {
+        method: superstar_pick(draws, method, seed=7)
+        for method in ("frequenza", "ritardo", "casuale")
+    }
+    for method, pick in picks.items():
+        assert 1 <= pick <= 90, f"{method} produced {pick}"
+
+    # Pairwise, not "more than one distinct value": the random control alone
+    # differing is what the broken version already did, and asserting that
+    # passes with every other method collapsed onto the frequency count.
+    assert len(set(picks.values())) == len(picks), (
+        f"two methods chose the same SuperStar: {picks}"
+    )
+
+    # And each one is really its own scoring function, not a coincidence of
+    # this fixture: the symptom test above cannot tell those apart.
+    assert picks["ritardo"] == rank_numbers(superstar_gap_scores(draws))[0]
+    assert picks["frequenza"] == rank_numbers(superstar_scores(draws))[0]
+
+
+def test_the_superstar_is_ranked_on_its_own_drum_and_not_on_the_wheel():
+    """Mixing the two counts would be an error of fact, not of taste.
+
+    A number can be cold on the wheel and hot on the SuperStar: they are
+    independent draws, and the archive shows the SuperStar repeating one of
+    the six 247 times against 223 expected.
+    """
+    from core.predictor import gap_scores, superstar_gap_scores
+
+    draws = archive_with_superstars(400)
+    wheel = gap_scores(draws)
+    drum = superstar_gap_scores(draws)
+    assert wheel != drum, "the SuperStar gaps are the wheel's gaps"
+    recorded = sum(1 for d in draws if d.has_superstar)
+    assert max(drum.values()) <= recorded, (
+        "a gap longer than the recorded history means draws before 2006 were counted"
+    )
+
+
+def test_the_superstar_forecast_asks_about_the_superstar_drum(monkeypatch):
+    """TimesFM gets a second forward pass, over a second set of ninety series.
+
+    Handing it the wheel's context and calling the answer a SuperStar would
+    be answering a question nobody asked.
+    """
+    import numpy as np
+
+    from core.features import build_context, build_superstar_context
+    from core.forecaster import TimesFMForecaster
+
+    draws = archive_with_superstars(400)
+    wheel = build_context(draws, context_length=64)
+    drum = build_superstar_context(draws, context_length=64)
+    assert wheel.shape[0] == drum.shape[0] == 90
+    assert not np.array_equal(wheel, drum)
+
+    seen = {}
+
+    class _Model:
+        def predict_batch(self, contexts, horizon, return_quantiles):
+            seen["context"] = contexts[0]
+            return [type("O", (), {"forecast": np.arange(90, dtype=float)})()]
+
+    forecaster = TimesFMForecaster()
+    forecaster._model = _Model()
+    forecaster.score_superstar(draws)
+    assert np.array_equal(seen["context"], build_superstar_context(
+        draws, context_length=forecaster.context_length
+    ))
+
+
+def test_a_windowed_build_gets_streams_to_write_to(monkeypatch):
+    """PyInstaller's console=False leaves sys.stdout and sys.stderr as None.
+
+    Not closed files — None. ``print()`` survives it silently, so the absence
+    is invisible until a library writes to the stream itself, and one did:
+    huggingface_hub draws its download progress bar on stderr, and pressing
+    «Scarica il modello» answered "'NoneType' object has no attribute 'write'"
+    — which reads like a network failure and is not one.
+    """
+    import sys
+
+    from core import streams
+
+    monkeypatch.setattr(streams, "_sink", None)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+
+    replaced = streams.ensure_writable_streams()
+    assert "stdout" in replaced and "stderr" in replaced
+    sys.stderr.write("questo non deve sollevare nulla\n")
+    sys.stdout.write("nemmeno questo\n")
+
+    # Idempotent: a second call must not replace what it just repaired, or a
+    # download and a forecast would each open their own null device.
+    assert streams.ensure_writable_streams() == []
+
+
+def test_real_streams_are_left_alone(monkeypatch):
+    """Run from a terminal, or under pytest, this has nothing to do."""
+    import sys
+
+    from core import streams
+
+    monkeypatch.setattr(streams, "_sink", None)
+    before = (sys.stdout, sys.stderr)
+    assert streams.ensure_writable_streams() == []
+    assert (sys.stdout, sys.stderr) == before
