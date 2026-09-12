@@ -12,6 +12,57 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.3] — 2026-09-12
+
+I pesi scaricati a mano adesso si possono usare.
+
+L'utente ha fatto la cosa giusta: dopo l'ennesimo download interrotto ha preso
+il file dal browser, l'ha messo in una cartella insieme agli altri — e Tyche
+continuava a dire che i pesi non c'erano. Aveva ragione lui: non c'era alcun
+modo di dirglielo.
+
+### Aggiunto
+
+- **Impostazioni → «Cartella dei pesi TimesFM»**, con il pulsante «Sfoglia…».
+  Indica una cartella e Tyche carica da lì: niente download, nessuna rete, né
+  al primo avvio né dopo. È la via d'uscita quando il download non arriva in
+  fondo, e adesso il passo 2 del Percorso la nomina.
+
+- **Servono due file, non cinque, e non è una stima.** `config.json` e
+  `model.safetensors`, presi dalla scheda «Files» della pagina del modello su
+  Hugging Face. È quello che il codice legge davvero: `timesfm3` passa una
+  cartella a `PyTorchModelHubMixin.from_pretrained`, che apre quei due nomi e
+  nessun altro. Il `config.json` non è facoltativo — costruisce il modello che
+  i pesi poi riempiono — e una cartella che contiene solo il file da 1,23 GB
+  viene segnalata come incompleta, per nome, invece di fallire al caricamento.
+
+- **La cartella sbagliata lo dice.** Se non esiste, se non è una cartella o se
+  manca uno dei due file, la schermata iniziale scrive quale manca e dove lo
+  stava cercando. E lo dice **anche quando il download aveva funzionato**:
+  altrimenti l'impostazione verrebbe ignorata in silenzio.
+
+### Corretto
+
+- **Il modello viene caricato dal disco, non dal nome del repository.** Finora
+  Tyche passava `google/timesfm-3.0-pytorch` a TimesFM anche con i pesi già in
+  cache, e a quel punto la libreria tornava comunque su Hugging Face a
+  risolvere la revisione. Adesso, quando i pesi sono su questa macchina, quello
+  che viene passato è la loro cartella: il caricamento non apre più una
+  connessione, che è ciò che «dopo il download non c'è più rete» ha sempre
+  promesso.
+
+- **Le spiegazioni sotto i campi delle Impostazioni uscivano dal riquadro.**
+  Rientrano di 200 pixel ma si misuravano sull'intera larghezza, quindi ogni
+  riga andava a capo 200 pixel troppo tardi e l'ultima parte finiva fuori dal
+  bordo destro. Si vedeva nella schermata e in nessun test.
+
+- **Una cache che huggingface_hub non riconosce viene letta lo stesso.** Una
+  cartella riempita a mano, o una cui si sono persi i `refs`, contiene i pesi e
+  risponde «non c'è niente» alla domanda della libreria. La libreria resta la
+  prima a essere interrogata; se declina, adesso la cartella viene guardata
+  direttamente — e mai la radice della cache, che appartiene anche agli altri
+  modelli.
+
 ## [1.0.2] — 2026-09-08 — `cb22b04`
 
 Il download si interrompeva, e nessuno lo diceva.

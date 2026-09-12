@@ -49,6 +49,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "timesfm_checkpoint": DEFAULT_TIMESFM_CHECKPOINT,
     "timesfm_device": "cpu",
     "hf_token": "",
+    # A folder the user filled by hand, used in preference to the download.
+    # Empty is the normal case; it earns its place on the machine where a
+    # gigabyte will not arrive over the wire, and there it is the difference
+    # between TimesFM working and TimesFM never working at all.
+    "timesfm_local_dir": "",
     # Which of the three views in core.features the model is fed. "frequenza"
     # is the only one with enough amplitude for a forecast to have a gradient
     # to follow; "presenza" is the honest raw series and forecasts as a flat

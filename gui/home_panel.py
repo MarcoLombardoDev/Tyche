@@ -72,7 +72,9 @@ STEPS = [
      "Vai all'archivio"),
     ("model", "2", "Il modello TimesFM",
      "Circa 1,3 GB di pesi, scaricati una volta sola e poi eseguiti sul tuo "
-     "computer. Senza, restano gli altri tre metodi.",
+     "computer. Senza, restano gli altri tre metodi. Se il download non "
+     "arriva in fondo, in Impostazioni si può indicare una cartella riempita "
+     "a mano: bastano i due file config.json e model.safetensors.",
      "Scarica il modello"),
     ("prediction", "3", "La previsione",
      "Il punto di arrivo: tutti e quattro i metodi, uno accanto all'altro, con "
@@ -220,6 +222,7 @@ class HomePanel(ctk.CTkFrame):
         """
         checkpoint = self._checkpoint()
         token = self.app.settings.get("hf_token", "")
+        folder = self._folder()
 
         def work(report):
             from core.data_manager import DATA_DIR
@@ -228,7 +231,9 @@ class HomePanel(ctk.CTkFrame):
             report("interrogo pacchetti, cache e Hub…", 0.0)
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             path = DATA_DIR / "diagnosi-timesfm.txt"
-            path.write_text("\n".join(diagnose(checkpoint, token)), encoding="utf-8")
+            path.write_text(
+                "\n".join(diagnose(checkpoint, token, folder)), encoding="utf-8"
+            )
             return path
 
         self.app.run_worker(
@@ -246,7 +251,7 @@ class HomePanel(ctk.CTkFrame):
             self._marks[key].configure(text=mark, text_color=colour)
         # Nothing to download when the weights are there, or when no download
         # would help — a missing package is not fixed by fetching a checkpoint.
-        model = availability(self._checkpoint())
+        model = availability(self._checkpoint(), self._folder())
         self._buttons["model"].configure(
             state="normal" if model.can_download else "disabled",
             text="Scarica il modello" if model.can_download else "Niente da scaricare",
@@ -254,6 +259,9 @@ class HomePanel(ctk.CTkFrame):
 
     def _checkpoint(self) -> str:
         return self.app.settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
+
+    def _folder(self) -> str:
+        return self.app.settings.get("timesfm_local_dir", "")
 
     def _states(self) -> dict[str, tuple[str, str, str]]:
         """``{step: (state text, colour, mark)}``.
@@ -290,7 +298,7 @@ class HomePanel(ctk.CTkFrame):
         if self.app.forecaster is not None and self.app.forecaster.loaded:
             return ("TimesFM è caricato in memoria: le previsioni partono subito.",
                     GOOD, "✓")
-        state = availability(self._checkpoint())
+        state = availability(self._checkpoint(), self._folder())
         if state.ready:
             return (state.detail, GOOD, "✓")
         return (state.detail, WARN, "!")

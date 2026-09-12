@@ -2,6 +2,7 @@
   "timesfm_checkpoint": "google/timesfm-3.0-pytorch",
   "timesfm_device": "cpu",
   "hf_token": "",
+  "timesfm_local_dir": "",
   "representation": "frequenza",
   "frequency_window": 150,
   "context_length": 1024,

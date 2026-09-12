@@ -219,7 +219,7 @@ def _force_availability(monkeypatch, state):
     import gui.model_status as model_status
 
     for module in (model_status, home_panel):
-        monkeypatch.setattr(module, "availability", lambda checkpoint=None: state)
+        monkeypatch.setattr(module, "availability", lambda *args, **kwargs: state)
 
 
 def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
@@ -830,3 +830,92 @@ def test_a_missing_mail_client_does_not_crash(app, monkeypatch):
     app.open_contact_email()
 
     assert app.winfo_exists()
+
+
+def test_the_weights_folder_can_be_picked_rather_than_typed(app, monkeypatch, tmp_path):
+    """A Windows path typed by hand is a path with one character wrong.
+
+    The field stays editable — ``_save`` reads the entry, not the picker — but
+    the person this setting exists for has just spent an hour on a download
+    that would not finish, and asking him to transcribe
+    ``C:\\Users\\…\\pesi`` is asking for the next failure.
+    """
+    import tkinter.filedialog as filedialog
+
+    panel = app._panels["settings"]
+    entry = panel._widgets["timesfm_local_dir"]
+    entry.delete(0, "end")
+    entry.insert(0, "qualcosa di vecchio")
+
+    monkeypatch.setattr(filedialog, "askdirectory", lambda **kwargs: str(tmp_path))
+    panel._choose(entry)
+    assert entry.get() == str(tmp_path)
+
+    # Cancelling must not throw away what is already there.
+    monkeypatch.setattr(filedialog, "askdirectory", lambda **kwargs: "")
+    panel._choose(entry)
+    assert entry.get() == str(tmp_path)
+
+
+def test_a_folder_of_weights_is_read_by_the_path_and_by_the_prediction_strip(
+    app, monkeypatch, tmp_path
+):
+    """Both screens have to see the setting, and they read it separately.
+
+    ``availability`` is bound into two namespaces by a ``from`` import, and
+    the folder is a second argument each call site has to pass. One that
+    forgot would report "pesi assenti" over a folder that works.
+    """
+    folder = tmp_path / "pesi"
+    folder.mkdir()
+    for name in ("config.json", "model.safetensors"):
+        (folder / name).write_bytes(b"x" * 16)
+
+    import gui.home_panel as home_panel
+    import gui.model_status as model_status
+
+    monkeypatch.setattr(model_status, "availability", _folder_reading_availability)
+    monkeypatch.setattr(home_panel, "availability", _folder_reading_availability)
+    app.settings["timesfm_local_dir"] = str(folder)
+
+    app.show("prediction")
+    app.update()
+    assert str(folder) in app._panels["prediction"].model_status.label.cget("text")
+
+    home = app._panels["home"]
+    home.refresh()
+    assert str(folder) in home._states()["model"][0]
+
+
+def _folder_reading_availability(checkpoint=None, folder=""):
+    """The real thing minus the package check, which this machine fails."""
+    from core.model_store import NO_CHECKPOINT, READY, Availability, folder_checkpoint
+
+    found = folder_checkpoint(folder)
+    if found is None:
+        return Availability(NO_CHECKPOINT, "niente pesi", True)
+    return Availability(READY, f"uso i pesi nella cartella {found}.", False)
+
+
+def test_every_settings_field_is_actually_on_the_screen(app):
+    """Declared, reachable — and drawn. The third one was missing.
+
+    Adding the folder picker moved ``pack`` into the branches that build each
+    kind of widget, and two of them did not get one back: three option menus
+    and two switches came up 1x1 and unmapped. Nothing failed. The panel
+    listed every setting, ``_save`` read every setting, and a third of them
+    could not be changed. The screenshot is what showed it, which is why this
+    test measures pixels rather than existence.
+    """
+    from gui.settings_panel import FIELDS
+
+    panel = app._panels["settings"]
+    app.show("settings")
+    app.update()
+    for key, label, _kind, _help in FIELDS:
+        widget = panel._widgets[key]
+        assert widget.winfo_ismapped(), f"«{label}» is built but never packed"
+        assert widget.winfo_width() > 20 and widget.winfo_height() > 10, (
+            f"«{label}» is on the screen at "
+            f"{widget.winfo_width()}x{widget.winfo_height()} pixels"
+        )

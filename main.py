@@ -122,6 +122,7 @@ def _run_model_check() -> int:
     for line in diagnose(
         settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT,
         settings.get("hf_token", ""),
+        settings.get("timesfm_local_dir", ""),
     ):
         print(line)
     return 0
@@ -363,6 +364,7 @@ def _run_forecast(method: str) -> int:
             representation=settings["representation"],
             window=int(settings["frequency_window"]),
             hf_token=settings.get("hf_token", ""),
+            local_dir=settings.get("timesfm_local_dir", ""),
         )
         print(forecaster.describe())
         if not forecaster.load_model():

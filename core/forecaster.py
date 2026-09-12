@@ -52,7 +52,7 @@ import numpy as np
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, Draw
 from core.features import DEFAULT_WINDOW, build_context
-from core.model_store import ensure_checkpoint
+from core.model_store import ensure_checkpoint, resolve_checkpoint
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 
 # TimesFM 3.0's own limit, restated so the reason for the chunking is visible
@@ -79,8 +79,13 @@ class TimesFMForecaster:
         representation: str = "frequenza",
         window: int = DEFAULT_WINDOW,
         hf_token: str = "",
+        local_dir: str = "",
     ):
         self.checkpoint = checkpoint
+        # A folder the user filled by hand, used in preference to everything
+        # else. It is what makes a failed download survivable: a browser
+        # fetches the two files the loader opens and Tyche is pointed at them.
+        self.local_dir = local_dir
         self.device = device
         self.context_length = context_length
         self.representation = representation
@@ -116,11 +121,24 @@ class TimesFMForecaster:
 
         # The download happens here, with a percentage, rather than inside the
         # evaluator's constructor where it is 1.3 GB of silence. No-op when the
-        # weights are already cached, which is every run after the first.
+        # weights are already on the machine, which is every run after the
+        # first — and always, when a folder was filled by hand.
         try:
-            ensure_checkpoint(self.checkpoint, token=self.hf_token, progress=progress)
+            ensure_checkpoint(
+                self.checkpoint,
+                token=self.hf_token,
+                progress=progress,
+                folder=self.local_dir,
+            )
         except Exception as exc:  # noqa: BLE001 — the caller wants a sentence
             return self._failed(progress, str(exc))
+
+        # A directory, when the weights are on disk, and the repository id
+        # otherwise. timesfm3 branches on os.path.isdir and hands a directory
+        # to PyTorchModelHubMixin, which reads it and never opens a socket —
+        # so this is also what stops a complete local install from failing on
+        # somebody's network.
+        target = resolve_checkpoint(self.checkpoint, self.local_dir)
 
         # Says what the wait is for. The weights are on disk by this point, so
         # nothing is downloading and there is no percentage to show — what
@@ -128,13 +146,13 @@ class TimesFMForecaster:
         # said only "Carico …" left the user watching an unexplained pause.
         _report(
             progress,
-            f"Carico {self.checkpoint} in memoria: circa 1,3 GB dal disco, "
+            f"Carico {target} in memoria: circa 1,3 GB dal disco, "
             "può richiedere un minuto…",
             0.2,
         )
         try:
             config = ModelConfig(
-                checkpoint_path=self.checkpoint,
+                checkpoint_path=target,
                 device=self.device,
                 # One forward pass per chunk of 32 variates, three chunks for
                 # ninety numbers, so a batch size of 4 already covers a whole
@@ -147,7 +165,10 @@ class TimesFMForecaster:
             return self._failed(
                 progress,
                 f"{type(exc).__name__}: {exc}",
-                prefix="I pesi sono su disco ma il modello non si è caricato",
+                prefix=(
+                    f"I pesi ({target}) sono su disco ma il modello non si è "
+                    "caricato"
+                ),
             )
         _report(progress, "TimesFM 3.0 pronto.", 1.0)
         return True

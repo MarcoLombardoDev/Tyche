@@ -20,6 +20,13 @@ interface can ask for *before* anything is started.
 it while drawing itself. Importing the model to find out whether the model is
 importable costs several seconds and, the first time, a gigabyte.
 
+**And there is a way in that does not involve downloading anything.** A
+gigabyte over a domestic connection can simply refuse to arrive — it did,
+several times, on the machine this was written for — so the checkpoint may
+also be a *folder the user filled by hand*. Two files, ``config.json`` and
+``model.safetensors``, are all a loader opens; see :data:`REQUIRED_FILES` for
+where that is read out of timesfm3 and huggingface_hub rather than assumed.
+
 **The token is not required for the default checkpoint, and saying otherwise
 would be a lie the interface tells.** The `checkpoint-licence` CI job asked
 the three model cards directly: none of them is gated, so the weights download
@@ -40,6 +47,7 @@ bare ``42%`` that becomes ``31%`` looks like a bug.
 from __future__ import annotations
 
 import importlib.util
+import os
 import pathlib
 import time
 from dataclasses import dataclass
@@ -103,6 +111,133 @@ def _has_module(name: str) -> bool:
 _WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
 
 
+# What a folder has to hold before a loader can be pointed straight at it —
+# and the honest answer to "does it really need everything?".
+#
+# **Read out of the libraries rather than guessed.**
+# ``timesfm3.ModelConfig(checkpoint_path=…)`` takes a Hugging Face repository
+# id *or* a directory: ``_init_model`` in ``timesfm3/torch/timesfm3_forecaster.py``
+# branches on ``os.path.isdir`` and hands a directory to
+# ``PyTorchModelHubMixin.from_pretrained``, whose local-directory branch opens
+# ``config.json`` beside ``model.safetensors`` and never touches the network.
+#
+# So a checkpoint assembled by hand is **two files**, out of the five the
+# repository publishes. Only these two, and no substitutes: the mixin's local
+# branch looks for ``model.safetensors`` by name, so a ``.bin`` sitting in the
+# folder is not an alternative — it falls back to one only when downloading.
+CONFIG_FILE = "config.json"
+WEIGHTS_FILE = "model.safetensors"
+REQUIRED_FILES = (CONFIG_FILE, WEIGHTS_FILE)
+
+
+def _holds_weights(path: pathlib.Path) -> bool:
+    """Whether this exact directory is one a loader would accept."""
+    try:
+        return all((path / name).is_file() for name in REQUIRED_FILES)
+    except OSError:
+        return False
+
+
+def _weights_dir(path: pathlib.Path):
+    """``path``, or the folder inside it that holds the two files.
+
+    The search one level down is not tidiness. A user who is handed "put the
+    files in a folder" unzips an archive, or drops the Hugging Face cache
+    entry in whole, and ends up with the weights one or two levels below the
+    folder they chose. Refusing that would be refusing over a detail the
+    message never mentioned.
+    """
+    try:
+        if not path.is_dir():
+            return None
+        if _holds_weights(path):
+            return path
+        for config in sorted(path.rglob(CONFIG_FILE)):
+            if _holds_weights(config.parent):
+                return config.parent
+    except OSError:
+        return None
+    return None
+
+
+def folder_checkpoint(folder: str):
+    """The weights in the folder the user chose, or ``None``."""
+    folder = (folder or "").strip()
+    if not folder:
+        return None
+    return _weights_dir(pathlib.Path(os.path.expanduser(folder)))
+
+
+def local_checkpoint(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT):
+    """The weights for ``checkpoint`` already on this machine, or ``None``.
+
+    Two places: the checkpoint setting itself, when somebody typed a path
+    into it, and this repository's own folder in the Hugging Face cache.
+
+    **The cache one is a repair, and it is deliberately not how the cache is
+    normally read.** :func:`_checkpoint_cached` asks huggingface_hub, because
+    the ``models--org--name/snapshots`` layout is the library's to change.
+    That question has one answer this module has now watched fail on a real
+    machine: a cache assembled by hand, or one whose ``refs`` were lost,
+    holds the weights and answers "no". Reading the folder ourselves is the
+    second opinion, used only after the library has declined.
+    """
+    checkpoint = (checkpoint or "").strip()
+    if checkpoint:
+        typed = _weights_dir(pathlib.Path(os.path.expanduser(checkpoint)))
+        if typed is not None:
+            return typed
+    try:
+        return _weights_dir(_repo_folder(checkpoint))
+    except Exception:  # noqa: BLE001 — no huggingface_hub, no cache to read
+        return None
+
+
+def resolve_checkpoint(
+    checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, folder: str = ""
+) -> str:
+    """What to hand ``ModelConfig(checkpoint_path=…)``.
+
+    A directory when there is one, because a directory is loaded from disk
+    and cannot fail on the network; the repository id otherwise, which is
+    what every working install has always passed.
+    """
+    for found in (folder_checkpoint(folder), local_checkpoint(checkpoint)):
+        if found is not None:
+            return str(found)
+    return checkpoint
+
+
+def folder_problem(
+    folder: str, checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT
+) -> str:
+    """Why the chosen folder cannot be used, in a sentence that says what to do.
+
+    "Non funziona" over a folder the user assembled by hand is the least
+    useful thing this program could say: he cannot see which file the loader
+    wanted, and there are only two.
+    """
+    raw = (folder or "").strip()
+    if not raw:
+        return ""
+    path = pathlib.Path(os.path.expanduser(raw))
+    if not path.exists():
+        return (
+            f"La cartella dei pesi indicata non esiste: {path}. Correggila in "
+            "Impostazioni → Cartella dei pesi TimesFM, oppure svuota il campo "
+            "e usa «Scarica il modello»."
+        )
+    if not path.is_dir():
+        return f"{path} non è una cartella."
+    missing = [name for name in REQUIRED_FILES if not (path / name).is_file()]
+    return (
+        f"Nella cartella {path} manca {' e '.join(missing)}. Servono due soli "
+        f"file — {CONFIG_FILE} e {WEIGHTS_FILE} — dalla pagina "
+        f"huggingface.co/{checkpoint}, scheda «Files», messi direttamente lì "
+        "dentro. Gli altri file del repository non servono."
+    )
+
+
 def _checkpoint_cached(checkpoint: str) -> bool:
     """Whether usable weights are already in the Hugging Face cache.
 
@@ -131,13 +266,45 @@ def _checkpoint_cached(checkpoint: str) -> bool:
     )
 
 
-def availability(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT) -> Availability:
-    """What stands between the user and a TimesFM forecast."""
+def availability(
+    checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, folder: str = ""
+) -> Availability:
+    """What stands between the user and a TimesFM forecast.
+
+    ``folder`` is the escape hatch: a directory the user filled by hand,
+    checked before anything that involves the network or hf_hub's cache
+    layout. It exists because a 1,3 GB download over a domestic connection
+    can simply refuse to complete, and at that point a browser and a USB
+    stick are a better tool than another retry.
+    """
     if not _has_module("timesfm3"):
         return Availability(
             NO_PACKAGE,
             "TimesFM non è installato in questa copia di Tyche. Gli altri tre "
             "metodi funzionano lo stesso — e ottengono lo stesso punteggio.",
+            can_download=False,
+        )
+
+    chosen = folder_checkpoint(folder)
+    if chosen is not None:
+        return Availability(
+            READY,
+            f"TimesFM è pronto: uso i pesi nella cartella {chosen}. Niente "
+            "download, esecuzione tutta locale.",
+            can_download=False,
+        )
+    # A folder that was set and cannot be used is reported even when the
+    # download route works, because the user asked for that folder and
+    # otherwise nothing on any screen would ever mention it again.
+    note = folder_problem(folder, checkpoint)
+
+    cached = local_checkpoint(checkpoint)
+    if cached is not None:
+        return Availability(
+            READY,
+            f"TimesFM è pronto: i pesi di {checkpoint} sono già su questo "
+            "computer e l'esecuzione è tutta locale."
+            + (f" {note}" if note else ""),
             can_download=False,
         )
     if not _has_module("huggingface_hub"):
@@ -151,9 +318,12 @@ def availability(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT) -> Availability:
         return Availability(
             READY,
             f"TimesFM è pronto: i pesi di {checkpoint} sono già su questo "
-            "computer e l'esecuzione è tutta locale.",
+            "computer e l'esecuzione è tutta locale."
+            + (f" {note}" if note else ""),
             can_download=False,
         )
+    if note:
+        return Availability(NO_CHECKPOINT, note, can_download=True)
     # How much is already there, so a download that stopped part-way says so
     # rather than reading as "nothing has happened". The owner pressed the
     # button several times against a cache holding 882 MB of 1.23 GB and had
@@ -282,9 +452,23 @@ def repo_cache_dir(checkpoint: str):
     """
     from huggingface_hub import constants
 
-    root = pathlib.Path(constants.HF_HUB_CACHE)
-    folder = root / ("models--" + checkpoint.replace("/", "--"))
-    return folder if folder.exists() else root
+    folder = _repo_folder(checkpoint)
+    return folder if folder.exists() else pathlib.Path(constants.HF_HUB_CACHE)
+
+
+def _repo_folder(checkpoint: str) -> pathlib.Path:
+    """One repository's folder in the cache, whether or not it exists.
+
+    Split out of :func:`repo_cache_dir` because that one falls back to the
+    cache root, and a fallback is exactly wrong for :func:`local_checkpoint`:
+    searching the root would find another model's ``config.json`` and report
+    a checkpoint that is not the one asked for.
+    """
+    from huggingface_hub import constants
+
+    return pathlib.Path(constants.HF_HUB_CACHE) / (
+        "models--" + checkpoint.replace("/", "--")
+    )
 
 
 def expected_download(checkpoint: str, token: str = "", ignore=()) -> tuple[int, int]:
@@ -482,7 +666,11 @@ def _report(progress, message: str, fraction: float = 0.0) -> None:
         progress(message, fraction)
 
 
-def diagnose(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, token: str = "") -> list[str]:
+def diagnose(
+    checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
+    token: str = "",
+    folder: str = "",
+) -> list[str]:
     """Everything that decides whether TimesFM can run, as printable lines.
 
     Written for the case this module was not built for: the user says the
@@ -539,8 +727,25 @@ def diagnose(checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT, token: str = "") -> l
         lines.append(f"cache non ispezionabile — {type(exc).__name__}: {exc}")
 
     lines.append("")
-    state = availability(checkpoint)
+    lines.append(f"cartella dei pesi configurata: {folder or '(nessuna)'}")
+    if folder:
+        chosen = folder_checkpoint(folder)
+        if chosen is not None:
+            lines.append(f"       utilizzabile: sì — {chosen}")
+            for name in REQUIRED_FILES:
+                item = chosen / name
+                lines.append(f"         {it_bytes(item.stat().st_size):>10}  {name}")
+        else:
+            lines.append(f"       utilizzabile: no — {folder_problem(folder, checkpoint)}")
+    lines.append(
+        "       (una cartella serve due soli file: "
+        f"{CONFIG_FILE} e {WEIGHTS_FILE})"
+    )
+
+    lines.append("")
+    state = availability(checkpoint, folder)
     lines.append(f"stato: {state.state} — {state.detail}")
+    lines.append(f"il modello verrà caricato da: {resolve_checkpoint(checkpoint, folder)}")
 
     lines.append("")
     lines.append("Interrogo l'Hub (serve rete):")
@@ -587,6 +792,7 @@ def ensure_checkpoint(
     checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
     token: str = "",
     progress=None,
+    folder: str = "",
 ) -> None:
     """Download the weights if they are not cached, otherwise do nothing.
 
@@ -596,6 +802,8 @@ def ensure_checkpoint(
     loader is then left to do whatever it does, which is what happened before
     this module existed.
     """
+    if folder_checkpoint(folder) is not None or local_checkpoint(checkpoint):
+        return
     if not _has_module("huggingface_hub"):
         return
     if _checkpoint_cached(checkpoint):

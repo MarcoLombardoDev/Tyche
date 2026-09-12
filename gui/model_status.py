@@ -68,6 +68,9 @@ class ModelStatus(ctk.CTkFrame):
             or DEFAULT_TIMESFM_CHECKPOINT
         )
 
+    def _folder(self) -> str:
+        return self.app.settings.get("timesfm_local_dir", "")
+
     def refresh(self) -> None:
         """Re-read the state and redraw. Safe to call as often as you like."""
         if self.app.forecaster is not None and self.app.forecaster.loaded:
@@ -78,7 +81,7 @@ class ModelStatus(ctk.CTkFrame):
                 GOOD, can_download=False, available=True,
             )
             return
-        state = availability(self._checkpoint())
+        state = availability(self._checkpoint(), self._folder())
         self._apply(
             state.detail,
             GOOD if state.ready else WARN,

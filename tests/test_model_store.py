@@ -484,3 +484,175 @@ class TestMethodNames:
         to move.
         """
         assert METHODS == ("timesfm", "frequenza", "ritardo", "casuale")
+
+
+class TestAFolderFilledByHand:
+    """The way in that does not involve downloading anything.
+
+    The owner's download refused to complete several times, so he fetched the
+    file with a browser and put it in a folder — and Tyche could not use it,
+    because a hand-made folder is not the ``models--org--name/snapshots``
+    layout ``snapshot_download`` resolves. That is the defect these cover.
+
+    **The two filenames are read out of the libraries, not chosen here.**
+    ``timesfm3`` branches on ``os.path.isdir`` and hands a directory to
+    ``PyTorchModelHubMixin.from_pretrained``, whose local branch opens
+    ``config.json`` and ``model.safetensors`` and nothing else.
+    """
+
+    def _folder(self, tmp_path, names, root="pesi"):
+        return self._fill(tmp_path / root, names)
+
+    def _fill(self, folder, names):
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (folder / name).write_bytes(b"x" * 16)
+        return folder
+
+    def _installed(self, monkeypatch):
+        monkeypatch.setattr(model_store, "_has_module", lambda name: True)
+        monkeypatch.setattr(model_store, "_checkpoint_cached", lambda checkpoint: False)
+
+    def test_two_files_are_enough(self, monkeypatch, tmp_path):
+        self._installed(monkeypatch)
+        folder = self._folder(tmp_path, model_store.REQUIRED_FILES)
+        state = availability(DEFAULT_TIMESFM_CHECKPOINT, str(folder))
+        assert state.state == READY
+        assert state.ready and state.usable
+        assert state.can_download is False
+        assert str(folder) in state.detail
+
+    def test_a_weights_file_on_its_own_is_not_a_checkpoint(self, monkeypatch, tmp_path):
+        """``config.json`` is not optional, and saying so beats a stack trace.
+
+        The mixin builds the model from the config and *then* loads the
+        tensors into it. A folder holding only the 1,23 GB file looks finished
+        to the person who assembled it and fails at load time.
+        """
+        self._installed(monkeypatch)
+        folder = self._folder(tmp_path, ["model.safetensors"])
+        state = availability(DEFAULT_TIMESFM_CHECKPOINT, str(folder))
+        assert state.state == NO_CHECKPOINT
+        assert "config.json" in state.detail
+
+    def test_the_missing_file_is_named(self, monkeypatch, tmp_path):
+        self._installed(monkeypatch)
+        folder = self._folder(tmp_path, ["config.json"])
+        detail = availability(DEFAULT_TIMESFM_CHECKPOINT, str(folder)).detail
+        assert "model.safetensors" in detail
+        assert str(folder) in detail
+
+    def test_a_folder_that_is_not_there_says_that_and_not_something_else(
+        self, monkeypatch, tmp_path
+    ):
+        self._installed(monkeypatch)
+        detail = availability(
+            DEFAULT_TIMESFM_CHECKPOINT, str(tmp_path / "non-esiste")
+        ).detail
+        assert "non esiste" in detail
+
+    def test_the_files_may_sit_one_level_down(self, monkeypatch, tmp_path):
+        """Unzipping an archive puts them in a subfolder, and that is fine.
+
+        Refusing that would be refusing over a detail the instruction never
+        mentioned.
+        """
+        self._installed(monkeypatch)
+        inner = self._folder(tmp_path / "scaricati", model_store.REQUIRED_FILES)
+        state = availability(DEFAULT_TIMESFM_CHECKPOINT, str(tmp_path / "scaricati"))
+        assert state.state == READY
+        assert str(inner) in state.detail
+
+    def test_the_loader_is_pointed_at_the_folder_and_not_at_the_repository(
+        self, tmp_path
+    ):
+        """The whole point: ``checkpoint_path`` becomes a directory.
+
+        Passing the repository id would send timesfm3 back to Hugging Face for
+        a file that is already on the disk, which is the failure the folder
+        exists to route around.
+        """
+        folder = self._folder(tmp_path, model_store.REQUIRED_FILES)
+        assert model_store.resolve_checkpoint(
+            DEFAULT_TIMESFM_CHECKPOINT, str(folder)
+        ) == str(folder)
+
+    def test_without_a_folder_the_repository_id_is_still_what_is_used(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(model_store, "local_checkpoint", lambda checkpoint: None)
+        assert (
+            model_store.resolve_checkpoint(DEFAULT_TIMESFM_CHECKPOINT, "")
+            == DEFAULT_TIMESFM_CHECKPOINT
+        )
+
+    def test_a_broken_folder_is_reported_even_when_the_download_worked(
+        self, monkeypatch, tmp_path
+    ):
+        """Otherwise the setting is silently ignored and nothing ever says so.
+
+        The weights are cached, so TimesFM runs and the state is READY — but
+        the folder the user typed is wrong, and no other screen will ever
+        mention it again.
+        """
+        monkeypatch.setattr(model_store, "_has_module", lambda name: True)
+        monkeypatch.setattr(model_store, "_checkpoint_cached", lambda checkpoint: True)
+        folder = self._folder(tmp_path, ["config.json"])
+        state = availability(DEFAULT_TIMESFM_CHECKPOINT, str(folder))
+        assert state.ready
+        assert "model.safetensors" in state.detail
+
+    def test_a_usable_folder_downloads_nothing(self, monkeypatch, tmp_path):
+        folder = self._folder(tmp_path, model_store.REQUIRED_FILES)
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("nothing should be downloaded")
+
+        monkeypatch.setattr(model_store, "download_checkpoint", refuse)
+        model_store.ensure_checkpoint(
+            DEFAULT_TIMESFM_CHECKPOINT, folder=str(folder)
+        )
+
+    def test_a_cache_huggingface_hub_will_not_resolve_is_read_directly(
+        self, monkeypatch, tmp_path
+    ):
+        """The repair. hf_hub says no; the folder plainly holds the weights.
+
+        A cache assembled by hand, or one whose ``refs`` were lost, answers
+        ``local_files_only`` with a miss while the two files sit there. Asking
+        the library first stays the rule — this is the second opinion.
+        """
+        monkeypatch.setattr(model_store, "_has_module", lambda name: True)
+        monkeypatch.setattr(model_store, "_checkpoint_cached", lambda checkpoint: False)
+        snapshot = self._fill(
+            tmp_path / "models--org--model" / "snapshots" / "abc123",
+            model_store.REQUIRED_FILES,
+        )
+        monkeypatch.setattr(
+            model_store, "_repo_folder", lambda checkpoint: tmp_path / "models--org--model"
+        )
+        state = availability("org/model")
+        assert state.state == READY
+        assert model_store.resolve_checkpoint("org/model") == str(snapshot)
+
+    def test_the_cache_of_another_model_is_not_mistaken_for_this_one(
+        self, monkeypatch, tmp_path
+    ):
+        """``repo_cache_dir`` falls back to the cache root; this must not.
+
+        Searching the root would find some other model's ``config.json`` and
+        report a checkpoint that was never asked for.
+        """
+        self._fill(
+            tmp_path / "models--altro--modello" / "snapshots" / "x",
+            model_store.REQUIRED_FILES,
+        )
+        # The root holds another model and this repository's folder does not
+        # exist — which is exactly when repo_cache_dir() answers with the root.
+        monkeypatch.setattr(
+            model_store,
+            "_repo_folder",
+            lambda checkpoint: tmp_path / "models--org--model",
+        )
+        monkeypatch.setattr(model_store, "repo_cache_dir", lambda checkpoint: tmp_path)
+        assert model_store.local_checkpoint("org/model") is None

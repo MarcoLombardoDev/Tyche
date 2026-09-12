@@ -21,11 +21,11 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
-from gui.theme import BG_ROOT, MUTED
+from gui.theme import BG_ROOT, BG_ROW, MUTED, TEXT
 from gui.widgets import body_font, fit_text, section
 
-# (key, label, kind, help). kind is "text", "secret", "bool", or a tuple of
-# choices. Every key in DEFAULT_SETTINGS that a user can meaningfully set
+# (key, label, kind, help). kind is "text", "secret", "folder", "bool", or a
+# tuple of choices. Every key in DEFAULT_SETTINGS that a user can meaningfully set
 # belongs here; test_every_setting_is_read_somewhere catches the reverse
 # mistake, a key nothing reads.
 FIELDS = [
@@ -41,6 +41,13 @@ FIELDS = [
      "→ crea un account → Settings → Access Tokens → New token, tipo «Read», e "
      "incolla qui la stringa che comincia con hf_. Salvato in "
      "config/settings.json, che git ignora."),
+    ("timesfm_local_dir", "Cartella dei pesi TimesFM", "folder",
+     "Da riempire solo se il download non riesce. Scarica a mano i due file "
+     "config.json e model.safetensors dalla pagina huggingface.co/"
+     f"{DEFAULT_TIMESFM_CHECKPOINT} (scheda «Files»), mettili in una cartella "
+     "qualsiasi e incolla qui il suo percorso: Tyche carica da lì e non scarica "
+     "più niente. Bastano quei due — gli altri file del repository non servono. "
+     "Lascia vuoto per usare il download normale."),
     ("representation", "Serie data al modello", ("frequenza", "presenza", "ritardo"),
      "«frequenza» è lisciata e offre una pendenza da seguire; «presenza» è il dato "
      "grezzo 0/1 e produce una previsione piatta, cosa che vale la pena vedere una "
@@ -74,6 +81,10 @@ FIELDS = [
 ]
 
 
+# How far the field column, and therefore every help line, sits from the left.
+HELP_INDENT = 200
+
+
 class SettingsPanel(ctk.CTkFrame):
     def __init__(self, parent, app):
         super().__init__(parent, fg_color=BG_ROOT)
@@ -94,10 +105,11 @@ class SettingsPanel(ctk.CTkFrame):
             row = ctk.CTkFrame(scroll, fg_color="transparent")
             row.pack(fill="x", pady=(0, 12))
             ctk.CTkLabel(
-                row, text=label, width=200, anchor="w", font=body_font(),
+                row, text=label, width=HELP_INDENT, anchor="w", font=body_font(),
             ).pack(side="left")
             raw = self.app.settings.get(key, "")
             value = str(raw)
+            extra = None
             if isinstance(kind, tuple):
                 widget = ctk.CTkOptionMenu(row, width=260, values=list(kind))
                 widget.set(value if value in kind else kind[0])
@@ -109,20 +121,62 @@ class SettingsPanel(ctk.CTkFrame):
                     widget.select()
                 else:
                     widget.deselect()
+            elif kind == "folder":
+                # Typed by hand this is a Windows path with backslashes in it,
+                # copied out of an address bar by somebody who has just spent
+                # an hour fighting a download. The picker is the difference
+                # between "it does not work" and a path with one character
+                # wrong. The entry stays the widget _save() reads, so the
+                # field is still editable and still a plain string.
+                widget = ctk.CTkEntry(row, width=340)
+                widget.insert(0, value)
+                extra = ctk.CTkButton(
+                    row, text="Sfoglia…", width=94, fg_color=BG_ROW,
+                    text_color=TEXT, command=lambda w=widget: self._choose(w),
+                )
             else:
                 widget = ctk.CTkEntry(row, width=440, show="•" if kind == "secret" else "")
                 widget.insert(0, value)
+            # One pack for every kind. Packing inside the branches instead cost
+            # three option menus and two switches, which came up 1x1 and
+            # unmapped — a branch that forgets it is invisible rather than
+            # wrong, and the screenshot is what showed it.
             widget.pack(side="left")
+            if extra is not None:
+                extra.pack(side="left", padx=(6, 0))
             self._widgets[key] = widget
+            # The margin has to carry the indent. fit_text measures the
+            # parent, and this label starts 200px into it — with the default
+            # margin every help line wrapped 200px too late and ran off the
+            # right edge of the box. Visible on the screenshot, invisible to
+            # every test, and worst on the longest line, which is the one
+            # explaining what to do when the download will not finish.
             fit_text(ctk.CTkLabel(
                 scroll, text=helptext, anchor="w", justify="left",
-                text_color=MUTED, wraplength=900,
-                font=body_font(),
-            )).pack(fill="x", padx=(200, 0), pady=(0, 10))
+                text_color=MUTED, font=body_font(),
+            ), margin=HELP_INDENT + 32).pack(fill="x", padx=(HELP_INDENT, 0), pady=(0, 10))
 
         ctk.CTkButton(block.body, text="Salva", width=120, command=self._save).pack(
             anchor="w", pady=(12, 0)
         )
+
+    def _choose(self, entry) -> None:
+        """Pick a folder and put it in the field.
+
+        Cancelling returns an empty string, which must leave what is there
+        alone: a picker that empties the field on Escape would throw away a
+        path the user had already typed.
+        """
+        from tkinter import filedialog
+
+        chosen = filedialog.askdirectory(
+            title="La cartella con config.json e model.safetensors",
+            initialdir=entry.get() or None,
+        )
+        if not chosen:
+            return
+        entry.delete(0, "end")
+        entry.insert(0, chosen)
 
     def _save(self) -> None:
         """Write the fields back, keeping the type each default declares.

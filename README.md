@@ -117,6 +117,20 @@ per scaricarli, invece di lasciartelo scoprire premendo «Genera».
 è ad accesso libero: il token in Impostazioni esiste solo per un repository
 che il suo proprietario abbia messo ad accesso ristretto.
 
+**Se il download non arriva in fondo, si può fare a mano.** Un gigabyte e
+mezzo su una linea domestica può interrompersi, e il modo di uscirne non è
+riprovare all'infinito: apri
+[huggingface.co/google/timesfm-3.0-pytorch](https://huggingface.co/google/timesfm-3.0-pytorch)
+nel browser, scarica dalla scheda «Files» i due file `config.json` e
+`model.safetensors`, mettili in una cartella qualsiasi e indica quella cartella
+in Impostazioni → **Cartella dei pesi TimesFM**. Da lì in poi Tyche carica da
+quella cartella e non scarica più niente.
+
+**Bastano quei due file**, e non è una semplificazione: `timesfm3` passa una
+cartella a `PyTorchModelHubMixin.from_pretrained`, che apre `config.json` per
+costruire il modello e `model.safetensors` per riempirlo. Gli altri tre file
+del repository non vengono letti.
+
 **E dopo il download non c'è più rete.** Il modello gira sul tuo computer, quindi
 il costo di una previsione è tempo di CPU e nient'altro: nessun consumo, nessuna
 chiamata a un servizio, nessun limite di quota. Quello che costa è il tempo:

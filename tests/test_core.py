@@ -2181,3 +2181,68 @@ def test_a_second_attempt_does_not_inherit_the_first_reason(monkeypatch):
     forecaster._model = None
     forecaster.load_model(lambda *_: None)
     assert forecaster.last_error != "qualcosa di vecchio"
+
+
+def test_a_folder_of_weights_is_what_the_loader_is_pointed_at(monkeypatch, tmp_path):
+    """The change that makes a hand-filled folder work at all.
+
+    Everything else about it — the state on the path panel, the sentence
+    naming the missing file — is reporting. This is the behaviour: what lands
+    in ``ModelConfig(checkpoint_path=…)``. Passing the repository id would
+    send timesfm3 back to Hugging Face for a file already on the disk, which
+    is the failure the folder exists to route around.
+
+    ``timesfm3`` is stubbed because the real one brings PyTorch, and this
+    suite runs without it.
+    """
+    import sys
+    import types
+
+    from core.forecaster import TimesFMForecaster
+
+    folder = tmp_path / "pesi-timesfm"
+    folder.mkdir()
+    for name in ("config.json", "model.safetensors"):
+        (folder / name).write_bytes(b"x" * 16)
+
+    seen: dict = {}
+
+    class _ModelConfig:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+    module = types.ModuleType("timesfm3")
+    module.ModelConfig = _ModelConfig
+    module.TimesFM3Evaluator = lambda config: object()
+    monkeypatch.setitem(sys.modules, "timesfm3", module)
+
+    forecaster = TimesFMForecaster(local_dir=str(folder))
+    assert forecaster.load_model(lambda *_: None) is True
+    assert seen["checkpoint_path"] == str(folder)
+
+
+def test_without_a_folder_the_checkpoint_is_still_the_repository(monkeypatch, tmp_path):
+    """The other half: nothing changes for a machine where the download worked."""
+    import sys
+    import types
+
+    from core import model_store
+    from core.forecaster import TimesFMForecaster
+
+    monkeypatch.setattr(model_store, "local_checkpoint", lambda checkpoint: None)
+    monkeypatch.setattr("core.forecaster.ensure_checkpoint", lambda *a, **k: None)
+
+    seen: dict = {}
+
+    class _ModelConfig:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+    module = types.ModuleType("timesfm3")
+    module.ModelConfig = _ModelConfig
+    module.TimesFM3Evaluator = lambda config: object()
+    monkeypatch.setitem(sys.modules, "timesfm3", module)
+
+    forecaster = TimesFMForecaster(checkpoint="org/modello")
+    assert forecaster.load_model(lambda *_: None) is True
+    assert seen["checkpoint_path"] == "org/modello"

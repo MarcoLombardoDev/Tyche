@@ -348,6 +348,7 @@ class PredictionPanel(ctk.CTkFrame):
                     representation=settings.get("representation", "frequenza"),
                     window=window,
                     hf_token=settings.get("hf_token", ""),
+                    local_dir=settings.get("timesfm_local_dir", ""),
                 )
                 if forecaster.load_model(report):
                     self.app.forecaster = forecaster

@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 362, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 411, GUI included
+python -m pytest tests/ -q                                   # 375, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 427, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`362 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`375 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -917,6 +917,41 @@ neither the count nor the size. It stays because the checkpoint is a setting
 and somebody may point Tyche at a repository that does carry four formats. Say
 that plainly rather than claiming a saving that was not made.
 
+**A folder the user filled by hand is the way out, and it is two files.**
+1.0.3, after the owner did the sensible thing — fetched the checkpoint with a
+browser when the download would not finish, put it in a folder — and Tyche
+went on reporting that the weights were missing. He was right and there was no
+way to tell him.
+
+`REQUIRED_FILES` is `config.json` and `model.safetensors`, and **it was read
+out of the libraries rather than chosen**: `timesfm3`'s `_init_model` branches
+on `os.path.isdir` and hands a directory to
+`PyTorchModelHubMixin.from_pretrained`, whose local-directory branch opens
+those two names and nothing else. That is also the honest answer to "does it
+need all five files?" — it does not, and the saving is real this time, unlike
+`SKIPPABLE` above. Do not "complete" the list with the other three, and do not
+drop `config.json` because the weights look like the important one: the config
+builds the model that the tensors are then loaded into, and a folder holding
+only the 1,23 GB file fails at load time looking finished.
+`test_a_weights_file_on_its_own_is_not_a_checkpoint` is the guard.
+
+Three decisions in the same change:
+
+- **`resolve_checkpoint` is what the loader gets, and it prefers a directory.**
+  Before it, Tyche passed the repository id even with the weights cached, and
+  hf_hub went back to the Hub to resolve a revision — so "after the download
+  there is no network" was not quite true. A directory cannot do that.
+- **A wrong folder is reported even when the download worked.** The state is
+  READY, TimesFM runs, and the sentence still says which file is missing from
+  the folder the user typed — otherwise the setting is ignored in silence and
+  no screen ever mentions it again.
+- **The cache is read directly only after huggingface_hub has declined.** The
+  `models--org--name/snapshots` layout is the library's to change, so asking it
+  stays the rule; `_repo_folder` is the second opinion for a cache assembled by
+  hand or missing its `refs`. It is split out of `repo_cache_dir` precisely
+  because that one falls back to the *cache root*, and searching the root would
+  find another model's `config.json` and report a checkpoint nobody asked for.
+
 **`timesfm` is an identifier; `TimesFM` is a name.** `core/predictor.METHOD_NAMES`
 is the one map, and `method_name` is what every screen goes through — the
 checkboxes, the option menu, all three result tables, the verdict and the path
@@ -951,11 +986,22 @@ shared cost strip below the grid vanished off the bottom of the window. It is
 packed *before* the grid with `side="bottom"`, which reserves its height
 first. Same class of mistake as the licence bar's ordering, opposite symptom.
 
+**A third pack lesson, from 1.0.3, and it is the cheapest one to repeat.**
+The settings panel packed each field once, after the `if`/`elif` chain that
+builds it. Adding a folder picker moved that line *into* the branches, two of
+them did not get it back, and three option menus and two switches came up
+1x1 and unmapped. Nothing raised, every test passed, the panel still listed
+every setting and `_save` still read every setting — and a third of them could
+not be touched. Build in the branches, pack once after them.
+
 **Look at the screenshot before believing a layout.** Every time this class of
-bug has been caught here — three times now — it was caught by rendering the
+bug has been caught here — four times now — it was caught by rendering the
 panel and looking at it, not by a test and not by reading the code. The
 0.10.0 grid took three renders to get right and no test would have found any
-of the three.
+of the three; 1.0.3's invisible controls were found the same way, and the
+guard written afterwards —
+`test_every_settings_field_is_actually_on_the_screen` — measures pixels rather
+than existence, because existence was never the thing that was missing.
 
 ## A wraplength in pixels is a guess about somebody else's screen
 
