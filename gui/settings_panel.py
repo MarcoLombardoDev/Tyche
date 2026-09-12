@@ -48,10 +48,6 @@ FIELDS = [
      "qualsiasi e incolla qui il suo percorso: Tyche carica da lì e non scarica "
      "più niente. Bastano quei due — gli altri file del repository non servono. "
      "Lascia vuoto per usare il download normale."),
-    ("representation", "Serie data al modello", ("frequenza", "presenza", "ritardo"),
-     "«frequenza» è lisciata e offre una pendenza da seguire; «presenza» è il dato "
-     "grezzo 0/1 e produce una previsione piatta, cosa che vale la pena vedere una "
-     "volta."),
     ("frequency_window", "Finestra mobile (estrazioni)", "text",
      "Quante estrazioni all'indietro guarda il metodo «frequenza» (e la serie "
      "lisciata, se è quella che dài al modello). 208 è un anno esatto alle "

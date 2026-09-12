@@ -750,28 +750,6 @@ def test_presence_matrix_has_six_ones_per_column():
     assert np.all(matrix.sum(axis=0) == 6)
 
 
-def test_rolling_frequency_starts_at_a_real_frequency():
-    """No zero-padded ramp: a model fed one learns it and looks skilful."""
-    from core.features import presence_matrix, rolling_frequency
-
-    frequency = rolling_frequency(presence_matrix(random_archive(300)), window=50)
-    assert frequency[:, 0].sum() == pytest.approx(6.0)     # first column: 6 of 90 at 1.0
-    assert frequency.mean() == pytest.approx(6 / 90, abs=1e-6)
-
-
-def test_gap_matrix_does_not_leak_the_target_draw():
-    """Column t is what a player saw *before* draw t; the reset lands at t+1."""
-    from core.features import gap_matrix, presence_matrix
-
-    draws = random_archive(60)
-    presence = presence_matrix(draws)
-    gaps = gap_matrix(presence)
-    for t in range(1, 60):
-        drawn_now = np.nonzero(presence[:, t])[0]
-        # If the reset leaked, every number drawn at t would read 0 at t.
-        assert not np.all(gaps[drawn_now, t] == 0)
-
-
 def test_current_gaps_distinguishes_never_seen_from_just_seen():
     from core.features import current_gaps
 
@@ -1193,16 +1171,13 @@ def test_settings_round_trip(tmp_path, monkeypatch):
     assert dm.load_settings()["context_length"] == 512
 
 
-def test_a_0_1_0_settings_file_is_read_with_the_new_names(tmp_path, monkeypatch):
-    """The English names 0.1.0 wrote must not reach build_context.
+def test_a_settings_file_naming_the_removed_series_still_loads(tmp_path, monkeypatch):
+    """1.0.6 removed the setting that chose what the model was fed.
 
-    An unmapped ``"frequency"`` raises "rappresentazione sconosciuta" the first
-    time a forecast is asked for, which is a long way from where the stale
-    file is.
-
-    Only the representation is left to translate: 0.10.0 removed the two
-    settings that stored a method name, and a key that no longer exists comes
-    back untouched rather than renamed, which is right — nothing reads it.
+    A settings file written by any earlier version names it, and the program
+    has to open anyway: an unknown key is carried through and read by nothing,
+    which is the right shape — deleting keys out of somebody's file would be a
+    worse answer than ignoring one.
     """
     import json
 
@@ -1211,14 +1186,41 @@ def test_a_0_1_0_settings_file_is_read_with_the_new_names(tmp_path, monkeypatch)
 
     path = tmp_path / "settings.json"
     path.write_text(
-        json.dumps({"representation": "frequency"}), encoding="utf-8",
+        json.dumps({"representation": "frequenza", "combinations": 3}),
+        encoding="utf-8",
     )
     monkeypatch.setattr(dm, "SETTINGS_PATH", path)
 
     settings = dm.load_settings()
-    assert settings["representation"] == "frequenza"
-    # Not just renamed — renamed to something the rest of the program accepts.
-    build_context(random_archive(60), representation=settings["representation"])
+    assert settings["combinations"] == 3, "a real setting was lost"
+    assert "representation" not in dm.DEFAULT_SETTINGS
+    # And the thing it used to configure takes no such argument any more.
+    build_context(random_archive(60), context_length=32)
+
+
+def test_the_model_is_fed_the_raw_draws_and_nothing_else():
+    """The owner asked for this and the reason is stronger than the request.
+
+    A smoothed series was the default, and it is why TimesFM's ranking was a
+    copy of the frequency method's: handed a moving average with no signal
+    under it, a good forecaster predicts approximately the last value, so the
+    model was re-ranking the other method's score. Two of the four cells were
+    very nearly one method.
+
+    The raw series is the archive, losslessly, and what the model does with it
+    is flatter and less impressive. That is the truth about this data; a
+    forecast that "looks better" is the defect, not the goal.
+    """
+    import numpy as np
+
+    from core.features import build_context, presence_matrix
+
+    draws = random_archive(300)
+    context = build_context(draws)
+    assert np.array_equal(context, presence_matrix(draws).astype(np.float32))
+    assert set(np.unique(context)) <= {0.0, 1.0}, (
+        "the model is being fed something other than the draws"
+    )
 
 
 def test_prediction_log_round_trip(tmp_path, monkeypatch):

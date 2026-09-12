@@ -345,8 +345,6 @@ class PredictionPanel(ctk.CTkFrame):
                     ),
                     device=settings.get("timesfm_device", "cpu"),
                     context_length=int(settings.get("context_length", 1024)),
-                    representation=settings.get("representation", "frequenza"),
-                    window=window,
                     hf_token=settings.get("hf_token", ""),
                     local_dir=settings.get("timesfm_local_dir", ""),
                 )

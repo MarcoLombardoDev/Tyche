@@ -339,8 +339,6 @@ jobs:
               checkpoint=settings["timesfm_checkpoint"],
               device="cpu",
               context_length=int(settings["context_length"]),
-              representation=settings["representation"],
-              window=int(settings["frequency_window"]),
           )
           assert model.load_model(), "the checkpoint did not load"
           scores = model.score_numbers(draws)
@@ -364,8 +362,6 @@ jobs:
 
           context = build_context(
               draws,
-              representation=settings["representation"],
-              window=int(settings["frequency_window"]),
               context_length=int(settings["context_length"]),
           )
           last = context[:, -1].astype(float)
@@ -403,8 +399,6 @@ jobs:
           model = TimesFMForecaster(
               checkpoint=settings["timesfm_checkpoint"], device="cpu",
               context_length=int(settings["context_length"]),
-              representation=settings["representation"],
-              window=int(settings["frequency_window"]),
           )
           assert model.load_model()
 

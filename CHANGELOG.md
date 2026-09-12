@@ -12,6 +12,54 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.6] — 2026-09-12
+
+Al modello si danno le estrazioni grezze, e basta.
+
+### Modificato
+
+- **Via l'impostazione «Serie data al modello».** TimesFM prevede serie
+  temporali, e un'estrazione — sei numeri su novanta — non è una serie: va
+  trasformata in novanta serie, una per numero. Quella scelta c'era, era
+  visibile, ed era la risposta alla domanda «perché la previsione di TimesFM è
+  identica a quella per frequenza».
+
+  Lo era davvero. Il valore predefinito dava al modello la **frequenza
+  mobile**, cioè la presenza lisciata su una finestra — e su dati senza
+  segnale un buon previsore prevede all'incirca l'ultimo valore della serie
+  che gli si dà. Il modello stava riordinando il punteggio di un altro metodo,
+  e due delle quattro caselle erano quasi lo stesso metodo. La scheda
+  Previsione si regge sul fatto che siano quattro.
+
+  Adesso riceve `presenza`: una riga per numero, 1 se è uscito e 0 se no.
+  **È l'archivio, senza perdere niente**, ed è ciò che chiedeva chi ha
+  segnalato il problema. La previsione che ne esce è più piatta e meno
+  impressionante: è la verità su questi dati, e una media mobile di rumore
+  bianco che sembra avere uno slancio è il modo più convincente di fabbricare
+  una struttura che non c'è.
+
+- **Con l'impostazione se ne vanno due funzioni e una traduzione.**
+  `rolling_frequency` e `gap_matrix` servivano solo a costruire l'ingresso del
+  modello e non le leggeva più nessun altro. Se n'è andata anche la mappa che
+  traduceva i nomi inglesi della 0.1.0: l'unica impostazione che ne aveva
+  ancora bisogno era questa.
+
+  Un `settings.json` scritto da una versione precedente continua ad aprirsi:
+  la chiave che non esiste più viene portata avanti e non la legge nessuno.
+  Cancellare chiavi dal file di qualcun altro sarebbe una risposta peggiore
+  che ignorarne una.
+
+### Da fare a mano, una volta
+
+- **La finestra mobile resta a 150 se l'avevi già usato.** Il nuovo valore
+  predefinito, 208, vale per un'installazione nuova: `config/settings.json`
+  conserva quello che c'è scritto dentro, e 150 ci è finito perché era il
+  predefinito di prima. Tyche non lo cambia da solo — un valore scelto e un
+  valore ereditato sono indistinguibili nel file, e riscrivere la scelta di
+  qualcuno perché *probabilmente* non l'ha fatta è il genere di aiuto che
+  cancella un'impostazione voluta. Cambialo in Impostazioni → Finestra mobile,
+  è un campo solo.
+
 ## [1.0.5] — 2026-09-12
 
 Il download falliva per una barra di avanzamento, e il SuperStar era sempre lo

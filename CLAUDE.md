@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 388, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 440, GUI included
+python -m pytest tests/ -q                                   # 387, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 439, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`388 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`387 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -469,12 +469,19 @@ translation into the comments.
 
 Four consequences that are easy to trip over:
 
-- **The method and representation names are Italian identifiers**, not display
-  strings: `METHODS = ("timesfm", "frequenza", "ritardo", "casuale")` and
-  `presenza` / `frequenza` / `ritardo`. They are what `--forecast` and
-  `settings.json` take, so 0.1.0's English names are a breaking change.
-  `load_settings` maps the old spellings to the new ones — that map is the only
-  place both vocabularies exist, and it stays until nobody can be running 0.1.0.
+- **The method names are Italian identifiers**, not display strings:
+  `METHODS = ("timesfm", "frequenza", "ritardo", "casuale")`. They are what
+  `--forecast` and `settings.json` take, so 0.1.0's English names are a
+  breaking change.
+
+  `load_settings` used to carry a map from the English spellings to these, and
+  1.0.6 deleted it with the last setting that needed it. The *representation*
+  was the only one left — 0.10.0 had already removed the two that stored a
+  method name — so the map had become a translation of a vocabulary the
+  program no longer has a place to put. A stale key in somebody's
+  `settings.json` is carried through and read by nothing, which is the right
+  shape: deleting keys out of a user's file would be a worse answer than
+  ignoring one, and there is a test.
 - **`core/localise.py` is the only place the Italian number and date formats are
   written.** It swaps the separators by hand rather than setting a locale,
   because `it_IT.UTF-8` is not generated on a CI runner and `setlocale` is
@@ -566,16 +573,38 @@ page for whatever the caller runs next.
   chunking. Since there is no cross-number structure to find, none of it is
   measurable here — it would matter on a real problem.
 
-- **The rolling-frequency series must not start from zero padding.** A
-  window-warmed series that ramps out of zero teaches a forecaster that ramp,
-  and the result looks exactly like skill. `rolling_frequency` divides by the
-  number of draws seen so far for the first `window` columns. There is a test.
+- **The model is fed the raw draws and nothing else, and that is 1.0.6's
+  doing.** `build_context` is `presence_matrix` trimmed: one row per number,
+  1 if drawn and 0 if not, the archive losslessly. The owner asked what the
+  "serie data al modello" setting was for and, on being told, had it removed —
+  and the reason is stronger than the request. The smoothed series was the
+  *default*, and it is why TimesFM's ranking was a copy of the frequency
+  method's: handed a moving average with no signal under it, a good forecaster
+  predicts approximately the last value, so the model was re-ranking the other
+  method's score. Two of the four cells were very nearly one method, and the
+  Prediction panel's whole argument depends on them being four.
 
-- **`gap_matrix` writes the reset at `t+1`, not `t`.** Column `t` is what a
-  player would have seen *before* draw `t`. Putting the reset in column `t`
-  leaks the outcome into the feature that predicts it, which is the standard
-  way this kind of backtest reports skill it does not have. There is a test
-  that would catch it.
+  **Do not reintroduce a smoothed input because the forecast looks flat.**
+  Looking flat is the finding. `test_the_model_is_fed_the_raw_draws_and_nothing_else`
+  asserts the context is 0/1 and equal to the presence matrix.
+
+- **Two feature builders went with it, and one lesson is worth keeping without
+  its code.** `rolling_frequency` and `gap_matrix` existed only to build the
+  model's input; nothing else ever read them, so they were deleted rather than
+  left as a setting nothing reads with extra steps. What they knew:
+
+  - a window-warmed series must not ramp out of zero padding, because a
+    forecaster taught that ramp produces something that looks exactly like
+    skill;
+  - a "draws since last seen" matrix must write the reset at `t+1`, never at
+    `t`, because column `t` is what a player would have seen *before* draw
+    `t` and putting the reset in it leaks the outcome into the feature that
+    predicts it — the standard way this kind of backtest reports skill it does
+    not have.
+
+  Both are traps for the *next* per-column feature anybody builds here.
+  `current_gaps` is the surviving gap computation and cannot leak: it is
+  defined as of after the final draw.
 
 - **The validation harness is itself tested with a cheat.** `_OracleForecaster`
   in `tests/test_core.py` uses `len(history)` to look up the draw it is being
@@ -1273,8 +1302,16 @@ This is an observation from one run, not a theorem. The `forecast` job now
 measures it directly, printing the correlation between the forecast and the
 last observed value of each series and the mean absolute change from it, so
 the next person to wonder has a number instead of two lists to eyeball. Do not
-turn it into an assertion: it is a fact about *this* input, and feeding the
-model the presence or gap representation should change it.
+turn it into an assertion: it is a fact about *that* input.
+
+**And the input changed in 1.0.6**, which is the point of the change: the
+model is now fed the raw 0/1 draws, so the run above describes a configuration
+Tyche no longer ships. The reasoning still holds and predicts what should
+happen — a persistence forecaster handed a series with mean 6/90 and no slope
+forecasts near-identical values for all ninety, so the ranking is decided by
+small differences rather than by a copy of the frequency score. **Nobody has
+re-run the `forecast` job since**, so that is a prediction and not a
+measurement: run it and replace this paragraph with numbers.
 
 ## The sum-of-numbers finding, and the claim I got wrong about it
 

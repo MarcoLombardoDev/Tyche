@@ -412,12 +412,17 @@ Due dettagli facili da sbagliare:
   diventano tre gruppi da trentadue. *Non* è un unico contesto congiunto su
   tutti e novanta, e chi ripete che «TimesFM 3.0 è multivariato, quindi li
   modella tutti insieme» dovrebbe saperlo.
-- **La serie che gli si dà conta.** La serie grezza 0/1 di presenza ha media
-  6/90 e nessuna pendenza; la serie di frequenza mobile è abbastanza liscia da
-  poter essere prevista e inventa uno slancio che non c'è, perché una media
-  mobile di rumore bianco sembra una tendenza. Tyche usa la frequenza come
-  predefinita e offre la presenza, che produce una previsione piatta — vale la
-  pena vederla una volta.
+- **Gli si danno le estrazioni grezze, e nient'altro.** Una riga per numero,
+  1 se è uscito e 0 se no: l'archivio, senza perdere niente, nella forma che
+  TimesFM legge. Fino alla 1.0.5 c'era un'impostazione per dargli invece una
+  *frequenza mobile*, ed era quella predefinita — ed è il motivo per cui la
+  classifica di TimesFM era una copia di quella del metodo «frequenza». Una
+  media mobile di rumore bianco sembra avere uno slancio, e un buon previsore
+  a cui la si dà prevede all'incirca l'ultimo valore: il modello stava
+  riordinando il punteggio di un altro metodo. Due delle quattro caselle erano
+  quasi lo stesso metodo, e questa pagina si regge sul fatto che siano quattro.
+  Sul dato grezzo la previsione è più piatta e meno impressionante, ed è la
+  verità su questi dati.
 
 E che cosa ne fa, da un'esecuzione reale su una macchina che poteva scaricare i
 pesi:

@@ -51,7 +51,7 @@ from __future__ import annotations
 import numpy as np
 
 from core.archive import ALL_NUMBERS, NUMBER_MAX, Draw
-from core.features import DEFAULT_WINDOW, build_context, build_superstar_context
+from core.features import build_context, build_superstar_context
 from core.model_store import ensure_checkpoint, resolve_checkpoint
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 
@@ -76,8 +76,6 @@ class TimesFMForecaster:
         checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
         device: str = "cpu",
         context_length: int = 1024,
-        representation: str = "frequenza",
-        window: int = DEFAULT_WINDOW,
         hf_token: str = "",
         local_dir: str = "",
     ):
@@ -88,8 +86,6 @@ class TimesFMForecaster:
         self.local_dir = local_dir
         self.device = device
         self.context_length = context_length
-        self.representation = representation
-        self.window = window
         self.hf_token = hf_token
         self._model = None
         # Why the last load_model() said no. Without it the caller has a False
@@ -205,12 +201,7 @@ class TimesFMForecaster:
                 f"{MIN_CONTEXT_DRAWS} perché la finestra mobile abbia senso"
             )
 
-        context = build_context(
-            draws,
-            representation=self.representation,
-            window=self.window,
-            context_length=self.context_length,
-        )
+        context = build_context(draws, context_length=self.context_length)
         return self._forecast(context, progress)
 
     def score_superstar(self, draws: list[Draw], progress=None) -> dict[int, float]:
@@ -236,12 +227,7 @@ class TimesFMForecaster:
                 f"{recorded} estrazioni con SuperStar sono troppo poche: ne "
                 f"servono almeno {MIN_CONTEXT_DRAWS}"
             )
-        context = build_superstar_context(
-            draws,
-            representation=self.representation,
-            window=self.window,
-            context_length=self.context_length,
-        )
+        context = build_superstar_context(draws, context_length=self.context_length)
         return self._forecast(context, progress)
 
     def _forecast(self, context, progress=None) -> dict[int, float]:
@@ -268,7 +254,7 @@ class TimesFMForecaster:
     def describe(self) -> str:
         chunks = -(-NUMBER_MAX // MAX_VARIATES_PER_FORWARD)
         return (
-            f"{self.checkpoint} su {self.device}, serie «{self.representation}», "
+            f"{self.checkpoint} su {self.device}, estrazioni grezze, "
             f"contesto di {self.context_length} estrazioni, {NUMBER_MAX} variate in "
             f"{chunks} blocchi di attenzione da al massimo "
             f"{MAX_VARIATES_PER_FORWARD}"

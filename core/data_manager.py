@@ -55,11 +55,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # gigabyte will not arrive over the wire, and there it is the difference
     # between TimesFM working and TimesFM never working at all.
     "timesfm_local_dir": "",
-    # Which of the three views in core.features the model is fed. "frequenza"
-    # is the only one with enough amplitude for a forecast to have a gradient
-    # to follow; "presenza" is the honest raw series and forecasts as a flat
-    # line at 0.067, which is itself worth seeing once.
-    "representation": "frequenza",
     "frequency_window": DEFAULT_WINDOW,
     # TimesFM 3.0 accepts up to 16k context. 1024 draws is about six and a
     # half years, long enough to cover any seasonality the game could have and
@@ -119,29 +114,6 @@ def load_settings() -> dict:
         return settings
     if isinstance(stored, dict):
         settings.update(stored)
-    return _translate_names(settings)
-
-
-# 0.1.0 wrote the representation name in English. 0.2.0 renamed it, and a
-# settings file from the older version would otherwise reach ``build_context``
-# as an unknown representation and raise where the user expects a forecast.
-# Reading is where the two vocabularies meet, so this is the only place that
-# has to know both. The method names were translated here too until 0.10.0,
-# when the two settings that stored one were removed.
-_RENAMED = {
-    "presence": "presenza",
-    "frequency": "frequenza",
-    "gap": "ritardo",
-    "random": "casuale",
-}
-
-
-def _translate_names(settings: dict) -> dict:
-    """Map any 0.1.0 English method or representation name to its 0.2.0 name."""
-    representation = settings.get("representation")
-    if isinstance(representation, str):
-        settings["representation"] = _RENAMED.get(representation, representation)
-
     return settings
 
 

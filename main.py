@@ -362,8 +362,6 @@ def _run_forecast(method: str) -> int:
             checkpoint=settings["timesfm_checkpoint"],
             device=settings["timesfm_device"],
             context_length=int(settings["context_length"]),
-            representation=settings["representation"],
-            window=int(settings["frequency_window"]),
             hf_token=settings.get("hf_token", ""),
             local_dir=settings.get("timesfm_local_dir", ""),
         )

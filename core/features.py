@@ -16,25 +16,31 @@ draw, oldest column first. That is TimesFM 3.0's multivariate layout
 context instead of ninety independent univariate calls, so whatever
 cross-number structure the model can see, it gets the chance to see.
 
-Three representations of the same history, because they are not
-interchangeable:
+**The model is given the raw draws, and nothing else.** ``presence_matrix`` is
+1 if the number was drawn and 0 if not: the archive, losslessly, in the shape
+TimesFM reads. Almost pure noise at the single-draw level — the mean of any
+row is 6/90 = 0.0667 and its autocorrelation is indistinguishable from zero —
+and that is the honest input.
 
-- **presenza** is the raw fact: 1 if the number was drawn, 0 if not. Faithful,
-  and almost pure noise at the single-draw level — the mean of any row is
-  6/90 = 0.0667 and its autocorrelation is indistinguishable from zero.
-- **frequenza** is presence smoothed over a trailing window. This is
-  the series a forecaster can actually work with, because it has enough
-  amplitude to carry a gradient, and it is also the one that invents structure
-  most convincingly: a moving average of white noise looks like it has
-  momentum. Every trend visible in it is an artefact of the window.
-- **ritardo** is the Italian player's own term — draws since the number last
-  came up. It rises by one per draw and resets to zero, so it is
-  deterministic given presence and adds no information; it is here because it
-  is what a player expects to see, and because its distribution is a clean
-  test of independence (:mod:`core.randomness`).
+**Until 1.0.6 there was a setting to feed it something else**, and the two
+alternatives were a trailing average of presence and the draws-since-last-seen
+series. The owner asked what the setting was for and then had it removed, and
+he was right twice over:
 
-None of the three makes the next draw predictable. They make it *describable*,
-which is a different and more honest claim.
+- The smoothed one was the default, and it is why TimesFM's ranking was a copy
+  of the frequency method's. Handed a moving average with no signal under it,
+  a good forecaster predicts approximately the last value — so the model was
+  being asked to re-rank a series that was already the other method's score.
+  Two of the four cells were very nearly the same method, and the panel's
+  argument depends on them being four.
+- A moving average of white noise looks like it has momentum. Every trend
+  visible in it is an artefact of the window, and feeding it to a foundation
+  model is the most convincing way to manufacture structure that is not there.
+
+What the model does with the raw series is flatter and less impressive, and it
+is the truth: there is nothing in it to follow. Do not reintroduce a smoothed
+input on the grounds that the forecast "looks better" — looking better is the
+defect.
 """
 
 from __future__ import annotations
@@ -68,48 +74,6 @@ def presence_matrix(draws: list[Draw]) -> np.ndarray:
         for n in draw.numbers:
             matrix[n - 1, t] = 1.0
     return matrix
-
-
-def rolling_frequency(presence: np.ndarray, window: int = DEFAULT_WINDOW) -> np.ndarray:
-    """``(90, T)`` trailing mean of ``presence`` over ``window`` draws.
-
-    The first ``window`` columns divide by however many draws exist so far
-    rather than by ``window``, so the series starts at a real frequency
-    instead of climbing out of an artificial zero. A forecaster fed the
-    zero-padded version learns that ramp and reproduces it, which looks
-    exactly like having learned something.
-    """
-    if window < 1:
-        raise ValueError("la finestra deve essere almeno 1")
-    n_numbers, n_draws = presence.shape
-    if n_draws == 0:
-        return presence.copy()
-    cumulative = np.cumsum(presence, axis=1)
-    padded = np.concatenate([np.zeros((n_numbers, 1), dtype=presence.dtype), cumulative], axis=1)
-    starts = np.maximum(np.arange(n_draws) - window + 1, 0)
-    sums = cumulative - padded[:, starts]
-    counts = np.arange(n_draws) - starts + 1
-    return (sums / counts).astype(np.float32)
-
-
-def gap_matrix(presence: np.ndarray) -> np.ndarray:
-    """``(90, T)`` of draws since each number last appeared, *before* draw t.
-
-    Column ``t`` is what a player would have seen walking up to the terminal
-    ahead of draw ``t``: a number drawn at ``t`` still shows its old gap
-    there, and only resets at ``t+1``. Writing the reset into column ``t``
-    would leak the outcome into the features, which is the standard way a
-    backtest of this kind accidentally reports skill.
-    """
-    n_numbers, n_draws = presence.shape
-    gaps = np.zeros((n_numbers, n_draws), dtype=np.float32)
-    current = np.zeros(n_numbers, dtype=np.float32)
-    for t in range(n_draws):
-        gaps[:, t] = current
-        drawn = presence[:, t] > 0
-        current = current + 1.0
-        current[drawn] = 0.0
-    return gaps
 
 
 def current_gaps(draws: list[Draw]) -> dict[int, int]:
@@ -185,52 +149,30 @@ def superstar_presence_matrix(draws: list[Draw]) -> np.ndarray:
     return matrix
 
 
-def _view(
-    presence: np.ndarray,
-    representation: str,
-    window: int,
-    context_length: int | None,
-) -> np.ndarray:
-    """One of the three views of a presence matrix, trimmed and ready."""
-    if representation == "presenza":
-        series = presence
-    elif representation == "frequenza":
-        series = rolling_frequency(presence, window)
-    elif representation == "ritardo":
-        series = gap_matrix(presence)
-    else:
-        raise ValueError(f"rappresentazione sconosciuta: {representation!r}")
+def _trim(series: np.ndarray, context_length: int | None) -> np.ndarray:
+    """The most recent ``context_length`` columns, contiguous and float32."""
     if context_length is not None and series.shape[1] > context_length:
         series = series[:, -context_length:]
     return np.ascontiguousarray(series, dtype=np.float32)
 
 
 def build_context(
-    draws: list[Draw],
-    representation: str = "frequenza",
-    window: int = DEFAULT_WINDOW,
-    context_length: int | None = None,
+    draws: list[Draw], context_length: int | None = None
 ) -> np.ndarray:
-    """``(90, context_length)`` float32 ready for TimesFM.
+    """``(90, context_length)`` float32 ready for TimesFM: the raw draws.
 
-    ``representation`` picks which of the three views above to hand the model.
     ``context_length`` trims to the most recent columns; None keeps everything.
     """
-    return _view(presence_matrix(draws), representation, window, context_length)
+    return _trim(presence_matrix(draws), context_length)
 
 
 def build_superstar_context(
-    draws: list[Draw],
-    representation: str = "frequenza",
-    window: int = DEFAULT_WINDOW,
-    context_length: int | None = None,
+    draws: list[Draw], context_length: int | None = None
 ) -> np.ndarray:
-    """The same three views, over the SuperStar's drum instead of the wheel.
+    """The same, over the SuperStar's drum instead of the wheel.
 
     Separate from :func:`build_context` rather than a flag on it, because the
     two answer different questions about different urns and a caller that got
     the flag wrong would get a plausible-looking forecast of the wrong thing.
     """
-    return _view(
-        superstar_presence_matrix(draws), representation, window, context_length
-    )
+    return _trim(superstar_presence_matrix(draws), context_length)

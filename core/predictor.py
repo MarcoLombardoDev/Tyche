@@ -227,7 +227,7 @@ def superstar_pick(
 def rank_numbers(scores: dict[int, float], descending: bool = True) -> list[int]:
     """The ninety numbers ordered by score, ties broken by the number itself.
 
-    The tie-break is not cosmetic. The presence representation forecasts to
+    The tie-break is not cosmetic. The raw presence series forecasts to
     near-identical values for every number, so without a deterministic order
     the ranking would depend on dictionary insertion and two identical runs
     would print different combinations.
