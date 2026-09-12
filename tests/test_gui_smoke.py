@@ -38,6 +38,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -125,7 +126,13 @@ def _generate(app, count: str = "1"):
     app.show("prediction")
     panel.count.set(count)
     panel._generate()
-    for _ in range(200):
+    # Four seconds was the budget and it was not enough: the whole file went
+    # red once on this line while another suite had the machine, and passed
+    # alone straight afterwards. A worker thread's share of a loaded runner is
+    # not something the test can control, so the budget is generous — twelve
+    # seconds — rather than tight. It still fails, and fast, when nothing is
+    # coming: the loop ends the moment a prediction lands.
+    for _ in range(600):
         app.update()
         if panel._predictions:
             return panel
@@ -166,6 +173,8 @@ def test_every_method_runs_at_once_and_gets_its_own_quarter(app):
     preference. Side by side, a reader can watch 330 million parameters and a
     random number generator disagree about which six numbers to play.
     """
+    from core.predictor import method_name
+
     panel = _generate(app)
 
     # TimesFM needs weights this machine does not have; the other three are
@@ -175,7 +184,13 @@ def test_every_method_runs_at_once_and_gets_its_own_quarter(app):
         prediction = panel._predictions[method]
         assert prediction.method == method
         assert len(prediction.combinations) == 1
-        assert panel._cells[method].box.get("1.0", "end").strip()
+        assert panel._cells[method].balls.winfo_children(), (
+            f"{method} produced nothing to look at"
+        )
+    # The scores moved out of the cells and into the report beside them.
+    report = panel.report.get("1.0", "end")
+    for method in ("frequenza", "ritardo", "casuale"):
+        assert method_name(method) in report
 
 
 def test_the_random_control_keeps_its_quarter_of_the_screen(app):
@@ -188,10 +203,14 @@ def test_the_random_control_keeps_its_quarter_of_the_screen(app):
     from core.predictor import METHODS
 
     panel = app._panels["prediction"]
+    app.show("prediction")
+    app.update()
     assert set(panel._cells) == set(METHODS)
     assert "casuale" in panel._cells
-    sizes = {m: cell.box.cget("height") for m, cell in panel._cells.items()}
-    assert len(set(sizes.values())) == 1, f"the cells are not the same size: {sizes}"
+    widths = {m: cell.winfo_width() for m, cell in panel._cells.items()}
+    assert len(set(widths.values())) == 1, f"the cells are not the same size: {widths}"
+    for method, cell in panel._cells.items():
+        assert cell.winfo_ismapped(), f"{method} is built but not on the screen"
 
 
 def test_timesfm_without_the_model_says_so_in_its_own_cell(app):
@@ -239,7 +258,9 @@ def test_a_missing_model_is_stated_before_it_is_offered(app, monkeypatch):
     panel = app._panels["prediction"]
     app.show("prediction")
     app.update()
-    assert "pesi" in panel.model_status.label.cget("text")
+    said = panel.model_status.label.cget("text")
+    assert "pesi" in said
+    assert "Percorso" in said, "an error here has to say where it can be fixed"
     assert not panel.model_status.button.winfo_ismapped(), (
         "the download belongs to the path, not to this panel"
     )
@@ -297,7 +318,9 @@ def test_ready_weights_are_reported_on_both_screens(app, monkeypatch):
 
     app.show("prediction")
     app.update()
-    assert "pronto" in app._panels["prediction"].model_status.label.cget("text")
+    # Beside «Genera» a ready model says nothing at all: the strip there is
+    # for problems, and the path panel is where the state is reported.
+    assert app._panels["prediction"].model_status.label.cget("text") == ""
 
     home = app._panels["home"]
     app.show("home")
@@ -394,17 +417,20 @@ def test_the_archive_tab_offers_one_source_and_a_file(app):
     assert hasattr(panel, "_fetch_export") and hasattr(panel, "_import_file")
 
 
-def test_the_method_cells_are_bordered_and_tall_enough_to_read(app):
-    """Four boxes showing three rows each are four boxes nobody reads."""
-    from gui.prediction_panel import CELL_HEIGHT
+def test_the_method_cells_are_bordered_and_hold_only_the_numbers(app):
+    """Four cells on one dark background read as one page of text.
+
+    And since 1.0.7 they hold the answer and nothing else: the scores moved to
+    the report beside them, because six numbers in a fifth of a cell with the
+    arithmetic filling the rest is the wrong way round.
+    """
     from gui.theme import ACCENT
 
     panel = app._panels["prediction"]
     for cell in panel._cells.values():
         assert cell.cget("border_width") >= 1
         assert cell.cget("border_color") == ACCENT
-        assert cell.box.cget("height") == CELL_HEIGHT
-    assert CELL_HEIGHT >= 240
+        assert not hasattr(cell, "box"), "the scores are back inside the cell"
 
 
 def test_every_label_is_one_size_unless_it_is_a_heading(app):
@@ -539,7 +565,7 @@ def test_the_prediction_follows_the_system_size_and_superstar_settings(app):
         assert all(len(c) == 9 for c in prediction.combinations)
         assert prediction.superstar is not None
 
-    text = panel.detail.get("1.0", "end")
+    text = panel.report.get("1.0", "end")
     assert "Sistema integrale da 9 numeri" in text
     assert "84 colonne" in text
     # The honest sentence has to be on the screen, not only in the source.
@@ -553,7 +579,7 @@ def test_a_plain_column_says_so_and_shows_no_system_table(app):
     panel = _generate(app)
 
     assert all(p.superstar is None for p in panel._predictions.values())
-    text = panel.detail.get("1.0", "end")
+    text = panel.report.get("1.0", "end")
     assert "Colonna singola" in text
     assert "Sistema integrale" not in text
 
@@ -596,7 +622,7 @@ def test_the_prediction_prints_what_the_ticket_costs(app):
     # 0.6.1 — the duplication this checks only exists with several plays.
     panel = _generate(app, count="5")
 
-    text = panel.detail.get("1.0", "end")
+    text = panel.report.get("1.0", "end")
     assert "Costo della giocata" in text
     # Five plays of 84 columns at 1.50 each.
     assert "630,00" in text
@@ -610,7 +636,7 @@ def test_the_cost_is_for_one_ticket_and_not_for_four(app):
     reads one price under four tickets and assumes it is the total.
     """
     panel = _generate(app)
-    text = panel.detail.get("1.0", "end")
+    text = panel.report.get("1.0", "end")
     assert "quattro" in text
     assert "non una giocata da moltiplicare" in text
     # In the same block as the price, not three screens away where the two
@@ -624,7 +650,7 @@ def test_a_single_combination_wastes_nothing_and_says_so(app):
     app.settings["predict_superstar"] = False
     panel = _generate(app, count="1")
 
-    text = panel.detail.get("1.0", "end")
+    text = panel.report.get("1.0", "end")
     assert "pagate due volte" not in text
     assert "scelte successive" not in text
 
@@ -880,7 +906,11 @@ def test_a_folder_of_weights_is_read_by_the_path_and_by_the_prediction_strip(
 
     app.show("prediction")
     app.update()
-    assert str(folder) in app._panels["prediction"].model_status.label.cget("text")
+    # The strip beside «Genera» reports problems and nothing else, so a folder
+    # that works shows as an empty line there and as a method that will run.
+    strip = app._panels["prediction"].model_status
+    assert strip.available is True, "the folder was not read by the prediction tab"
+    assert strip.label.cget("text") == ""
 
     home = app._panels["home"]
     home.refresh()
@@ -919,3 +949,101 @@ def test_every_settings_field_is_actually_on_the_screen(app):
             f"«{label}» is on the screen at "
             f"{widget.winfo_width()}x{widget.winfo_height()} pixels"
         )
+
+
+def test_the_superstar_rides_on_the_numbers_row_with_a_star_and_no_label(app):
+    """One row, right-aligned, a star instead of the word.
+
+    "SuperStar" cost seventy pixels the combinations wanted and a whole row of
+    its own; the star says the same thing in the width of a character. And it
+    is packed last so that a window too narrow for a twelve-number system
+    loses the star rather than the numbers — which is what "if there is room"
+    has to mean to be true.
+    """
+    import customtkinter as ctk
+
+    from gui.prediction_panel import SUPERSTAR_MARK
+
+    app.settings["predict_superstar"] = True
+    panel = _generate(app)
+
+    cell = panel._cells["frequenza"]
+    first_row = cell.balls.winfo_children()[0]
+    stars = [
+        child for frame in first_row.winfo_children()
+        if isinstance(frame, ctk.CTkFrame)
+        for child in frame.winfo_children()
+        if isinstance(child, ctk.CTkLabel) and SUPERSTAR_MARK in child.cget("text")
+    ]
+    assert stars, "the SuperStar is not on the same row as the numbers"
+    assert stars[0].cget("text_color") == "#ffffff"
+
+    texts = _all_label_texts(cell)
+    assert not any("SuperStar" in t for t in texts), (
+        "the star is there to replace that label, not to sit beside it"
+    )
+
+
+def test_the_button_is_dead_while_a_generation_runs(app):
+    """Pressing it again during a run did nothing and said so afterwards.
+
+    run_worker already refuses the second job, but refusing it in the status
+    bar after the click is not the same as saying beforehand that the click
+    will do nothing.
+    """
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.update()
+    assert panel.button.cget("state") == "normal"
+
+    # Observed *during* the run, and that is the whole test. _generate()
+    # disables the button before run_worker returns, and _enable() only
+    # reaches it through the queue that update() drains — so between these two
+    # lines the state is deterministic rather than a race.
+    panel._generate()
+    assert panel.button.cget("state") == "disabled", (
+        "the button stayed live while its own job was running"
+    )
+
+    for _ in range(200):
+        app.update()
+        if panel._predictions:
+            break
+        time.sleep(0.02)
+    for _ in range(50):
+        app.update()
+        if panel.button.cget("state") == "normal":
+            break
+        time.sleep(0.02)
+    assert panel.button.cget("state") == "normal", (
+        "the button never came back after the run"
+    )
+
+    # And it comes back even when the work raises, which is the case that
+    # would otherwise leave it dead for the rest of the session.
+    panel.button.configure(state="disabled")
+    app.run_worker(
+        "Prova",
+        lambda report: (_ for _ in ()).throw(RuntimeError("boom")),
+        lambda result: None,
+        on_done=panel._enable,
+    )
+    for _ in range(200):
+        app.update()
+        if panel.button.cget("state") == "normal":
+            break
+        time.sleep(0.02)
+    assert panel.button.cget("state") == "normal", (
+        "a job that raised left the button disabled"
+    )
+
+
+def _all_label_texts(widget) -> list[str]:
+    import customtkinter as ctk
+
+    found = []
+    for child in widget.winfo_children():
+        if isinstance(child, ctk.CTkLabel):
+            found.append(child.cget("text"))
+        found += _all_label_texts(child)
+    return found

@@ -12,6 +12,52 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.7] — 2026-09-12
+
+La scheda Previsione rimessa in ordine: le risposte a sinistra, i conti a
+destra.
+
+### Modificato
+
+- **Due colonne invece di quattro riquadri misti.** I quattro metodi stanno
+  ora in pila nella colonna di sinistra e contengono **solo i numeri**; tutto
+  ciò che è testo — l'archivio, la forma della giocata, il costo, e in coda i
+  punteggi di ogni metodo — sta in un'unica finestra scura a destra. Prima
+  ogni riquadro era mezzo output e mezza tabella, quindi i sei numeri per cui
+  si apre quella scheda occupavano un quinto dello spazio e l'aritmetica il
+  resto, quattro volte.
+
+  I punteggi non sono diventati meno importanti: si sono spostati dove c'è
+  larghezza per leggerli. E stando tutti nello stesso riquadro, le quattro
+  escursioni finiscono sulla stessa pagina — che è il modo di accorgersi che
+  due metodi diversi stanno ordinando i novanta numeri quasi uguale.
+
+- **Il SuperStar sta sulla riga dei numeri**, allineato a destra, preceduto da
+  una stella bianca e senza etichetta. «SuperStar» costava settanta pixel che
+  servivano alle combinazioni e una riga intera; la stella dice la stessa cosa
+  nello spazio di un carattere. È impaginata per ultima, quindi una finestra
+  troppo stretta per un sistema da dodici numeri perde la stella e non i
+  numeri.
+
+- **Il SuperStar è attivo di default.** Attenzione a una conseguenza: con
+  TimesFM la previsione costa il doppio, perché sono due passate del modello —
+  una per l'urna dei sei e una per quella del SuperStar. Le Impostazioni ora
+  lo dicono.
+
+- **Accanto a «Genera» compaiono solo i problemi.** Prima c'era scritto
+  «TimesFM è pronto», che è una riga da leggere ogni volta per scoprire che
+  non c'è niente da fare. Quando invece non è pronto, adesso dice cosa non va
+  **e dove si risolve**: nella scheda Percorso, altrimenti la previsione gira
+  con gli altri tre metodi.
+
+### Corretto
+
+- **Il pulsante «Genera» si spegne mentre la generazione è in corso**, e torna
+  attivo quando finisce — anche se è fallita. Premere due volte non ha mai
+  fatto partire due elaborazioni, ma dirlo nella barra di stato *dopo* il
+  click non è la stessa cosa che far vedere prima che il click non farà
+  niente.
+
 ## [1.0.6] — 2026-09-12 — `3a45422`
 
 Al modello si danno le estrazioni grezze, e basta.

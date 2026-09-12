@@ -68,9 +68,11 @@ _METHOD_LABELS = {
     "casuale": "Casuale (la condizione di controllo)",
 }
 
-# The height of one cell's report box. Doubled in 0.11.0: at 120 the boxes
-# showed three lines of a table and the page read as noise.
-CELL_HEIGHT = 240
+# The star that marks the SuperStar. No label beside it: a row of six purple
+# balls and a seventh needs one thing said about the seventh, and a symbol
+# says it in the width of a character where "SuperStar" costs seventy pixels
+# the combinations want.
+SUPERSTAR_MARK = "★"
 
 # What each cell says under the method's name. Short: the cell is a quarter of
 # the window and the numbers are the point.
@@ -160,7 +162,14 @@ def _ticket_lines(prediction) -> list[str]:
 
 
 class _MethodCell(ctk.CTkFrame):
-    """One quarter of the page: a method's combinations and its scores."""
+    """One method's answer: the numbers, and nothing else.
+
+    **The scores used to be in here and are now in the report beside it.**
+    Four dark boxes of tables stacked down the page put the thing the user
+    came for — six numbers — in a fifth of the space and the arithmetic in the
+    other four fifths. The tables did not become less important; they moved to
+    where there is room to read them, which is a column of their own.
+    """
 
     def __init__(self, parent, method: str):
         # A frame with Tyche's own colour round it. Four cells on one dark
@@ -192,18 +201,12 @@ class _MethodCell(ctk.CTkFrame):
             self, text="", anchor="w", justify="left", text_color=MUTED,
             wraplength=520, font=body_font(),
         ))
-        self.state.pack(fill="x", padx=10)
-        # Twice what it was. Four boxes showing three rows each is four
-        # boxes nobody can read; CELL_HEIGHT is what makes the grid taller
-        # than the window, and the scrollable frame is what makes that fine.
-        self.box = ReportBox(self, height=CELL_HEIGHT)
-        self.box.pack(fill="both", expand=True, padx=10, pady=(4, 10))
+        self.state.pack(fill="x", padx=10, pady=(0, 10))
 
     def clear(self, message: str, colour: str = MUTED) -> None:
         for child in self.balls.winfo_children():
             child.destroy()
         self.state.configure(text=message, text_color=colour)
-        self.box.set_text("")
 
     def show(self, prediction) -> None:
         for child in self.balls.winfo_children():
@@ -216,15 +219,28 @@ class _MethodCell(ctk.CTkFrame):
                 line, text=f"{i}.", width=20, text_color=MUTED, font=body_font(),
             ).pack(side="left")
             ball_row(line, combination, size=30).pack(side="left")
-        if prediction.superstar is not None:
-            line = ctk.CTkFrame(self.balls, fg_color="transparent")
-            line.pack(fill="x", pady=(6, 2))
-            ctk.CTkLabel(
-                line, text="SuperStar", width=72, anchor="w",
-                text_color=MUTED, font=body_font(),
-            ).pack(side="left")
-            ball_row(line, (prediction.superstar,), size=30).pack(side="left")
-        self.box.set_text("\n".join(_score_lines(prediction)))
+            if i == 1 and prediction.superstar is not None:
+                self._star(line, prediction.superstar)
+
+    def _star(self, line, number: int) -> None:
+        """The SuperStar, on the numbers' own row and right-aligned.
+
+        Packed *after* the combination and to the right, which is what makes
+        "if there is room" true rather than a hope: pack hands the first
+        widget its requested width and this one takes what is left, so a
+        window too narrow for a twelve-number system loses the star and not
+        the numbers.
+        """
+        star = ctk.CTkFrame(line, fg_color="transparent")
+        star.pack(side="right")
+        # Bold, and bigger than the body, which is the one exemption the
+        # "everything a reader reads is one size" rule has — and it applies
+        # here for the reason it exists: this is a glyph doing the job of an
+        # icon beside a 30px ball, not a word in a sentence.
+        ctk.CTkLabel(
+            star, text=SUPERSTAR_MARK, text_color="#ffffff", font=heading_font(16),
+        ).pack(side="left", padx=(0, 4))
+        ball_row(star, (number,), size=30).pack(side="left")
 
 
 def _score_lines(prediction) -> list[str]:
@@ -250,6 +266,31 @@ def _score_lines(prediction) -> list[str]:
     for rank, n in enumerate(ranked[-3:], len(ranked) - 2):
         lines.append(f"{rank:>5} {n:>3} {prediction.scores[n]:>14.6f}")
     lines += ["", prediction.note]
+    return lines
+
+
+def _method_lines(predictions: dict, skipped: str) -> list[str]:
+    """Every method's own numbers, under the text they all share.
+
+    They used to be four separate boxes inside four cells. One report means
+    one place to scroll and, more to the point, the four spreads end up on the
+    same page — which is how a reader finds out that two methods that look
+    different are ranking the ninety numbers almost identically.
+
+    Built from :data:`METHODS` rather than from ``predictions``, so a method
+    that produced nothing says so here instead of vanishing from the
+    comparison.
+    """
+    lines = ["═" * 46, "I punteggi, metodo per metodo", ""]
+    for method in METHODS:
+        lines.append(f"── {method_name(method)} " + "─" * 24)
+        if method in predictions:
+            lines += _score_lines(predictions[method])
+        elif method == "timesfm":
+            lines.append(skipped or "Non eseguito: il modello non è disponibile.")
+        else:
+            lines.append("Non eseguito.")
+        lines.append("")
     return lines
 
 
@@ -279,45 +320,52 @@ class PredictionPanel(ctk.CTkFrame):
         self.count = ctk.CTkOptionMenu(row, width=70, values=[str(i) for i in range(1, 11)])
         self.count.set(str(self.app.settings.get("combinations", 1)))
         self.count.pack(side="left", padx=(0, 16))
-        ctk.CTkButton(row, text="Genera", width=120, command=self._generate).pack(side="left")
+        self.button = ctk.CTkButton(
+            row, text="Genera", width=120, command=self._generate,
+        )
+        self.button.pack(side="left")
 
-        # TimesFM's state on the same line as the button, where the hint about
-        # combinations used to be: whether the fourth method can run is worth
-        # more of that space than a sentence about the third combination, and
-        # the cost block below says the same thing where it is relevant.
-        # No download button here — step 2 of the path owns that one.
-        self.model_status = ModelStatus(row, self.app, offer_download=False)
+        # Beside the button, and *only when something is wrong*. The strip
+        # used to say "TimesFM è pronto" there, which is a line the reader has
+        # to process on every visit to learn that nothing needs doing. When it
+        # is not ready it says so and sends the reader to the path, which is
+        # the screen that can actually fix it.
+        # No download button here either — step 2 of the path owns that one.
+        self.model_status = ModelStatus(
+            row, self.app, offer_download=False, errors_only=True,
+        )
         self.model_status.pack(side="left", fill="x", expand=True, padx=14)
 
-        # Packed before the grid and to the bottom: pack gives the expanding
-        # widget whatever is left, and a strip packed after it is simply
-        # clipped off the window when the four cells are hungry.
+        # Two columns: the answers on the left, the working on the right.
         #
-        # It wraps on words rather than being folded by hand, so the prose
-        # uses the whole window instead of breaking at a column count guessed
-        # in advance. The tables inside it are short enough not to need the
-        # width.
-        self.detail = ReportBox(self, height=120, wrap="word")
-        self.detail.pack(side="bottom", fill="x", padx=22, pady=(4, 14))
-        self.detail.set_text(value_note())
-
-        # Scrollable, because the cells are now taller than a 840px window can
-        # show two rows of. Given the choice between four readable cells that
-        # scroll and four unreadable ones that fit, the owner asked for the
-        # first — twice the height, and a border so the four read as four.
-        grid = ctk.CTkScrollableFrame(self, fg_color=BG_ROOT)
-        grid.pack(fill="both", expand=True, padx=16, pady=(0, 0))
+        # Before this the four cells were a 2x2 grid of half-output and
+        # half-scores, with a shared block of prose underneath — so the six
+        # numbers a reader came for took a fifth of each cell and the tables
+        # took the rest, four times over. The numbers now stack down the left
+        # in a column of their own, and everything that is text lives in one
+        # report on the right where there is width to read it.
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=16, pady=(0, 14))
+        body.grid_rowconfigure(0, weight=1)
         for column in (0, 1):
-            grid.grid_columnconfigure(column, weight=1, uniform="method")
-        for line in (0, 1):
-            grid.grid_rowconfigure(line, weight=1, uniform="method", minsize=CELL_HEIGHT)
-        for index, method in enumerate(METHODS):
-            cell = _MethodCell(grid, method)
-            cell.grid(
-                row=index // 2, column=index % 2, sticky="nsew", padx=6, pady=6,
-            )
+            body.grid_columnconfigure(column, weight=1, uniform="half")
+
+        # Scrollable: ten combinations of a twelve-number system is a column
+        # taller than any window, and the cells must not shrink to fit.
+        cells = ctk.CTkScrollableFrame(body, fg_color=BG_ROOT)
+        cells.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        for method in METHODS:
+            cell = _MethodCell(cells, method)
+            cell.pack(fill="x", pady=(0, 10))
             self._cells[method] = cell
             cell.clear("Non ancora generate.")
+
+        # The dark report. It wraps on words rather than being folded by hand,
+        # so the prose uses the whole column; the tables appended to it are
+        # narrower than that and do not need the width.
+        self.report = ReportBox(body, wrap="word")
+        self.report.grid(row=0, column=1, sticky="nsew")
+        self.report.set_text(value_note())
 
     # ── running ──────────────────────────────────────────────
     def _generate(self) -> None:
@@ -371,7 +419,18 @@ class PredictionPanel(ctk.CTkFrame):
                 )
             return results, skipped
 
-        self.app.run_worker("Previsione", work, self._show)
+        # Disabled until this run ends, and re-enabled by on_done rather than
+        # by _show: a run that raises never reaches _show, and a button that
+        # comes back only on success is a button that dies the first time
+        # something goes wrong. run_worker already refuses a second job, but
+        # refusing it in the status bar after the click is not the same as
+        # saying beforehand that the click will do nothing.
+        self.button.configure(state="disabled", text="Generazione…")
+        self.app.run_worker("Previsione", work, self._show, on_done=self._enable)
+
+    def _enable(self) -> None:
+        """Give the button back. Runs after every job, successful or not."""
+        self.button.configure(state="normal", text="Genera")
 
     # ── output ───────────────────────────────────────────────
     def _show(self, result) -> None:
@@ -398,6 +457,10 @@ class PredictionPanel(ctk.CTkFrame):
                 cell.clear("Non generata.")
 
         if not predictions:
+            self.report.set_text(
+                "Nessun metodo ha prodotto una previsione.\n\n"
+                + (skipped or "")
+            )
             self.app.set_status("Nessun metodo ha prodotto una previsione.")
             return
 
@@ -422,8 +485,10 @@ class PredictionPanel(ctk.CTkFrame):
             "non una giocata da moltiplicare per quattro.",
             "",
             value_note(),
+            "",
+            *_method_lines(predictions, skipped),
         ]
-        self.detail.set_text("\n".join(lines))
+        self.report.set_text("\n".join(lines))
         self.app.set_status(
             f"{it_count(len(predictions), 'metodo', 'metodi')} a confronto, "
             f"{it_count(len(any_prediction.combinations), 'combinazione', 'combinazioni')} "

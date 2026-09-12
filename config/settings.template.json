@@ -8,7 +8,7 @@
   "auto_repair_labels": true,
   "combinations": 1,
   "prediction_size": 6,
-  "predict_superstar": false,
+  "predict_superstar": true,
   "column_price": 1.0,
   "superstar_price": 0.5
 }

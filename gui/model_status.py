@@ -37,7 +37,14 @@ class ModelStatus(ctk.CTkFrame):
     the method can run, and the panel knows what to grey out.
     """
 
-    def __init__(self, parent, app, on_change=None, offer_download: bool = True):
+    def __init__(
+        self,
+        parent,
+        app,
+        on_change=None,
+        offer_download: bool = True,
+        errors_only: bool = False,
+    ):
         super().__init__(parent, fg_color="transparent")
         self.app = app
         self._on_change = on_change
@@ -46,6 +53,12 @@ class ModelStatus(ctk.CTkFrame):
         # is two places to look for it. The path keeps the offer because the
         # path is where a user is told what has to be true before generating.
         self._offer_download = offer_download
+        # Beside «Genera» the strip says nothing when there is nothing wrong.
+        # "TimesFM è pronto" next to a button is a line the reader has to
+        # process on every visit in order to learn that no action is needed,
+        # and the owner asked for exactly one thing there: what to do about a
+        # problem. The path panel is where the state is reported in full.
+        self._errors_only = errors_only
         self._state = None
 
         self.label = fit_text(ctk.CTkLabel(
@@ -90,6 +103,11 @@ class ModelStatus(ctk.CTkFrame):
         )
 
     def _apply(self, text: str, colour: str, can_download: bool, available: bool) -> None:
+        if self._errors_only:
+            text = "" if available else (
+                f"{text} Risolvilo nella scheda Percorso: altrimenti la "
+                "previsione gira senza TimesFM, con gli altri tre metodi."
+            )
         self.label.configure(text=text, text_color=colour)
         if can_download and self._offer_download:
             self.button.pack(side="left", padx=(14, 0))

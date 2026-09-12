@@ -367,13 +367,19 @@ class TycheApp(ctk.CTk):
         )
 
     # ── worker threads ───────────────────────────────────────
-    def run_worker(self, label: str, work, on_success) -> None:
+    def run_worker(self, label: str, work, on_success, on_done=None) -> None:
         """Run ``work(report)`` off-thread and hand its result to ``on_success``.
 
         ``report(message, fraction)`` is passed into the worker and is safe to
         call from it: it only enqueues. One job at a time — two concurrent
         fetches would both write the archive, and the loser's draws would be
         silently dropped by whichever saved last.
+
+        ``on_done`` runs afterwards **whatever happened**, on the main thread,
+        and it exists for the one thing ``on_success`` cannot do: put a button
+        back. A panel that disables its own button while a job runs and
+        re-enables it in ``on_success`` leaves the button dead for the rest of
+        the session the first time the job raises.
         """
         if self._busy:
             self.set_status("C'è già un'operazione in corso — aspetta che finisca.")
@@ -400,6 +406,8 @@ class TycheApp(ctk.CTk):
                 self._queue.put(lambda: on_success(result))
             finally:
                 self._queue.put(self._clear_busy)
+                if on_done is not None:
+                    self._queue.put(on_done)
 
         threading.Thread(target=run, daemon=True, name=label).start()
 

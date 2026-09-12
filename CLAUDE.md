@@ -55,7 +55,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 387, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 439, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 441, GUI included
 python -m ruff check .
 ```
 
@@ -518,14 +518,27 @@ page for whatever the caller runs next.
   the command line. What went is a *screen*, and the complaint was about the
   screen.
 
+  **The panel is two columns since 1.0.7**: the four methods stacked down the
+  left holding *only* their numbers, and one dark report on the right with
+  everything that is text — the archive line, the ticket, the cost, and the
+  four score tables appended to it. Before that each cell was half output and
+  half table, so the six numbers a reader opens that tab for took a fifth of
+  the cell and the arithmetic took the rest, four times over. Putting the four
+  spreads in one report also does something the four boxes could not: it puts
+  them on the same page, which is how a reader finds out that two methods are
+  ranking the ninety numbers almost identically.
+
   **What carries the argument now is the Prediction panel, and it must keep
-  carrying it.** All four methods run on every press and each takes a quarter
-  of the window, so the random control sits beside TimesFM at the same size,
-  in front of a reader who never asked to see it. That is a stronger
+  carrying it.** All four methods run on every press and each gets a cell the
+  size of the others, so the random control sits under TimesFM at the same
+  size, in front of a reader who never asked to see it. That is a stronger
   demonstration than the tab it replaced, because it cannot be skipped — and
   it is the reason the following are not cosmetic decisions:
 
-  - the random baseline keeps its cell, at the size of the others;
+  - the random baseline keeps its cell, at the size of the others
+    (`test_the_random_control_keeps_its_quarter_of_the_screen` kept its name
+    through the 1.0.7 relayout; it now compares widths in a column rather
+    than boxes in a grid, and it is the same guard);
   - the four cells are built from `METHODS`, so a method cannot be quietly
     dropped from the display without being dropped from the program;
   - `test_the_random_control_keeps_its_quarter_of_the_screen` fails if any of
@@ -1013,13 +1026,35 @@ as "one fixed way of choosing", and a method *is* a way of choosing.
 own history: `superstar_scores` counts, `superstar_gap_scores` measures
 absence, `TimesFMForecaster.score_superstar` forecasts a second set of ninety
 series built by `build_superstar_context`, and the control stays random. That
-is a **second forward pass**, about as expensive as the first, and it only
-happens when `predict_superstar` is on — which it is not by default.
+is a **second forward pass**, about as expensive as the first, and it happens
+whenever `predict_superstar` is on — which, since 1.0.7, it is by default, on
+the owner's instruction. A TimesFM forecast therefore costs twice what it did;
+the settings help says so, because "it got slower" with no explanation on
+screen is the kind of thing that gets reported as a hang.
 `test_each_method_picks_its_own_superstar` asserts the picks are *pairwise*
 distinct and then checks each against its own scoring function: an earlier
 version asserted only "more than one distinct value", which passes with every
 method but the random control collapsed onto the frequency count — checked by
 mutation.
+
+**Beside «Genera» the strip says nothing when nothing is wrong.** 1.0.7, and
+the rule generalises: a status line next to a button is read on every visit,
+so it should earn that by carrying something to act on. `ModelStatus` takes
+`errors_only=True` there and composes the state's own detail with where to fix
+it — the path panel — and what happens if it is not fixed. The path keeps
+reporting the state in full, because that is the screen whose job is the
+state.
+
+**And the button goes dead while its own job runs.** `run_worker` already
+refused a second job, but refusing it in the status bar *after* the click is
+not the same as showing beforehand that the click will do nothing. The
+re-enable goes through `run_worker(..., on_done=)`, which runs after every
+job, successful or not: a panel that re-enables in `on_success` leaves the
+button dead for the rest of the session the first time the work raises.
+`test_the_button_is_dead_while_a_generation_runs` observes the disabled state
+*between* `_generate()` and the first `update()`, where it is deterministic —
+an earlier version checked only that the button came back, which passes with
+the disabling deleted.
 
 **`DEFAULT_WINDOW` is 208, and it is counted rather than assumed.** It was
 150, "roughly a year at three draws a week", and that is what the game drew

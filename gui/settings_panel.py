@@ -69,7 +69,9 @@ FIELDS = [
     ("predict_superstar", "Gioca anche il SuperStar", "bool",
      "Il SuperStar esce da un'urna separata, quindi è un numero da 1 a 90 "
      "indipendente dai sei e che può ripeterne uno. Indovinarlo è 1 su 90, "
-     "sempre, e viene scelto sulla storia della sua urna e non su quella dei sei."),
+     "sempre, e viene scelto sulla storia della sua urna e non su quella dei "
+     "sei — ogni metodo lo sceglie a modo suo. Con questa attiva la previsione "
+     "di TimesFM costa il doppio: sono due passate del modello, una per urna."),
     ("column_price", "Costo di una colonna (euro)", "text",
      "Quanto costa una singola colonna da sei numeri. Serve solo a calcolare "
      "il costo della giocata mostrata nella scheda Previsione: è un prezzo "
