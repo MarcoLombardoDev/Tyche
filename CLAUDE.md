@@ -54,15 +54,15 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 375, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 427, GUI included
+python -m pytest tests/ -q                                   # 383, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 435, GUI included
 python -m ruff check .
 ```
 
 **Tyche fixes the "a green run can be a lie" problem rather than warning about
 it.** `tests/test_gui_smoke.py` still skips itself when there is no `DISPLAY`
 or no `tkinter` — a bare `pytest tests/` on a headless box reports
-`375 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
+`383 passed, 2 skipped` and has tested no interface at all. The difference from Argus is
 that setting `TYCHE_REQUIRE_GUI=1` turns every such skip into a **failure**.
 Set it in CI, and set it in any session that intends to claim a GUI change was
 verified. Argus should probably grow the same switch.
@@ -951,6 +951,45 @@ Three decisions in the same change:
   hand or missing its `refs`. It is split out of `repo_cache_dir` precisely
   because that one falls back to the *cache root*, and searching the root would
   find another model's `config.json` and report a checkpoint nobody asked for.
+
+**Importable is not the same as visible, and that distinction cost a
+release.** 1.0.4. The weights were complete on disk, every screen said
+«pronto», and «Genera» answered `NameError: name 'safetensors' is not defined`
+after a wait.
+
+`huggingface_hub` never asks whether safetensors can be imported. It asks
+`importlib.metadata.version("safetensors")` — once, while
+`utils/_runtime.py` is being imported, into a dict — and `hub_mixin.py` binds
+the name only if that answered. **A PyInstaller build collects the module and
+leaves the `.dist-info` behind**, so the answer is no, the import at the top
+of the mixin is skipped, and the name is used anyway seven hundred lines
+later. The module was in the bundle the whole time.
+
+Three things follow, and none of them is optional:
+
+- **`Tyche.spec` calls `copy_metadata`** for safetensors, torch,
+  huggingface_hub and numpy. `collect_all` does not do this: it collects a
+  package's files, and metadata is a sibling directory belonging to the
+  installation rather than to the package.
+- **`core/model_store.LOADER_PACKAGES` is checked before anything about the
+  weights**, through `_visible_to_hub`, which asks hf_hub's own
+  `is_package_available` when it can reach it and `importlib.metadata`
+  otherwise. Never `find_spec`: that is the cheap question, it answers yes
+  here, and answering it would report a working machine.
+  `test_a_module_without_metadata_does_not_count_as_installed` pins the
+  difference on `json`, which imports everywhere and is not a distribution —
+  checked by mutation, and the first version of that mutation check was
+  inconclusive because an `import importlib.metadata` *inside* the function
+  made `importlib` local and swallowed the difference into an `except`.
+- **`--self-check` fails on it.** It used to import timesfm3 and torch and
+  report "nel pacchetto", which was true of a bundle where no forecast could
+  start — the exact "a green run can be a lie" defect, in the check meant to
+  catch it. The broken case deliberately does *not* begin with `timesfm: nel
+  pacchetto`, so `release.yml`'s grep fails too and the build goes red twice.
+
+The remedy depends on `_frozen()`: a packaged build has no console, so
+«pip install safetensors» is advice nobody there can take, and it is told to
+download Tyche again instead.
 
 **`timesfm` is an identifier; `TimesFM` is a name.** `core/predictor.METHOD_NAMES`
 is the one map, and `method_name` is what every screen goes through — the

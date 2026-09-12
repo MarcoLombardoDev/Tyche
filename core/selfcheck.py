@@ -180,20 +180,37 @@ def _check_export() -> tuple[bool, str]:
 
 
 def _check_timesfm() -> tuple[bool, str]:
-    """Is TimesFM in the bundle at all?
+    """Is TimesFM in the bundle, and can it actually read a checkpoint?
 
-    Reported, never failed on. The checkpoint is 1.3 GB and lives on Hugging
-    Face, so a smoke test cannot run a forecast without turning every build
-    into a download; and a bundle without torch is a smaller, working program
-    rather than a broken one. What this answers is which of the two was built.
+    **The first half used to be the whole check, and it passed on a bundle
+    where the forecast could not run.** timesfm3 imported, torch imported, and
+    loading the weights still ended in ``NameError: name 'safetensors' is not
+    defined`` — because huggingface_hub asks ``importlib.metadata`` whether
+    safetensors is installed, the build had collected the module without its
+    ``.dist-info``, and the answer was no. Exactly the "a green run can be a
+    lie" problem, in the one check that was meant to catch it.
+
+    Absence is still reported rather than failed on: a bundle without torch is
+    a smaller working program, and the release job greps for the bundled case
+    separately. What is a *failure* is having TimesFM and not being able to
+    use it, because that ships a program whose headline method cannot start.
     """
     try:
         import timesfm3  # noqa: F401
         import torch
-
-        return True, f"timesfm: nel pacchetto, torch {torch.__version__}"
     except ImportError as exc:
         return True, f"timesfm: assente ({exc.name}) — ogni altro metodo funziona lo stesso"
+
+    from core.model_store import missing_loader_packages
+
+    missing = missing_loader_packages()
+    if missing:
+        return False, (
+            f"timesfm: INUTILIZZABILE — huggingface_hub non vede {', '.join(missing)} "
+            "(il modulo c'è, i metadati no), quindi il caricamento dei pesi "
+            "finisce in NameError"
+        )
+    return True, f"timesfm: nel pacchetto, torch {torch.__version__}"
 
 
 CHECKS = (

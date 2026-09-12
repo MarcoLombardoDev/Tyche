@@ -2246,3 +2246,37 @@ def test_without_a_folder_the_checkpoint_is_still_the_repository(monkeypatch, tm
     forecaster = TimesFMForecaster(checkpoint="org/modello")
     assert forecaster.load_model(lambda *_: None) is True
     assert seen["checkpoint_path"] == "org/modello"
+
+
+def test_the_self_check_fails_a_bundle_whose_loader_cannot_read_weights(monkeypatch):
+    """The check that passed on a bundle where nothing could be forecast.
+
+    timesfm3 imported and torch imported, so ``--self-check`` said "nel
+    pacchetto" and the release shipped — and every forecast on it died on
+    ``NameError: name 'safetensors' is not defined``, because huggingface_hub
+    asks ``importlib.metadata`` and the build had collected the module without
+    its metadata. This is the assertion that turns that into a red build.
+    """
+    import sys
+    import types
+
+    from core import model_store, selfcheck
+
+    monkeypatch.setitem(sys.modules, "timesfm3", types.ModuleType("timesfm3"))
+    torch = types.ModuleType("torch")
+    torch.__version__ = "2.14.0+cpu"
+    monkeypatch.setitem(sys.modules, "torch", torch)
+
+    monkeypatch.setattr(model_store, "missing_loader_packages", lambda: [])
+    ok, message = selfcheck._check_timesfm()
+    assert ok and message.startswith("timesfm: nel pacchetto")
+
+    monkeypatch.setattr(
+        model_store, "missing_loader_packages", lambda: ["safetensors"]
+    )
+    ok, message = selfcheck._check_timesfm()
+    assert not ok, "a bundle that cannot load the weights must fail the check"
+    assert "safetensors" in message
+    assert not message.startswith("timesfm: nel pacchetto"), (
+        "release.yml greps for that line: the broken case must not satisfy it"
+    )

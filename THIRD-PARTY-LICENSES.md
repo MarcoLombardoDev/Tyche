@@ -77,6 +77,11 @@ inventory inside that archive names those versions.
 | NumPy | 2.5.3 | `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0` | every feature matrix and every statistic |
 | requests | 2.34.2 | `Apache-2.0` | fetching the draw archive, and the certificate bundle behind it |
 | timesfm[torch] | ≥3.0 | `Apache-2.0` | the forecast model's own code |
+| safetensors | ≥0.5.3 | `Apache-2.0` | reading the 1,23 GB of weights off the disk |
+
+`safetensors` arrives with `timesfm` in any case; it is named in
+`requirements.txt` on its own line because the *frozen* build needs its
+metadata, not only its module — see the note there. Same licence either way.
 
 `timesfm[torch]` pulls in **PyTorch** (`BSD-3-Clause`, with Apache-2.0, BSL-1.0
 and MIT parts) and **huggingface-hub** (`Apache-2.0`), which is what fetches the

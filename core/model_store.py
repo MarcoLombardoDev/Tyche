@@ -46,9 +46,11 @@ bare ``42%`` that becomes ``31%`` looks like a bug.
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import os
 import pathlib
+import sys
 import time
 from dataclasses import dataclass
 
@@ -128,6 +130,82 @@ _WEIGHT_SUFFIXES = (".safetensors", ".bin", ".pt", ".pth", ".ckpt")
 CONFIG_FILE = "config.json"
 WEIGHTS_FILE = "model.safetensors"
 REQUIRED_FILES = (CONFIG_FILE, WEIGHTS_FILE)
+
+
+# What the loader has to be able to *find*, which is not the same as what it
+# can import — and the distinction is the whole of this section.
+#
+# huggingface_hub decides whether safetensors exists by asking
+# ``importlib.metadata.version("safetensors")``, once, while
+# ``utils/_runtime.py`` is being imported, and ``hub_mixin.py`` binds the name
+# only if that answered. A frozen build collects the *module* and not its
+# ``.dist-info``, so the answer is no, the import at the top of the mixin is
+# skipped, and loading the weights ends — several seconds in, with the
+# checkpoint on disk and every screen reporting it ready — in
+# ``NameError: name 'safetensors' is not defined``.
+#
+# That is exactly the class of failure this module exists to catch before the
+# user presses anything, and it is invisible to ``find_spec``: the module is
+# perfectly importable. The question has to be asked the way hf_hub asks it.
+LOADER_PACKAGES = ("safetensors",)
+
+
+def _visible_to_hub(package: str) -> bool:
+    """Whether huggingface_hub would consider ``package`` installed.
+
+    Its own helper when it can be reached — that is the authority, and a
+    reimplementation here could drift from it — and ``importlib.metadata``
+    otherwise, which is what the helper does anyway.
+    """
+    try:
+        from huggingface_hub.utils import is_package_available
+
+        return bool(is_package_available(package))
+    except Exception:  # noqa: BLE001 — no hf_hub, or it moved the helper
+        pass
+    # Module level, not here: an ``import importlib.metadata`` inside this
+    # function makes ``importlib`` a *local* name for the whole body, so the
+    # block above would raise UnboundLocalError the moment it touched
+    # ``importlib.util`` — silently, into the except.
+    try:
+        importlib.metadata.version(package)
+        return True
+    except Exception:  # noqa: BLE001 — every miss is "not visible"
+        return False
+
+
+def missing_loader_packages() -> list[str]:
+    """The packages the weights loader needs and huggingface_hub cannot see."""
+    return [name for name in LOADER_PACKAGES if not _visible_to_hub(name)]
+
+
+def _frozen() -> bool:
+    """Whether this is the packaged build.
+
+    A seam, and it decides the remedy: «pip install» is useless advice to
+    somebody double-clicking a Windows folder build, which has no console to
+    type it into.
+    """
+    return bool(getattr(sys, "frozen", False))
+
+
+def _loader_detail(missing: list[str]) -> str:
+    """What to do about it, which depends on how Tyche was installed."""
+    names = " e ".join(missing)
+    if _frozen():
+        return (
+            f"Questa copia di Tyche è incompleta: {names} non risulta "
+            "installato, e senza TimesFM non riesce a leggere i pesi anche "
+            "quando sono già scaricati. Non è un problema del tuo computer né "
+            "dei pesi: scarica di nuovo Tyche dalla pagina delle release. I "
+            "file già scaricati restano dove sono. Gli altri tre metodi "
+            "funzionano lo stesso."
+        )
+    return (
+        f"Manca il pacchetto {names}, che serve a leggere i pesi: "
+        f"installalo con «pip install {' '.join(missing)}» e riavvia Tyche. "
+        "Gli altri tre metodi funzionano lo stesso."
+    )
 
 
 def _holds_weights(path: pathlib.Path) -> bool:
@@ -284,6 +362,12 @@ def availability(
             "metodi funzionano lo stesso — e ottengono lo stesso punteggio.",
             can_download=False,
         )
+
+    # Before anything about the weights: a loader that cannot read them makes
+    # "pronto" a lie, and the user finds out by pressing «Genera» and waiting.
+    missing = missing_loader_packages()
+    if missing:
+        return Availability(NO_PACKAGE, _loader_detail(missing), can_download=False)
 
     chosen = folder_checkpoint(folder)
     if chosen is not None:
@@ -689,20 +773,37 @@ def diagnose(
 
     lines = [
         f"Tyche su Python {sys.version.split()[0]}, {platform.platform()}",
+        "eseguito da: " + ("pacchetto congelato" if _frozen() else "sorgenti"),
         f"checkpoint richiesto: {checkpoint}",
         f"token configurato: {'sì' if token else 'no'} "
         "(non serve per il checkpoint predefinito)",
         "",
     ]
 
-    for name in ("timesfm3", "huggingface_hub", "torch"):
+    for name in ("timesfm3", "huggingface_hub", "torch", "safetensors"):
         try:
             module = __import__(name)
         except Exception as exc:  # noqa: BLE001
             lines.append(f"{name:<16} NON importabile — {type(exc).__name__}: {exc}")
-        else:
-            version = getattr(module, "__version__", "versione ignota")
-            lines.append(f"{name:<16} {version}")
+            continue
+        version = getattr(module, "__version__", "")
+        if not version:
+            # timesfm3 declares no __version__, and a frozen build may carry
+            # the module without its metadata — which is the bug below.
+            try:
+                version = importlib.metadata.version(name)
+            except Exception:  # noqa: BLE001
+                version = "versione ignota"
+        lines.append(f"{name:<16} {version}")
+
+    # The distinction that cost a release: importable is not the same as
+    # visible. hf_hub asks importlib.metadata, and a frozen build that
+    # collected the module without its .dist-info answers no — then skips its
+    # own import and dies on a NameError while loading the weights.
+    lines.append("")
+    for name in LOADER_PACKAGES:
+        seen = "sì" if _visible_to_hub(name) else "NO — è questo che rompe il caricamento"
+        lines.append(f"{name} visibile a huggingface_hub: {seen}")
 
     lines.append("")
     try:

@@ -23,6 +23,14 @@ requests>=2.31.0
 #   pip install -r requirements.txt
 timesfm[torch]>=3.0.0
 
+# Pulled in by timesfm anyway — named here because the frozen build needs it
+# by name. huggingface_hub asks importlib.metadata whether safetensors is
+# installed and binds the module only if that answers, so a bundle carrying
+# the module without its .dist-info loads no weights at all and says
+# "NameError: name 'safetensors' is not defined" instead. Tyche.spec copies
+# the metadata; this line is what makes sure there is metadata to copy.
+safetensors>=0.5.3
+
 # NOTE on what is deliberately absent:
 #
 # - pandas. The archive is a few thousand rows read once into a list of

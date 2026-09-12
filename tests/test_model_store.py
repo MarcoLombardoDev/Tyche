@@ -29,6 +29,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import model_store  # noqa: E402
@@ -44,6 +46,21 @@ from core.model_store import (  # noqa: E402
 )
 from core.predictor import METHOD_NAMES, METHODS, method_name  # noqa: E402
 from core.version import DEFAULT_TIMESFM_CHECKPOINT  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _the_loader_can_read_weights(monkeypatch):
+    """Describe a machine where huggingface_hub can see safetensors.
+
+    It cannot see it here: this suite runs with neither torch nor safetensors
+    installed, on purpose, and without this every availability test would stop
+    at "the loader is broken" — which is true of the test machine and not of
+    the question being asked.
+
+    A test about *that* failure patches it back; monkeypatch inside the test
+    wins over a fixture applied before it.
+    """
+    monkeypatch.setattr(model_store, "missing_loader_packages", lambda: [])
 
 
 class _Clock:
@@ -656,3 +673,79 @@ class TestAFolderFilledByHand:
         )
         monkeypatch.setattr(model_store, "repo_cache_dir", lambda checkpoint: tmp_path)
         assert model_store.local_checkpoint("org/model") is None
+
+
+class TestTheLoaderTheHubCannotSee:
+    """Importable is not the same as visible, and the difference is a release.
+
+    The owner's build had the weights on disk, every screen said «pronto», and
+    pressing «Genera» produced ``NameError: name 'safetensors' is not
+    defined`` after a wait. Nothing was wrong with the download or the
+    checkpoint: huggingface_hub asks ``importlib.metadata`` whether
+    safetensors is installed, the frozen bundle carried the module without its
+    ``.dist-info``, and so the mixin never imported the name it later used.
+    """
+
+    def test_a_module_without_metadata_does_not_count_as_installed(self):
+        """``json`` imports on every machine and is not a distribution.
+
+        This is the whole distinction in one line: ``find_spec`` would say yes
+        and huggingface_hub says no, so asking the cheap question would have
+        reported a working machine.
+        """
+        import importlib.util
+
+        assert importlib.util.find_spec("json") is not None
+        assert model_store._visible_to_hub("json") is False
+
+    def test_an_invisible_loader_is_not_ready_however_complete_the_weights_are(
+        self, monkeypatch, tmp_path
+    ):
+        folder = tmp_path / "pesi"
+        folder.mkdir()
+        for name in model_store.REQUIRED_FILES:
+            (folder / name).write_bytes(b"x" * 16)
+        monkeypatch.setattr(model_store, "_has_module", lambda name: True)
+        monkeypatch.setattr(model_store, "_checkpoint_cached", lambda checkpoint: True)
+        monkeypatch.setattr(
+            model_store, "missing_loader_packages", lambda: ["safetensors"]
+        )
+
+        state = availability(DEFAULT_TIMESFM_CHECKPOINT, str(folder))
+        assert state.state == NO_PACKAGE
+        assert state.ready is False
+        assert state.can_download is False, (
+            "downloading 1,23 GB again cannot fix a missing package"
+        )
+        assert "safetensors" in state.detail
+
+    def test_a_frozen_build_is_told_to_reinstall_and_not_to_run_pip(
+        self, monkeypatch
+    ):
+        """There is no console in the packaged build, so pip is not advice."""
+        monkeypatch.setattr(model_store, "_frozen", lambda: True)
+        detail = model_store._loader_detail(["safetensors"])
+        assert "pip" not in detail
+        assert "release" in detail
+
+    def test_a_source_install_is_told_the_command(self, monkeypatch):
+        monkeypatch.setattr(model_store, "_frozen", lambda: False)
+        detail = model_store._loader_detail(["safetensors"])
+        assert "pip install safetensors" in detail
+
+    def test_the_other_methods_are_not_taken_down_with_it(self, monkeypatch):
+        monkeypatch.setattr(
+            model_store, "missing_loader_packages", lambda: ["safetensors"]
+        )
+        monkeypatch.setattr(model_store, "_has_module", lambda name: True)
+        assert "altri tre metodi" in availability().detail
+
+    def test_the_diagnosis_names_it_as_the_cause(self, monkeypatch):
+        monkeypatch.setattr(model_store, "_visible_to_hub", lambda name: False)
+        report = "\n".join(model_store.diagnose())
+        assert "safetensors visibile a huggingface_hub: NO" in report
+
+    def test_the_diagnosis_says_whether_this_is_a_packaged_build(self):
+        """Which decides the remedy, so support cannot start without it."""
+        report = "\n".join(model_store.diagnose())
+        assert "eseguito da:" in report

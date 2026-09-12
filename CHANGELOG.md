@@ -12,6 +12,46 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.0.4] — 2026-09-12
+
+Il modello non si caricava, e non era colpa dei pesi.
+
+Con 1,23 GB di pesi completi sul disco e ogni schermata che diceva «pronto»,
+premere «Genera» produceva, dopo qualche secondo,
+`NameError: name 'safetensors' is not defined`. Adesso c'è un nome per quel
+difetto, e non è nel computer di chi lo ha visto.
+
+### Corretto
+
+- **Il pacchetto Windows non portava con sé i metadati di `safetensors`.**
+  `huggingface_hub` non chiede «riesco a importare safetensors?»: chiede a
+  `importlib.metadata` se è *installato*, una volta sola, mentre si importa —
+  e associa il nome solo se la risposta è sì. Un pacchetto congelato raccoglie
+  il modulo e lascia indietro la cartella `.dist-info` che lo dimostra, quindi
+  la risposta era no, l'import veniva saltato, e il caricamento dei pesi
+  moriva sul nome mai definito. Il modulo era nel pacchetto dall'inizio:
+  mancava la prova che ci fosse. `Tyche.spec` adesso copia i metadati di
+  `safetensors`, `torch`, `huggingface_hub` e `numpy`.
+
+- **L'autodiagnosi passava su un pacchetto in cui nessuna previsione poteva
+  partire.** Controllava che `timesfm3` e `torch` si importassero — ed era
+  vero, e non bastava. Ora chiede la stessa domanda che si fa
+  `huggingface_hub`, nello stesso modo, e **fallisce**: una build che non può
+  leggere i pesi diventa rossa in CI invece di diventare una release.
+
+### Aggiunto
+
+- **Lo dice prima, non dopo.** Se manca quel pacchetto, il passo 2 del
+  Percorso e la scheda Previsione lo scrivono subito, insieme al rimedio —
+  che dipende da come Tyche è stato installato: «scarica di nuovo Tyche» per
+  il pacchetto, `pip install safetensors` per i sorgenti. Suggerire `pip` a
+  chi ha fatto doppio clic su una cartella Windows sarebbe un consiglio
+  inutilizzabile.
+
+- **La diagnosi dice se stai usando il pacchetto o i sorgenti**, stampa la
+  versione di `safetensors` accanto alle altre tre, e chiude con la riga che
+  conta: `safetensors visibile a huggingface_hub: sì/NO`.
+
 ## [1.0.3] — 2026-09-12 — `f0159e3`
 
 I pesi scaricati a mano adesso si possono usare.

@@ -39,7 +39,7 @@
 
 import sys
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
 # CustomTkinter ships its themes and fonts as package data (JSON and TTF under
 # customtkinter/assets/). Without this the import succeeds, the first widget
@@ -60,7 +60,11 @@ hiddenimports = []
 # Optional on purpose — a build machine without torch produces a smaller
 # bundle that does everything except the TimesFM forecast, and says so through
 # --self-check rather than failing here.
-for package in ("timesfm3", "timesfm"):
+#
+# safetensors is here for a second reason as well as the obvious one: it is
+# a compiled Rust extension, and it is what actually reads the 1,23 GB of
+# weights off the disk.
+for package in ("timesfm3", "timesfm", "safetensors"):
     try:
         package_datas, package_binaries, package_hidden = collect_all(package)
     except Exception as exc:                                    # noqa: BLE001
@@ -69,6 +73,30 @@ for package in ("timesfm3", "timesfm"):
     datas += package_datas
     binaries += package_binaries
     hiddenimports += package_hidden
+
+# **The metadata, not just the module — and this one cost a working build.**
+#
+# huggingface_hub decides whether safetensors and torch are installed by
+# asking importlib.metadata.version(...), once, while utils/_runtime.py is
+# imported; hub_mixin.py then binds the names only if that answered. A frozen
+# build collects the module and leaves the .dist-info behind, so the answer is
+# no, the import is skipped, and loading a checkpoint that is sitting right
+# there on the disk dies on
+#
+#     NameError: name 'safetensors' is not defined
+#
+# several seconds after every screen in the program said it was ready. The
+# module was in the bundle the whole time. What was missing was the folder
+# that proves it.
+#
+# core/selfcheck.py asks the same question the same way, so a bundle built
+# without this fails its own self-check and the release goes red instead of
+# out.
+for package in ("safetensors", "torch", "huggingface_hub", "numpy"):
+    try:
+        datas += copy_metadata(package)
+    except Exception as exc:                                    # noqa: BLE001
+        print(f"[Tyche.spec] no metadata for {package}: {exc}")
 
 # .icns on macOS, .ico on Windows, nothing on Linux — see the note beside
 # `icon=` below for why this cannot be one file.
