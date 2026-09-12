@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.0.4] — 2026-09-12
+## [1.0.4] — 2026-09-12 — `58c6fe6`
 
 Il modello non si caricava, e non era colpa dei pesi.
 
