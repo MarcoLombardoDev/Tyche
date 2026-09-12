@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.0.3] — 2026-09-12
+## [1.0.3] — 2026-09-12 — `f0159e3`
 
 I pesi scaricati a mano adesso si possono usare.
 
