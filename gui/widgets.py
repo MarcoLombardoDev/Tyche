@@ -36,14 +36,72 @@ BODY_SIZE = 12
 HEADING_SIZE = 15
 
 
+# Every font this program uses, kept for the life of the process.
+#
+# **Not an optimisation — a Tk font that gets collected can hang the program.**
+# ``tkinter.font.Font.__del__`` calls Tcl (``font delete``), and the garbage
+# collector runs on whichever thread happens to trip the threshold. When that
+# thread is a worker, the call goes into Tcl from outside the Tk thread and
+# blocks there: the forecast stops mid-way, the status bar keeps the last
+# method it announced, and the button never comes back. See
+# ``TycheApp.run_worker`` for the other half of the defence.
+#
+# Building one CTkFont per label made hundreds of collectable Tk objects per
+# screen. Caching them means there is almost nothing left to collect.
+_FONTS: dict[tuple, ctk.CTkFont] = {}
+
+
+def reset_fonts() -> None:
+    """Drop the cache. Called when a window is built, and it has to be.
+
+    **A Tk font belongs to the interpreter that created it.** The cache is a
+    module global and outlives a window, so without this the second window in
+    a process — which is every test after the first — hands its labels fonts
+    belonging to a destroyed application, and the next ``cget`` raises
+    ``TclError: application has been destroyed``. Caching the fonts without
+    this line turned one intermittent failure into a reliable one, which at
+    least had the courtesy of being obvious.
+
+    Dropping them runs ``Font.__del__`` here, on the main thread, while a
+    window is being built and no worker exists — which is the legal place for
+    it, and the whole point of the cache.
+    """
+    _FONTS.clear()
+
+
+def _font(size: int, weight: str = "normal"):
+    key = (ui_font_family(), size, weight)
+    if key not in _FONTS:
+        _FONTS[key] = ctk.CTkFont(family=key[0], size=size, weight=weight)
+    return _FONTS[key]
+
+
+def link_font():
+    """Underlined body text: the one clickable label in the window."""
+    key = (ui_font_family(), BODY_SIZE, "link")
+    if key not in _FONTS:
+        _FONTS[key] = ctk.CTkFont(
+            family=key[0], size=BODY_SIZE, underline=True,
+        )
+    return _FONTS[key]
+
+
+def mono_font():
+    """The report boxes' font. Monospace on purpose: they hold tables."""
+    key = ("monospace", BODY_SIZE, "normal")
+    if key not in _FONTS:
+        _FONTS[key] = ctk.CTkFont(family="monospace", size=BODY_SIZE)
+    return _FONTS[key]
+
+
 def body_font():
     """The size every non-heading label uses. Pass it, do not default to it."""
-    return ctk.CTkFont(family=ui_font_family(), size=BODY_SIZE)
+    return _font(BODY_SIZE)
 
 
 def heading_font(size: int = HEADING_SIZE):
     """Bold, and therefore exempt from the one-size rule."""
-    return ctk.CTkFont(family=ui_font_family(), size=size, weight="bold")
+    return _font(size, "bold")
 
 
 def fit_text(label, margin: int = 32):
@@ -124,7 +182,7 @@ class ReportBox(ctk.CTkTextbox):
         # than a column count guessed when the text was written.
         super().__init__(
             parent, height=height, fg_color=BG_ROOT, text_color=TEXT,
-            font=ctk.CTkFont(family="monospace", size=BODY_SIZE),
+            font=mono_font(),
             wrap=wrap, **kwargs,
         )
         self.configure(state="disabled")
@@ -136,16 +194,44 @@ class ReportBox(ctk.CTkTextbox):
         self.configure(state="disabled")
 
 
-def ball_row(parent, numbers, size: int = 38) -> ctk.CTkFrame:
-    """Render a combination as circles, the way a receipt prints it."""
+def ball_row(parent, numbers, size: int = 38, per_line: int = 6) -> ctk.CTkFrame:
+    """Render a combination as circles, the way a receipt prints it.
+
+    The digits are sized by :func:`badge_font_size`, the same rule the
+    SuperStar's star uses, so a ball and a star of the same width carry
+    numbers of the same height. Hard-coding 14 here — which is what this did —
+    meant the two matched at one size and nowhere else.
+
+    **It wraps, and it has to.** ``pack`` clips what does not fit and says
+    nothing: at fifty pixels a *sistema integrale* of twelve numbers ran off
+    the side of its cell and showed seven, which is the worst way for this
+    screen to be wrong — five numbers the user would be playing, missing, with
+    nothing to suggest anything was cut. Six a line, because six is a column:
+    a system of nine then reads as a column and three more, which is how the
+    ranking builds it.
+    """
     row = ctk.CTkFrame(parent, fg_color="transparent")
-    for n in numbers:
-        ctk.CTkLabel(
-            row, text=f"{n:02d}", width=size, height=size, corner_radius=size // 2,
-            fg_color=ACCENT, text_color="#ffffff",
-            font=ctk.CTkFont(family=ui_font_family(), size=14, weight="bold"),
-        ).pack(side="left", padx=3)
+    numbers = list(numbers)
+    for start in range(0, len(numbers), per_line):
+        line = ctk.CTkFrame(row, fg_color="transparent")
+        line.pack(fill="x", pady=1)
+        for n in numbers[start:start + per_line]:
+            ctk.CTkLabel(
+                line, text=f"{n:02d}", width=size, height=size,
+                corner_radius=size // 2, fg_color=ACCENT, text_color="#ffffff",
+                font=_font(badge_font_size(size), "bold"),
+            ).pack(side="left", padx=3)
     return row
+
+
+def badge_font_size(size: int) -> int:
+    """How big the number inside a ball or a star of ``size`` pixels is.
+
+    One rule for both, because they sit on the same row and a reader compares
+    them: six numbers and a SuperStar have to look like seven numbers, one of
+    which is marked, rather than like two kinds of thing.
+    """
+    return max(11, round(size * 0.28))
 
 
 
@@ -198,6 +284,6 @@ def star_badge(parent, number: int, size: int = 42, background: str = BG_PANEL):
     # "floating in it".
     canvas.create_text(
         centre, centre + size * 0.04, text=f"{number:02d}", fill="#ffffff",
-        font=(ui_font_family(), max(11, round(size * 0.28)), "bold"),
+        font=(ui_font_family(), badge_font_size(size), "bold"),
     )
     return canvas

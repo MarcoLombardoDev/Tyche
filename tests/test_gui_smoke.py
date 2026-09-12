@@ -140,11 +140,36 @@ def _generate(app, count: str = "1"):
     raise AssertionError(
         "no prediction after waiting: "
         f"status={app._status.cget('text')!r} busy={app._busy} "
-        f"queued={app._queue.qsize()} "
+        f"queued={app._queue.qsize()}\n"
         # Which of the two it was matters: still busy means the worker is
-        # genuinely slow, while not-busy with a full queue means the result
-        # arrived and the main loop never drained it.
+        # genuinely slow or stuck, while not-busy with a full queue means the
+        # result arrived and the main loop never drained it. The first answer
+        # this printed was "busy, queue empty" — a live worker that had
+        # reported a method costing a millisecond and then produced nothing
+        # for twelve seconds — so it now prints where that thread actually is.
+        + _thread_stacks()
     )
+
+
+def _thread_stacks() -> str:
+    """Every live thread's stack, for a wait that ended in nothing.
+
+    ``sys._current_frames`` is the only way to see inside a worker that is not
+    going to raise: an intermittent stall says nothing about itself, and
+    guessing at it from the status bar is how two rounds of this went.
+    """
+    import sys
+    import threading
+    import traceback
+
+    named = {t.ident: t.name for t in threading.enumerate()}
+    lines = []
+    for ident, frame in sys._current_frames().items():
+        if ident == threading.get_ident():
+            continue
+        lines.append(f"--- thread {named.get(ident, ident)} ---")
+        lines += [line.rstrip() for line in traceback.format_stack(frame)]
+    return "\n".join(lines) or "(no other threads alive)"
 
 
 def test_window_opens_with_every_panel(app):
@@ -1080,3 +1105,136 @@ def _all_label_texts(widget) -> list[str]:
             found.append(child.cget("text"))
         found += _all_label_texts(child)
     return found
+
+
+def _ball_labels(widget) -> list:
+    """Every two-digit circle under ``widget``, in the order Tk holds them."""
+    import customtkinter as ctk
+
+    found = []
+    for child in widget.winfo_children():
+        if isinstance(child, ctk.CTkLabel) and child.cget("text").isdigit():
+            found.append(child)
+        found += _ball_labels(child)
+    return found
+
+
+def test_every_number_of_a_system_is_on_the_screen(app):
+    """`pack` clips what does not fit and says nothing about it.
+
+    At fifty pixels a *sistema integrale* of twelve ran off the side of its
+    cell and showed seven — five numbers the user would be playing, missing,
+    with nothing on screen to suggest anything had been cut. That is the worst
+    way for this panel to be wrong, so the balls wrap.
+    """
+    app.settings["prediction_size"] = 12
+    panel = _generate(app)
+
+    cell = panel._cells["frequenza"]
+    first = cell.balls.winfo_children()[0]
+    balls = _ball_labels(first)
+    assert len(balls) == 12, f"only {len(balls)} of the twelve are drawn"
+
+    # On more than one line, which is the mechanism: a single row of twelve
+    # would satisfy the count above and still run off the window. Two balls on
+    # the same line share a y; the rows are what the distinct ones count.
+    app.update()
+    # Screen coordinates, not winfo_y: each ball sits inside its own line
+    # frame, so its y is relative to that frame and reads 0 on every row.
+    rows = {ball.winfo_rooty() for ball in balls}
+    assert len(rows) >= 2, f"twelve numbers were laid out on one line: {rows}"
+
+    right_edge = max(ball.winfo_rootx() + ball.winfo_width() for ball in balls)
+    cell_edge = cell.winfo_rootx() + cell.winfo_width()
+    assert right_edge <= cell_edge, (
+        f"the numbers reach {right_edge} past the cell's edge at {cell_edge}"
+    )
+
+
+def test_a_ball_and_the_star_carry_the_same_size_of_number(app):
+    """They sit on the same row, so they have to read as one kind of thing.
+
+    A SuperStar with bigger digits than the six would look more important than
+    them rather than merely different — and the six are what the method chose.
+    """
+    import tkinter
+
+    from gui.prediction_panel import BADGE_SIZE
+    from gui.widgets import badge_font_size
+
+    app.settings["predict_superstar"] = True
+    app.settings["prediction_size"] = 6
+    panel = _generate(app)
+
+    cell = panel._cells["frequenza"]
+    first = cell.balls.winfo_children()[0]
+    ball = _ball_labels(first)[0]
+    canvas = next(
+        child for child in first.winfo_children()
+        if isinstance(child, tkinter.Canvas)
+    )
+    text = [i for i in canvas.find_all() if canvas.type(i) == "text"][0]
+
+    # Tk returns the font as "family size weight"; the size is the number.
+    star_size = int(
+        [part for part in canvas.itemcget(text, "font").split() if part.lstrip("-").isdigit()][-1]
+    )
+    assert star_size == ball.cget("font").cget("size") == badge_font_size(BADGE_SIZE)
+
+    # And they agree because both follow the rule, not because 14 happens to
+    # be what the rule returns at today's size. A hard-coded 14 in ball_row
+    # passes everything above — checked by mutation — and fails here.
+    from gui.widgets import ball_row
+
+    bigger = ball_row(cell, (7,), size=80)
+    assert _ball_labels(bigger)[0].cget("font").cget("size") == badge_font_size(80)
+    bigger.destroy()
+
+
+def test_the_collector_is_off_while_a_worker_runs(app):
+    """The fix for a stall that took three rounds and a stack dump to find.
+
+    ``tkinter.font.Font.__del__`` calls Tcl, and the garbage collector runs on
+    whichever thread crosses the threshold. When that was the prediction
+    worker, the call entered Tcl from outside Tk's own thread and blocked
+    there: the forecast stopped mid-way, the status bar kept the method it had
+    just announced, and the button stayed disabled. The smoke suite hit it
+    intermittently for three versions and reported it as a slow worker.
+    """
+    import gc
+
+    seen = {}
+
+    def work(report):
+        seen["during"] = gc.isenabled()
+        return "fatto"
+
+    assert gc.isenabled(), "something left the collector off"
+    app.run_worker("Prova", work, lambda result: seen.setdefault("result", result))
+    for _ in range(200):
+        app.update()
+        if "result" in seen:
+            break
+        time.sleep(0.02)
+
+    assert seen["during"] is False, (
+        "the collector was live inside the worker: Font.__del__ can run there"
+    )
+    assert gc.isenabled(), "the collector was never turned back on"
+
+
+def test_a_font_is_built_once_and_kept(app):
+    """Fewer Tk objects to collect is the other half of the same fix.
+
+    One CTkFont per label made hundreds of collectable Tk objects per screen,
+    every one of them a ``font delete`` waiting for the wrong thread.
+    """
+    from gui.widgets import body_font, heading_font, mono_font
+
+    assert body_font() is body_font()
+    assert mono_font() is mono_font()
+    assert heading_font(14) is heading_font(14)
+    assert heading_font(14) is not heading_font(16)
+    assert body_font() is not heading_font(body_font().cget("size")), (
+        "bold and normal at the same size are not the same font"
+    )

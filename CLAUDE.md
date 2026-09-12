@@ -55,7 +55,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 387, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 441, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 445, GUI included
 python -m ruff check .
 ```
 
@@ -1048,11 +1048,26 @@ Three things about it are not free choices:
 - **`_STAR_INNER` is 0.55, not the 0.382 of a regular pentagram.** The elegant
   proportion leaves a centre too small for two digits, and the number ends up
   across the points rather than in the shape.
-- **The badge is 50px where a ball is 30**, for the same reason: a star's
-  usable middle is a fraction of its bounding box.
+- **`BADGE_SIZE` is 50 and the balls use it too.** They sit on the same row,
+  so a SuperStar with bigger digits than the six would read as more important
+  than them — and the six are what the method actually chose.
+  `gui.widgets.badge_font_size` is the one rule for the digits inside either
+  shape; `ball_row` used to hard-code 14, which matched the star at one size
+  and nowhere else.
 - **The canvas is opaque**, so `background` has to match what it sits on or
   the star arrives in a grey square. That is why `star_badge` takes it rather
   than assuming `BG_PANEL`.
+
+**And the balls wrap, six a line, because enlarging them broke a system.**
+`pack` clips what does not fit and says nothing: at fifty pixels a *sistema
+integrale* of twelve ran off the side of its cell and showed **seven**. Five
+numbers the user would be playing, gone, with nothing on screen to suggest
+anything had been cut — the worst way this panel can be wrong, and it was
+invisible at thirty pixels where twelve still fitted.
+`test_every_number_of_a_system_is_on_the_screen` counts the balls *and*
+checks they occupy more than one row, in screen coordinates: a ball's
+`winfo_y` is relative to its own line frame and reads 0 on every row, so the
+obvious version of that check cannot see the difference.
 
 `test_the_superstar_is_a_purple_star_with_its_number_in_it` checks the
 polygon's *radii alternate* — five far, five near — and not merely that it has
@@ -1133,6 +1148,57 @@ checkboxes, the option menu, all three result tables, the verdict and the path
 panel. The identifiers did not move and must not: `settings.json` stores them
 and `--forecast` takes them, and there is a test pinning the tuple. The CLI
 keeps printing identifiers, because there the identifier *is* the interface.
+
+## The garbage collector must not run while a worker does
+
+**A Tk font that gets collected on the wrong thread hangs the program**, and
+this took three versions and a stack dump to find.
+
+`tkinter.font.Font.__del__` calls Tcl — `font delete` — and CPython's
+collector runs on whichever thread crosses the allocation threshold. When that
+thread is one of `run_worker`'s, the call enters Tcl from outside the thread
+Tk was created on and blocks there permanently. The symptom is a forecast that
+stops mid-way with the status bar showing the last method it announced, and
+since 1.0.7 a «Genera» button that never comes back.
+
+**It reported itself as something else for three versions.** The smoke suite
+hit it intermittently — always in a full run, never alone — and the visible
+evidence was "the worker is still on `ritardo`", a method that takes a
+millisecond. Two rounds went into widening the wait. What settled it was
+printing, from the failing test, `app._busy`, the queue depth and then **every
+live thread's stack**: `busy=True queued=0` said the worker was alive and
+stuck rather than slow, and the stack pointed at `queue.put` →
+`Font.__del__` → `_call`. `_thread_stacks()` in `tests/test_gui_smoke.py` is
+that instrument; leave it there.
+
+The fix is in two places and needs both:
+
+- **`run_worker` calls `gc.collect()` and then `gc.disable()`** before
+  starting the thread, and `_clear_busy` — which runs on the main thread,
+  through the queue, after every job — calls `gc.enable()`. Sweeping first
+  means the thread starts with nothing pending; disabling means nothing new
+  can be swept until the job ends. Reference counting still frees objects the
+  moment their last reference goes, but a worker holds none to Tk objects: it
+  runs `core/` code, so those deallocations happen on the main thread where
+  the Tcl call is legal.
+- **`gui/widgets` caches every font** in `_FONTS` instead of building one per
+  label. Hundreds of collectable Tk objects per screen is hundreds of chances
+  for the above; a handful of shared ones is almost none. Every `CTkFont` in
+  the program goes through `_font`, `mono_font` or `link_font` — a new
+  `ctk.CTkFont(...)` anywhere else puts one back.
+
+  **And `reset_fonts()` is the first line of `TycheApp.__init__`.** A Tk font
+  belongs to the interpreter that created it, and the cache is a module global
+  that outlives a window: without that line the *second* window in a process —
+  which is every test after the first — hands its labels fonts belonging to a
+  destroyed application, and the next `cget` raises `TclError: application has
+  been destroyed`. Adding the cache without it turned one intermittent failure
+  into a reliable one, which at least had the courtesy of being obvious.
+
+`test_the_collector_is_off_while_a_worker_runs` reads `gc.isenabled()` from
+inside a worker and again after it, and fails in both directions — checked by
+mutation. What no test here can reproduce is the stall itself: it needs the
+collector to fire inside a worker at the wrong moment, which is a race.
 
 ## CTkFrame is 200 pixels tall until you tell it otherwise
 

@@ -69,10 +69,13 @@ _METHOD_LABELS = {
     "casuale": "Casuale (la condizione di controllo)",
 }
 
-# The SuperStar's badge, in pixels. Larger than a ball (30) because a star's
-# usable middle is a fraction of its bounding box: at 30 the number would sit
-# across the points instead of inside the shape.
-SUPERSTAR_SIZE = 50
+# How wide a number is on this screen, ball or star alike. **One constant for
+# both**: they sit on the same row, and a SuperStar bigger than the six would
+# read as more important than them rather than merely different. The size is
+# driven by the star — its usable middle is a fraction of its bounding box, so
+# 30 pixels leaves the number across the points instead of inside the shape —
+# and the balls follow it.
+BADGE_SIZE = 50
 
 
 # What each cell says under the method's name. Short: the cell is a quarter of
@@ -218,8 +221,8 @@ class _MethodCell(ctk.CTkFrame):
             line.pack(fill="x", pady=2)
             ctk.CTkLabel(
                 line, text=f"{i}.", width=20, text_color=MUTED, font=body_font(),
-            ).pack(side="left")
-            ball_row(line, combination, size=30).pack(side="left")
+            ).pack(side="left", anchor="n", pady=(10, 0))
+            ball_row(line, combination, size=BADGE_SIZE).pack(side="left")
             if i == 1 and prediction.superstar is not None:
                 self._star(line, prediction.superstar)
 
@@ -237,8 +240,11 @@ class _MethodCell(ctk.CTkFrame):
         window too narrow for a twelve-number system loses the star and not
         the numbers.
         """
-        star_badge(line, number, size=SUPERSTAR_SIZE, background=BG_PANEL).pack(
-            side="right", padx=(6, 0),
+        # anchor="n" so it lines up with the *first* row of balls: a system of
+        # twelve wraps onto two lines and a vertically centred star would sit
+        # between them, pointing at nothing.
+        star_badge(line, number, size=BADGE_SIZE, background=BG_PANEL).pack(
+            side="right", padx=(6, 0), anchor="n",
         )
 
 

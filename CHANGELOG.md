@@ -14,7 +14,7 @@ Niente, per ora.
 
 ## [1.0.8] — 2026-09-12
 
-Il SuperStar dentro una stella, e basta.
+Il SuperStar dentro una stella, e i numeri della stessa misura.
 
 ### Modificato
 
@@ -33,6 +33,48 @@ Il SuperStar dentro una stella, e basta.
   Le punte sono meno affilate di un pentagramma regolare — le rientranze si
   fermano al 55% del raggio invece che al 38% — per la stessa ragione: un
   pentagramma è più elegante e non ha un centro in cui scrivere «49».
+
+- **Anche i sei numeri sono grandi come la stella**, con le cifre della stessa
+  misura. Stanno sulla stessa riga, quindi devono leggersi come sette numeri
+  di cui uno marcato, non come due cose diverse: un SuperStar con le cifre più
+  grandi degli altri sembrerebbe più importante di quei sei, che invece sono
+  quelli che il metodo ha scelto. Una sola costante decide la misura di
+  entrambi e una sola regola decide il corpo delle cifre.
+
+### Corretto
+
+- **La previsione poteva piantarsi a metà, e adesso si sa perché.** Ogni
+  tanto — non sempre, e più facilmente dopo che il programma era già stato
+  usato un po' — l'elaborazione si fermava su un metodo, la barra di stato
+  restava su quel nome e (dalla 1.0.7) il pulsante «Genera» non tornava più
+  attivo.
+
+  La causa non è nel calcolo, che dura un millesimo di secondo. È il
+  **raccoglitore di memoria di Python**: quando distrugge un font di Tk chiama
+  Tcl, e gira sul thread che gli capita. Se quel thread è quello della
+  previsione, la chiamata entra in Tcl da fuori il thread grafico e **si
+  blocca lì per sempre**. L'ho trovato facendo stampare alla suite la pila del
+  thread al momento dello stallo, dopo che per tre versioni si era presentato
+  come «il worker è lento».
+
+  Due correzioni, entrambe necessarie: il raccoglitore viene spento per la
+  durata di ogni elaborazione (e la memoria viene liberata subito prima, sul
+  thread giusto), e i font non vengono più creati uno per etichetta ma tenuti
+  in un elenco — erano centinaia di oggetti Tk da distruggere per ogni
+  schermata, cioè centinaia di occasioni perché capitasse.
+
+  Per onestà: la seconda delle due, scritta di getto, ha introdotto un difetto
+  peggiore — un font appartiene all'interprete Tk che l'ho creato, e un elenco
+  che sopravvive alla finestra consegna alla successiva font di una
+  applicazione distrutta. La suite se n'è accorta subito, il che è già
+  qualcosa; adesso l'elenco viene svuotato quando si apre una finestra.
+
+- **Un sistema da dodici numeri ne mostrava sette.** Ingrandire le palline lo
+  ha fatto emergere: `pack` taglia quello che non ci sta e non lo dice, quindi
+  cinque numeri che l'utente avrebbe giocato sparivano dallo schermo senza che
+  niente lo segnalasse. È il modo peggiore in cui questa scheda potesse
+  sbagliare. Ora i numeri vanno a capo, **sei per riga** — perché sei è una
+  colonna, e un sistema da nove si legge come una colonna più tre.
 
 ## [1.0.7] — 2026-09-12 — `9d4ba89`
 

@@ -40,6 +40,7 @@ which fails intermittently and only under load, i.e. in front of the user.
 from __future__ import annotations
 
 import contextlib
+import gc
 import os
 import queue
 import threading
@@ -51,7 +52,6 @@ import customtkinter as ctk
 
 from core.archive import describe_archive, freshness, load_archive
 from core.data_manager import ARCHIVE_PATH, load_settings, save_settings
-from core.fonts import ui_font_family
 from core.localise import it_date, it_number
 from core.model_store import download_checkpoint
 from core.version import (
@@ -66,7 +66,7 @@ from gui.home_panel import HomePanel
 from gui.prediction_panel import PredictionPanel
 from gui.settings_panel import SettingsPanel
 from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, SEP, TEXT, WARN, apply_theme
-from gui.widgets import BODY_SIZE, body_font, heading_font
+from gui.widgets import body_font, heading_font, link_font, reset_fonts
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -84,6 +84,10 @@ class TycheApp(ctk.CTk):
     """Main window."""
 
     def __init__(self):
+        # Before any widget: the font cache is a module global and outlives a
+        # window, so a second TycheApp in one process would hand its labels
+        # fonts belonging to the destroyed one.
+        reset_fonts()
         super().__init__()
         self.settings = load_settings()
         self.draws = load_archive(ARCHIVE_PATH)
@@ -294,9 +298,7 @@ class TycheApp(ctk.CTk):
         self._licence_email = ctk.CTkLabel(
             centre,
             text=CONTACT_EMAIL,
-            font=ctk.CTkFont(
-                family=ui_font_family(), size=BODY_SIZE, underline=True,
-            ),
+            font=link_font(),
             text_color=ACCENT,
             cursor="hand2",
         )
@@ -385,6 +387,31 @@ class TycheApp(ctk.CTk):
             self.set_status("C'è già un'operazione in corso — aspetta che finisca.")
             return
         self._busy = True
+
+        # **The garbage collector must not run while a worker does, and this
+        # is not a performance measure.**
+        #
+        # ``tkinter.font.Font.__del__`` calls Tcl — ``font delete`` — and the
+        # collector runs on whichever thread happens to cross the threshold.
+        # When that is a worker, the call enters Tcl from outside the thread
+        # Tk was created on and blocks there, for good: the forecast stops
+        # mid-way, the status bar keeps the last method it announced, and
+        # since 1.0.7 the button never comes back either. It was caught by
+        # dumping the worker's stack from the smoke suite after an
+        # intermittent stall, and the stack pointed straight at
+        # ``queue.put`` → ``Font.__del__`` → ``_call``.
+        #
+        # Sweeping first, here, means the thread starts with nothing pending;
+        # disabling means nothing new can be swept until the job is over.
+        # Reference counting still frees objects immediately on whatever
+        # thread drops the last reference, but a worker holds no references to
+        # Tk objects — it runs ``core/`` code — so the only deallocations left
+        # happen on the main thread, where the Tcl call is legal.
+        #
+        # ``gui.widgets`` is the other half: it caches every font instead of
+        # building one per label, so there is little left to collect anyway.
+        gc.collect()
+        gc.disable()
         self.set_status(f"{label}…")
 
         def report(message: str, fraction: float = 0.0) -> None:
@@ -438,7 +465,9 @@ class TycheApp(ctk.CTk):
         self.run_worker("TimesFM", work, done)
 
     def _clear_busy(self) -> None:
+        """Runs on the main thread, through the queue, after every job."""
         self._busy = False
+        gc.enable()
 
     def _poll_queue(self) -> None:
         while True:
