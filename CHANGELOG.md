@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.1.1] — 2026-09-13
+## [1.1.1] — 2026-09-13 — `e851827`
 
 Il testo che non andava a capo, e due cose in meno sul Percorso.
 
