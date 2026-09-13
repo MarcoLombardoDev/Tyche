@@ -72,10 +72,18 @@ Un quinto metodo che è fatto degli altri, e dei pesi che si sono guadagnati.
 
 ### Modificato
 
-- **La scheda Previsione ha cinque riquadri invece di quattro**, e un pulsante
-  «Ricalibra i pesi» accanto a «Genera». La calibrazione si rifà da sola
-  quando l'archivio si è mosso di più di dieci estrazioni; il pulsante serve
-  per chiederla apposta, per esempio dopo aver installato il modello.
+- **La scheda Previsione ha cinque riquadri invece di quattro**, e nessun
+  pulsante in più: i pesi si ricalibrano da soli quando l'archivio si è mosso
+  di più di dieci estrazioni, quando cambia la finestra della frequenza o
+  quando TimesFM compare o sparisce. Il rapporto dice di quando sono e se
+  sono stati rifatti adesso.
+
+- **I sei numeri sono disegnati come il SuperStar, e sono cerchi veri.** Erano
+  etichette con gli angoli arrotondati, cioè rettangoli: a cinquanta pixel
+  bastano a sembrare cerchi da soli, e accanto a una stella della stessa
+  larghezza si vedono più squadrati. Ora stanno sulla stessa tela, nello
+  stesso quadrato, con la stessa regola per le cifre e lo stesso viola — a
+  distinguere il SuperStar resta la forma, che è l'unica differenza che c'è.
 
 - **I risultati per estrazione del backtest vengono conservati**, in
   `data/ensemble/`. Con TimesFM installato ogni estrazione del backtest costa

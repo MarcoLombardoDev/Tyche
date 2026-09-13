@@ -62,7 +62,7 @@ from core.predictor import (
 )
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.model_status import ModelStatus
-from gui.theme import ACCENT, BG_PANEL, BG_ROOT, BG_ROW, MUTED, TEXT, WARN
+from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, WARN
 from gui.widgets import (
     ReportBox,
     ball_row,
@@ -235,7 +235,9 @@ class _MethodCell(ctk.CTkFrame):
             ctk.CTkLabel(
                 line, text=f"{i}.", width=20, text_color=MUTED, font=body_font(),
             ).pack(side="left", anchor="n", pady=(10, 0))
-            ball_row(line, combination, size=BADGE_SIZE).pack(side="left")
+            ball_row(
+                line, combination, size=BADGE_SIZE, background=BG_PANEL,
+            ).pack(side="left")
             if i == 1 and prediction.superstar is not None:
                 self._star(line, prediction.superstar)
 
@@ -376,9 +378,6 @@ class PredictionPanel(ctk.CTkFrame):
         self.app = app
         self._predictions: dict = {}
         self._cells: dict[str, _MethodCell] = {}
-        # Set by «Ricalibra i pesi» and cleared after every run, successful or
-        # not — like the button state, and for the same reason.
-        self._force_fit = False
         self._build()
 
     def _build(self) -> None:
@@ -390,8 +389,8 @@ class PredictionPanel(ctk.CTkFrame):
             "Il primo riquadro è l'ensemble: gli altri tre messi insieme con i "
             "pesi che un backtest ha assegnato loro, ed è calcolato per ultimo "
             "perché è fatto di loro. I pesi si ricalibrano da soli quando "
-            "l'archivio si muove; il rapporto a destra dice quali sono e da dove "
-            "vengono.\n"
+            "l'archivio si muove abbastanza da cambiarli; il rapporto a destra "
+            "dice quali sono, da dove vengono e di quando sono.\n"
             "Numeri per combinazione e SuperStar si scelgono nelle Impostazioni.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
@@ -408,14 +407,6 @@ class PredictionPanel(ctk.CTkFrame):
             row, text="Genera", width=120, command=self._generate,
         )
         self.button.pack(side="left")
-        # Beside it rather than in the Settings: it is an action, not a
-        # preference, and it is the only button in the program that can cost
-        # an hour — the text says so when it is pressed.
-        self.recalibrate = ctk.CTkButton(
-            row, text="Ricalibra i pesi", width=150, fg_color=BG_ROW,
-            text_color=TEXT, command=self._recalibrate,
-        )
-        self.recalibrate.pack(side="left", padx=(8, 0))
 
         # Beside the button, and *only when something is wrong*. The strip
         # used to say "TimesFM è pronto" there, which is a line the reader has
@@ -460,17 +451,6 @@ class PredictionPanel(ctk.CTkFrame):
         self.report.set_text(value_note())
 
     # ── running ──────────────────────────────────────────────
-    def _recalibrate(self) -> None:
-        """Generate, but throw the stored weights away first.
-
-        The weights are refitted on their own when the archive has moved on,
-        so this is not the normal way to get new ones — it is the way to get
-        them after installing the model, changing a setting the fit does not
-        watch, or simply to watch the backtest run again.
-        """
-        self._force_fit = True
-        self._generate()
-
     def _ensemble(self, draws, settings, forecaster, report, state) -> None:
         """Fit or reuse the weights, then run the combined method.
 
@@ -490,9 +470,7 @@ class PredictionPanel(ctk.CTkFrame):
 
         window = int(settings.get("frequency_window", DEFAULT_WINDOW))
         record = load_ensemble_fit()
-        if self._force_fit or not is_current(
-            record, draws, window, forecaster is not None
-        ):
+        if not is_current(record, draws, window, forecaster is not None):
             report("Calibro i pesi dell'ensemble sul backtest…", 0.0)
             calibrated = fit(
                 draws,
@@ -596,14 +574,11 @@ class PredictionPanel(ctk.CTkFrame):
         # refusing it in the status bar after the click is not the same as
         # saying beforehand that the click will do nothing.
         self.button.configure(state="disabled", text="Generazione…")
-        self.recalibrate.configure(state="disabled")
         self.app.run_worker("Previsione", work, self._show, on_done=self._enable)
 
     def _enable(self) -> None:
-        """Give the buttons back. Runs after every job, successful or not."""
+        """Give the button back. Runs after every job, successful or not."""
         self.button.configure(state="normal", text="Genera")
-        self.recalibrate.configure(state="normal")
-        self._force_fit = False
 
     # ── output ───────────────────────────────────────────────
     def _show(self, result) -> None:

@@ -57,7 +57,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 429, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 491, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 492, GUI included
 python -m ruff check .
 ```
 
@@ -938,6 +938,14 @@ archive that shrank, a changed window, or TimesFM appearing or disappearing.
 Age alone is not on that list — weights fitted three weeks ago on the same
 archive are the same weights.
 
+**And there is no «Ricalibra i pesi» button, though there was one for a
+day.** The owner's objection was the right one: the refit already happens
+whenever the weights would differ, so a button to ask for it is a control
+that does what would have happened anyway, and a reader has to work out when
+to press it before finding that out. `test_the_weights_are_not_recalibrated_on_every_generation`
+covers both halves — the second «Genera» on an unmoved archive reuses the
+stored fit, and one after the archive has grown does not.
+
 ### Two smaller things that came with it
 
 - **`TimesFMForecaster` now remembers its last answer per urn.** The panel asks
@@ -1198,6 +1206,18 @@ Three things about it are not free choices:
   `gui.widgets.badge_font_size` is the one rule for the digits inside either
   shape; `ball_row` used to hard-code 14, which matched the star at one size
   and nowhere else.
+- **And since 1.1.0 the balls are canvases too, drawn by `ball_badge`.** The
+  owner asked for the six numbers to be built like the SuperStar and to differ
+  from it in the shape alone. They were `CTkLabel`s with `corner_radius` set
+  to half the width — which is a rounded rectangle, not a circle: at fifty
+  pixels it passes on its own and reads visibly squarer beside a star of the
+  same width. `_badge_canvas` is now the one box both go in, so a change to
+  one cannot leave the other a pixel different, and `create_oval` fills it in
+  both directions. The star keeps its downward text nudge and the circle has
+  none: a circle carries its area evenly about its centre and a star does not.
+  `test_a_drawn_number_is_a_circle_drawn_the_way_the_superstar_is` checks the
+  item type, the bounds and the shared box — a rounded rectangle fails on the
+  first of those.
 - **The canvas is opaque**, so `background` has to match what it sits on or
   the star arrives in a grey square. That is why `star_badge` takes it rather
   than assuming `BG_PANEL`.

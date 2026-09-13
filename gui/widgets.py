@@ -194,13 +194,25 @@ class ReportBox(ctk.CTkTextbox):
         self.configure(state="disabled")
 
 
-def ball_row(parent, numbers, size: int = 38, per_line: int = 6) -> ctk.CTkFrame:
+def ball_row(
+    parent, numbers, size: int = 38, per_line: int = 6,
+    background: str = BG_PANEL,
+) -> ctk.CTkFrame:
     """Render a combination as circles, the way a receipt prints it.
 
-    The digits are sized by :func:`badge_font_size`, the same rule the
-    SuperStar's star uses, so a ball and a star of the same width carry
-    numbers of the same height. Hard-coding 14 here — which is what this did —
-    meant the two matched at one size and nowhere else.
+    **Each number is drawn the way the SuperStar is** — a shape on a canvas
+    with the number inside it — and differs from it in the shape alone: a
+    perfect circle where the SuperStar has a star. They sit on the same row
+    and a reader compares them, so everything else about them is deliberately
+    identical: the same box, the same rule for the digits, the same purple.
+    What says "this one is the SuperStar" is then the outline and nothing
+    else, which is the only difference there is.
+
+    Before 1.1.0 the balls were ``CTkLabel``s with the corner radius turned
+    up. That draws a rounded rectangle, not a circle: at fifty pixels with a
+    radius of twenty-five it is close enough to pass on its own and reads as
+    slightly *squarer* than the star beside it, which is exactly the kind of
+    difference nobody can name and everybody sees.
 
     **It wraps, and it has to.** ``pack`` clips what does not fit and says
     nothing: at fifty pixels a *sistema integrale* of twelve numbers ran off
@@ -216,11 +228,9 @@ def ball_row(parent, numbers, size: int = 38, per_line: int = 6) -> ctk.CTkFrame
         line = ctk.CTkFrame(row, fg_color="transparent")
         line.pack(fill="x", pady=1)
         for n in numbers[start:start + per_line]:
-            ctk.CTkLabel(
-                line, text=f"{n:02d}", width=size, height=size,
-                corner_radius=size // 2, fg_color=ACCENT, text_color="#ffffff",
-                font=_font(badge_font_size(size), "bold"),
-            ).pack(side="left", padx=3)
+            ball_badge(line, n, size=size, background=background).pack(
+                side="left", padx=3,
+            )
     return row
 
 
@@ -256,6 +266,42 @@ def _star_points(centre: float, outer: float, inner: float, points: int = 5) -> 
     return coords
 
 
+def _badge_canvas(parent, size: int, background: str):
+    """The square a badge is drawn in, for the ball and the star alike.
+
+    One function because the two must agree about their box: they are packed
+    on the same row, and a ball one pixel wider than the star would show as a
+    step in a line of seven numbers.
+
+    ``background`` has to match what the badge sits on. A Tk canvas is opaque
+    and there is no transparent fill, so a wrong colour here does not fail —
+    it draws a grey square around the number.
+    """
+    return ctk.CTkCanvas(
+        parent, width=size, height=size, bg=background,
+        highlightthickness=0, bd=0,
+    )
+
+
+def ball_badge(parent, number: int, size: int = 38, background: str = BG_PANEL):
+    """One drawn number: a filled circle with its two digits in the middle.
+
+    A real circle rather than a rounded rectangle, and the same canvas the
+    SuperStar uses — see :func:`ball_row` for why the two are built the same
+    way. There is no vertical nudge on the text: a circle carries its area
+    evenly around its centre, which is the whole difference from the star
+    below.
+    """
+    canvas = _badge_canvas(parent, size, background)
+    centre = (size - 1) / 2
+    canvas.create_oval(0, 0, size - 1, size - 1, fill=ACCENT, outline="")
+    canvas.create_text(
+        centre, centre, text=f"{number:02d}", fill="#ffffff",
+        font=(ui_font_family(), badge_font_size(size), "bold"),
+    )
+    return canvas
+
+
 def star_badge(parent, number: int, size: int = 42, background: str = BG_PANEL):
     """The SuperStar: its number inside a star in Tyche's own purple.
 
@@ -266,13 +312,10 @@ def star_badge(parent, number: int, size: int = 42, background: str = BG_PANEL):
     canvas draws polygons natively, so the badge is a real star with the
     number in the middle of it and no second widget to align.
 
-    ``background`` has to match what the badge sits on: a canvas is opaque and
-    a wrong colour here shows as a grey square around the star.
+    Since 1.1.0 the six numbers beside it are drawn the same way, so what
+    distinguishes the SuperStar is the shape alone — :func:`ball_badge`.
     """
-    canvas = ctk.CTkCanvas(
-        parent, width=size, height=size, bg=background,
-        highlightthickness=0, bd=0,
-    )
+    canvas = _badge_canvas(parent, size, background)
     centre = size / 2
     canvas.create_polygon(
         _star_points(centre, centre, centre * _STAR_INNER),

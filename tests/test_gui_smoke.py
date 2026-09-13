@@ -275,8 +275,9 @@ def test_the_weights_are_not_recalibrated_on_every_generation(app):
 
     With the model installed a calibration is one forward pass per backtest
     draw — an hour. Pressing «Genera» twice on an archive that has not moved
-    must reuse the stored weights, and «Ricalibra i pesi» is the way to ask
-    for them again on purpose.
+    must reuse the stored weights; `core.ensemble.is_current` is what decides,
+    and there is no button, because a refit nobody has to ask for is one
+    nobody has to understand.
     """
     import core.data_manager as dm
 
@@ -288,17 +289,14 @@ def test_the_weights_are_not_recalibrated_on_every_generation(app):
     _generate(app)
     assert json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8")) == first
 
+    # And it does refit when the archive has moved far enough to matter,
+    # which is the other half: a rule that never fires is a stale weighting.
+    app.set_draws(_sample_archive(640))
     panel._predictions = {}
-    panel._recalibrate()
-    for _ in range(600):
-        app.update()
-        if panel._predictions:
-            break
-        time.sleep(0.02)
+    _generate(app)
     again = json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8"))
-    assert again["generated_at"] != first["generated_at"], (
-        "«Ricalibra i pesi» did not recalibrate anything"
-    )
+    assert again["archive_size"] == 640
+    assert again["generated_at"] != first["generated_at"]
 
 
 def test_an_uncalibratable_ensemble_costs_its_own_cell_and_nothing_else(app):
@@ -1100,7 +1098,14 @@ def test_the_superstar_is_a_purple_star_with_its_number_in_it(app):
         if isinstance(child, tkinter.Canvas)
     ]
     assert canvases, "the SuperStar is not on the same row as the numbers"
-    canvas = canvases[0]
+    # Since 1.1.0 the six numbers are canvases as well, so the star is the one
+    # carrying a polygon rather than simply the first one there.
+    starred = [
+        c for c in canvases
+        if any(c.type(i) == "polygon" for i in c.find_all())
+    ]
+    assert len(starred) == 1, "exactly one badge on this row is a star"
+    canvas = starred[0]
 
     polygons = [i for i in canvas.find_all() if canvas.type(i) == "polygon"]
     assert len(polygons) == 1
@@ -1200,16 +1205,37 @@ def _all_label_texts(widget) -> list[str]:
     return found
 
 
-def _ball_labels(widget) -> list:
-    """Every two-digit circle under ``widget``, in the order Tk holds them."""
-    import customtkinter as ctk
+def _balls(widget) -> list:
+    """Every drawn number under ``widget``, in the order Tk holds them.
+
+    A ball is a canvas with an oval on it since 1.1.0 — it was a CTkLabel with
+    the corner radius turned up, which is a rounded rectangle and not a
+    circle. The SuperStar is a canvas too and is deliberately excluded here:
+    it carries a polygon instead.
+    """
+    import tkinter
 
     found = []
     for child in widget.winfo_children():
-        if isinstance(child, ctk.CTkLabel) and child.cget("text").isdigit():
+        if isinstance(child, tkinter.Canvas) and any(
+            child.type(i) == "oval" for i in child.find_all()
+        ):
             found.append(child)
-        found += _ball_labels(child)
+        found += _balls(child)
     return found
+
+
+def _badge_number(canvas) -> str:
+    """The digits drawn inside a ball or a star."""
+    text = [i for i in canvas.find_all() if canvas.type(i) == "text"][0]
+    return canvas.itemcget(text, "text")
+
+
+def _badge_font_size(canvas) -> int:
+    """Tk hands the font back as "family size weight"; the size is the number."""
+    text = [i for i in canvas.find_all() if canvas.type(i) == "text"][0]
+    parts = canvas.itemcget(text, "font").split()
+    return int([p for p in parts if p.lstrip("-").isdigit()][-1])
 
 
 def test_every_number_of_a_system_is_on_the_screen(app):
@@ -1225,7 +1251,7 @@ def test_every_number_of_a_system_is_on_the_screen(app):
 
     cell = panel._cells["frequenza"]
     first = cell.balls.winfo_children()[0]
-    balls = _ball_labels(first)
+    balls = _balls(first)
     assert len(balls) == 12, f"only {len(balls)} of the twelve are drawn"
 
     # On more than one line, which is the mechanism: a single row of twelve
@@ -1261,18 +1287,14 @@ def test_a_ball_and_the_star_carry_the_same_size_of_number(app):
 
     cell = panel._cells["frequenza"]
     first = cell.balls.winfo_children()[0]
-    ball = _ball_labels(first)[0]
-    canvas = next(
+    ball = _balls(first)[0]
+    star = next(
         child for child in first.winfo_children()
         if isinstance(child, tkinter.Canvas)
+        and any(child.type(i) == "polygon" for i in child.find_all())
     )
-    text = [i for i in canvas.find_all() if canvas.type(i) == "text"][0]
 
-    # Tk returns the font as "family size weight"; the size is the number.
-    star_size = int(
-        [part for part in canvas.itemcget(text, "font").split() if part.lstrip("-").isdigit()][-1]
-    )
-    assert star_size == ball.cget("font").cget("size") == badge_font_size(BADGE_SIZE)
+    assert _badge_font_size(star) == _badge_font_size(ball) == badge_font_size(BADGE_SIZE)
 
     # And they agree because both follow the rule, not because 14 happens to
     # be what the rule returns at today's size. A hard-coded 14 in ball_row
@@ -1280,8 +1302,55 @@ def test_a_ball_and_the_star_carry_the_same_size_of_number(app):
     from gui.widgets import ball_row
 
     bigger = ball_row(cell, (7,), size=80)
-    assert _ball_labels(bigger)[0].cget("font").cget("size") == badge_font_size(80)
+    assert _badge_font_size(_balls(bigger)[0]) == badge_font_size(80)
     bigger.destroy()
+
+
+def test_a_drawn_number_is_a_circle_drawn_the_way_the_superstar_is(app):
+    """The six and the SuperStar differ in their shape and in nothing else.
+
+    They are packed on the same row and a reader compares them, so a ball
+    built out of a different widget than the star is a difference nobody can
+    name and everybody sees. Until 1.1.0 a ball was a ``CTkLabel`` with the
+    corner radius turned up — a rounded rectangle, close enough to a circle to
+    pass on its own and visibly squarer beside a star of the same width.
+
+    So: same box, same font rule, same purple, and an oval that fills the box
+    in both directions. A rectangle drawn with rounded corners would fail on
+    the item type; an oval that was not round would fail on the bounds.
+    """
+    import tkinter
+
+    from gui.prediction_panel import BADGE_SIZE
+    from gui.theme import ACCENT
+
+    app.settings["predict_superstar"] = True
+    app.settings["prediction_size"] = 6
+    panel = _generate(app)
+
+    cell = panel._cells["frequenza"]
+    first = cell.balls.winfo_children()[0]
+    balls = _balls(first)
+    assert len(balls) == 6
+
+    star = next(
+        child for child in first.winfo_children()
+        if isinstance(child, tkinter.Canvas)
+        and any(child.type(i) == "polygon" for i in child.find_all())
+    )
+    for ball in balls:
+        ovals = [i for i in ball.find_all() if ball.type(i) == "oval"]
+        assert len(ovals) == 1
+        assert ball.itemcget(ovals[0], "fill") == ACCENT
+        x0, y0, x1, y1 = ball.coords(ovals[0])
+        assert (x1 - x0) == (y1 - y0), "the ball is an ellipse, not a circle"
+        assert (x1 - x0) >= BADGE_SIZE - 2, "the circle does not fill its box"
+        # The same square as the star's, or the row shows a step in it.
+        assert int(ball.cget("width")) == int(star.cget("width"))
+        assert int(ball.cget("height")) == int(star.cget("height"))
+
+    drawn = [int(_badge_number(ball)) for ball in balls]
+    assert drawn == list(panel._predictions["frequenza"].combinations[0])
 
 
 def test_the_collector_is_off_while_a_worker_runs(app):
