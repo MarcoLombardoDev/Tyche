@@ -104,6 +104,19 @@ class TycheApp(ctk.CTk):
         self.title(f"{APP_TITLE}  ·  v{__version__}")
         # The size the window falls back to: what it gets if maximising is
         # refused, and what it returns to when the user un-maximises it.
+        #
+        # In CustomTkinter's units, not in pixels — and that is already
+        # handled, which is worth writing down because it looks like the bug
+        # fixed in 1.1.1 and is its opposite. ``CTk.geometry`` and
+        # ``CTk.minsize`` put whatever they are given through the *window*
+        # scaling before Tk sees it, so on a display at 150% these two numbers
+        # are already 1920x1260 and 1560x1020 on screen. Multiplying them here
+        # by the widget scaling — which is what a session fixing the
+        # wraplength will be tempted to do — makes the window twice too big
+        # for the screen it opens on.
+        #
+        # The one to convert is a size *measured* off the screen and handed
+        # back to a widget; these were never measured.
         self.geometry("1280x840")
         self.minsize(1040, 680)
         self.configure(fg_color=BG_ROOT)

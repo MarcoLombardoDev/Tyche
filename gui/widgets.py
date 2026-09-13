@@ -104,6 +104,41 @@ def heading_font(size: int = HEADING_SIZE):
     return _font(size, "bold")
 
 
+# How much of the window is left alone to the right of a wrapped paragraph,
+# when the window is the thing that decides its width. Only reached on a
+# window too narrow for its own content — see fit_text.
+EDGE_GUTTER = 24
+
+# No paragraph is wrapped narrower than this, whatever the arithmetic says. A
+# column of two words is not more readable than one clipped line, and a
+# measurement that comes out at forty pixels is a measurement that went wrong.
+MIN_WRAP = 200
+
+
+def widget_scaling(widget) -> float:
+    """The factor CustomTkinter multiplies every size it is handed by.
+
+    **This is the whole of the "the text runs off the screen" bug**, and it is
+    invisible on a display at 100%. ``CTkLabel.configure(wraplength=N)`` does
+    not pass N to Tk: it passes ``N * widget_scaling``, which on a Windows
+    laptop at 150% is half as wide again. ``winfo_width()`` answers in real
+    screen pixels, so a wraplength measured off a container and handed back
+    unconverted wrapped the prose at 1800 pixels inside a 1232-pixel window —
+    every paragraph, every tab, with no scrollbar and no way to read the ends
+    of the lines. The owner reported exactly that and neither the tests nor a
+    screenshot from this machine could show it, because both run at 1.0.
+
+    Everything measured here stays in screen pixels; the conversion happens
+    once, at the point of handing the number over. ``gui.app`` asks for the
+    same factor, for the opposite reason: the window's own minimum size is in
+    real pixels and the layout it has to hold is not.
+    """
+    try:
+        return float(ctk.ScalingTracker.get_widget_scaling(widget)) or 1.0
+    except Exception:  # noqa: BLE001 — a scaling we cannot read is 1.0
+        return 1.0
+
+
 def fit_text(label, margin: int = 32):
     """Make a label wrap to the window's width instead of a number from 2026.
 
@@ -120,32 +155,97 @@ def fit_text(label, margin: int = 32):
     That did not fail, it hung — ``update()`` never returned and the whole GUI
     suite stopped dead. The parent's width is imposed by the window above it
     and does not answer back.
-    """
-    applied = {"width": 0}
 
-    def resize(event=None):
-        # The binding lives on the toplevel and outlives the label: a panel
-        # destroyed while the window is still up leaves this callback pointing
-        # at a widget that is gone. On Linux the ordering happened never to
-        # hit it; the Windows leg of CI printed a TclError per orphan on every
-        # test that closed a window. Ask, and stand down when the answer is no.
+    **Measured after the layout, which is the fix the owner's report needed.**
+    The binding was right and the *timing* was not: a ``<Configure>`` on the
+    toplevel is delivered before the geometry manager has resized anything
+    inside it, so reading the parent there returns the width it had a moment
+    ago. Growing the window, that wraps a little narrow and nobody notices.
+    Shrinking it, every paragraph keeps the wraplength of the larger window —
+    and since the last event of a drag is also the last chance to measure, the
+    text stays wider than the window, with no scrollbar and no way to read the
+    end of a line. That is what was reported, on every tab.
+
+    The measurement now runs from ``after_idle``. Tk queues its own relayout
+    as an idle handler while it is processing the resize — before any binding
+    is dispatched — and idle handlers run in the order they were queued, so
+    ours reads what the window actually granted.
+
+    **And it does not flush that layout itself.** Calling
+    ``update_idletasks()`` in here is the obvious way to be certain the
+    geometry has settled, and it hangs the program: every other label's
+    pending measurement runs inside this one, each widening a label, each
+    widening what the window's contents ask for — and a toplevel with no
+    window manager over it grants that, which raises the width this was
+    measuring. It is the same runaway the two earlier versions had, moved
+    inside a single callback where no event loop can damp it. Do not add it
+    back.
+
+    **And it re-measures when a panel is first shown.** Three of the four
+    panels are built at startup and never mapped, so their labels had no width
+    to be measured against and every resize before their first appearance was
+    wasted on them. ``<Map>`` fires when a panel is packed into view, does not
+    fire when a wraplength changes, and so cannot feed back into itself.
+
+    ``margin`` is the padding between the label and its parent's edges. The
+    caller knows it; nothing here can measure it.
+    """
+    state: dict = {"width": 0, "job": None}
+
+    def measure():
+        state["job"] = None
         try:
             if not label.winfo_exists():
+                # The binding lives on the toplevel and outlives the label: a
+                # panel destroyed while the window is still up leaves this
+                # pointing at a widget that is gone. On Linux the ordering
+                # happened never to hit it; the Windows leg of CI printed a
+                # TclError per orphan on every test that closed a window.
                 return
-            width = label.master.winfo_width()
+            if not label.winfo_ismapped():
+                # Nothing to measure against yet. <Map> brings us back, and
+                # applying a number now would wrap the paragraph to MIN_WRAP
+                # for as long as the window is left alone.
+                return
+            top = label.winfo_toplevel()
+            room = label.master.winfo_width() - margin
+            # A container cannot shrink below what its own contents ask for,
+            # so on a narrow window it can report a width the window does not
+            # have. What the window leaves to the right of where this label
+            # starts is the other answer, and the smaller of the two fits.
+            visible = (
+                top.winfo_width()
+                - (label.winfo_rootx() - top.winfo_rootx())
+                - EDGE_GUTTER
+            )
+            width = min(room, visible)
         except tkinter.TclError:
             return
-        if abs(width - applied["width"]) < 4:
+        if abs(width - state["width"]) < 4:
             return
-        applied["width"] = width
-        label.configure(wraplength=max(width - margin, 200))
+        state["width"] = width
+        # Into CustomTkinter's units on the way out. See _widget_scaling: the
+        # width was measured in screen pixels and CTk multiplies whatever it
+        # is given by the display scaling.
+        label.configure(
+            wraplength=round(max(width, MIN_WRAP) / widget_scaling(label))
+        )
+
+    def schedule(event=None):
+        if state["job"] is not None:
+            return
+        try:
+            state["job"] = label.after_idle(measure)
+        except tkinter.TclError:
+            state["job"] = None
 
     # ``add="+"`` because every label bound this way shares the toplevel, and
     # a plain bind would leave only the last one working.
-    label.winfo_toplevel().bind("<Configure>", resize, add="+")
+    label.winfo_toplevel().bind("<Configure>", schedule, add="+")
+    label.bind("<Map>", schedule, add="+")
     # And once on the way in, so the first frame is right rather than waiting
     # for the user to resize something.
-    label.after_idle(resize)
+    schedule()
     return label
 
 

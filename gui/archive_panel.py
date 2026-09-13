@@ -72,9 +72,14 @@ class ArchivePanel(ctk.CTkFrame):
         ctk.CTkButton(row, text="Importa un file…", width=155,
                       command=self._import_file).pack(side="left", padx=8)
 
-        self.status = ctk.CTkLabel(
-            sources.body, text="", anchor="w", text_color=MUTED, font=body_font(),
-        )
+        # fit_text like every other paragraph on these screens: this one
+        # carries the archive's whole line — dates, counts, sources — and it
+        # was the one label long enough to run off a narrow window and the
+        # only one that never wrapped.
+        self.status = fit_text(ctk.CTkLabel(
+            sources.body, text="", anchor="w", justify="left",
+            text_color=MUTED, font=body_font(),
+        ))
         self.status.pack(fill="x", pady=(10, 0))
         self.freshness = fit_text(ctk.CTkLabel(
             sources.body, text="", anchor="w", justify="left", wraplength=1000,

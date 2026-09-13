@@ -57,7 +57,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 429, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 492, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 494, GUI included
 python -m ruff check .
 ```
 
@@ -559,6 +559,18 @@ page for whatever the caller runs next.
   downloads the weights, because that job belongs to no tab. Everything else
   opens the panel that does the work and reports what it produced, through
   `app.last_predictions`.
+
+  **1.1.1 took the «Diagnosi» button off it**, on the owner's report that the
+  model now starts. It was there for the one case where "it does not work and
+  I cannot tell you why" was a real outcome, and `core.model_store.diagnose`
+  still exists behind `--model-check`: what went is a button on the first
+  screen a user sees, for a failure that has since been fixed at the source.
+  Put it back if that stops being true, rather than leaving a diagnostic
+  button on the path as decoration.
+
+  It also says two things less: the sentence about the random control, which
+  the Prediction panel demonstrates by giving it a cell, and the pointer to
+  the archive's figures, which are found by opening the Archive tab.
 
 - **The bulk mirror is wrong, and the way it is wrong is instructive.** Every
   one of its 3,076 SuperEnalotto rows validates individually, and nine of them
@@ -1439,6 +1451,87 @@ panel destroyed while the window is up leaves it pointing at a widget that is
 gone — a `TclError` per orphan on every subsequent resize, which only the
 Windows leg of CI ever printed. It checks `winfo_exists` and treats a
 `TclError` as "stand down".
+
+### The unit the number is in, which is 1.1.1 and the real bug
+
+**`CTkLabel.configure(wraplength=N)` does not pass N to Tk. It passes
+`N * widget_scaling`**, and `winfo_width()` answers in real screen pixels. On
+a display at 100% those are the same number and everything above is correct.
+On a Windows laptop at 150% — which is most of them — a paragraph measured at
+1200 was handed to Tk as **1800, inside a window 1232 wide**: every paragraph,
+every tab, no scrollbar, no way to read the ends of the lines. That is what
+the owner reported and it had shipped in every version this helper existed in.
+
+Three things worth keeping from it:
+
+- **Nothing here could have caught it.** The suite runs at scaling 1.0, the
+  screenshots are taken at 1.0, and the assertion compared `cget("wraplength")`
+  — which gives back the number CTk was *handed*, not the one Tk got. The
+  guard now sets `ctk.set_widget_scaling(1.5)` and reads
+  `label._label.cget("wraplength")`, the inner Tk widget's own value, which is
+  the only place the defect is visible.
+- **Measure in pixels, convert once, at the point of handing the number over.**
+  `_widget_scaling` is that conversion. Every other number in the function
+  stays in screen pixels, because that is what every `winfo_` answer is.
+- **A user's "it does not work" about geometry may be about their DPI**, and
+  no amount of looking at it here will show it. Ask what the display scaling
+  is before assuming the layout code is wrong in the way it looks wrong.
+
+### Two more things the same report needed
+
+- **The measurement happens in an idle callback now, not in the `<Configure>`
+  handler.** Tk delivers the toplevel's Configure *before* the geometry
+  manager has resized anything inside it, so reading the parent there returns
+  the width it had a moment ago. Growing a window that wraps slightly narrow
+  and nobody notices; shrinking one, every paragraph keeps the wraplength of
+  the larger window and the last event of a drag is the last chance to
+  measure. Tk queues its own relayout as an idle handler while processing the
+  resize, before any binding is dispatched, and idle handlers run in order —
+  so `after_idle` reads what the window actually granted.
+
+- **Do not call `update_idletasks()` in there to be sure.** It hangs: every
+  other label's pending measurement runs inside the one that called it, each
+  widening a label, each widening what the window's contents ask for — and a
+  toplevel with no window manager over it grants that, which raises the width
+  being measured. It is the same runaway as the two earlier versions, moved
+  inside a single callback where no event loop can damp it. Tried, hung the
+  probe, reverted.
+
+- **`<Map>` on the label, as well as `<Configure>` on the toplevel.** Three of
+  the four panels are built at startup and never mapped, so their labels had
+  no width to measure against and every resize before their first appearance
+  was wasted on them. Mapping does not change with the wraplength, so it
+  cannot feed back.
+
+- **And the wraplength is clamped to what the window really leaves.** A
+  container cannot shrink below what its own contents ask for, so on a narrow
+  window it can report a width the window does not have; the smaller of "the
+  parent's width" and "the window minus where this label starts" is the one
+  that fits.
+
+**What is *not* the same bug: the window's own geometry and minimum.**
+`CTk.geometry` and `CTk.minsize` already put what they are given through the
+*window* scaling, so `minsize(1040, 680)` is 1560x1020 on a 150% display
+without anyone doing anything. Scaling those by hand as well — which is the
+obvious next move after finding the wraplength defect, and was made and
+reverted here — opens the window at twice the size of the screen. The rule
+that separates them: convert a number that was **measured** off the screen and
+is being handed back to a widget; leave alone a number that was written down
+in CustomTkinter's units to begin with.
+
+**One label is deliberately left out of all this**: the blurb beside a
+method's name in the Prediction panel's cells. It shares its row with the
+name, so the space it has is the row minus a sibling, and the only widget that
+knows that is the label itself — whose own width is exactly the measurement
+that oscillates. It is short, and the row it sits in is as wide as the cell.
+Do not "finish the job" by passing it through `fit_text`; that was tried, and
+it wraps to the parent's width, which is the width of the whole row including
+the name.
+
+`test_every_paragraph_wraps_inside_the_space_it_has` walks all four panels and
+fails on any long label that never wraps or wraps wider than its parent — the
+report was about every tab, and a guard aimed at one panel would have missed
+the archive line, which had simply never been passed through `fit_text`.
 
 ## One font size for everything a reader reads
 

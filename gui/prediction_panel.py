@@ -204,6 +204,11 @@ class _MethodCell(ctk.CTkFrame):
             header, text=method_name(method), anchor="w", text_color=ACCENT,
             font=heading_font(14),
         ).pack(side="left")
+        # Not fit_text, deliberately: this one shares its row with the method's
+        # name, so the space it has is the row minus a sibling — and the only
+        # widget that knows that is the label itself, whose own width is the
+        # measurement that oscillates and hung the suite twice. It is short
+        # enough to fit the cell at every size the window can be.
         ctk.CTkLabel(
             header, text=f" — {_METHOD_BLURBS[method]}", anchor="w",
             text_color=MUTED, font=body_font(),

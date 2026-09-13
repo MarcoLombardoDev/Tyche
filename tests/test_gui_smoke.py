@@ -513,6 +513,108 @@ def test_prose_wraps_to_the_window_and_not_to_a_number(app):
         )
 
 
+def _prose(widget) -> list:
+    """Every mapped label on screen carrying more than a caption of text."""
+    import customtkinter as ctk
+
+    found = []
+    for child in widget.winfo_children():
+        if isinstance(child, ctk.CTkLabel):
+            try:
+                text = str(child.cget("text"))
+            except Exception:  # noqa: BLE001
+                text = ""
+            if len(text) >= 60 and child.winfo_ismapped():
+                found.append(child)
+        found += _prose(child)
+    return found
+
+
+def test_every_paragraph_wraps_inside_the_space_it_has(app):
+    """On every tab, not on the one that was being worked on.
+
+    The owner's report was "the text does not wrap and I cannot see the end of
+    the line", and it was true of all four panels at once — which is what a
+    helper everything shares fails like. Checked against the parent's own
+    width rather than the window's, because whether a geometry request is
+    granted is the window manager's business and the Windows runner does not
+    grant it.
+
+    ``_label`` is CustomTkinter's inner Tk widget, and it is what this has to
+    read: ``cget("wraplength")`` gives back the number CTk was handed, which
+    is exactly the number that was wrong.
+    """
+    from gui.app import VIEWS
+
+    for key, _, _ in VIEWS:
+        app.show(key)
+        app.update()
+        app.update_idletasks()
+        for label in _prose(app._panels[key]):
+            text = str(label.cget("text"))[:40]
+            parent = label.master.winfo_width()
+            if parent < 100:
+                continue
+            real = int(label._label.cget("wraplength"))
+            assert real, f"{key}: never wraps at all: {text!r}"
+            assert real <= parent + 8, (
+                f"{key}: wraps at {real} inside {parent}: {text!r}"
+            )
+
+
+def test_prose_wraps_to_the_window_on_a_display_that_scales(app):
+    """A Windows laptop at 125% or 150%, which is most of them.
+
+    ``CTkLabel.configure(wraplength=N)`` hands Tk ``N * widget_scaling``,
+    while ``winfo_width()`` answers in real screen pixels. Measure one and set
+    the other and the prose wraps half again as wide as the window it is in —
+    invisible here, invisible in a screenshot from this machine, and the whole
+    of what the owner was looking at.
+
+    Mutation check: drop the conversion in ``gui.widgets.fit_text`` and this
+    fails at 1.5 while every other test in this file still passes.
+    """
+    import customtkinter as ctk
+
+    from gui.widgets import fit_text
+
+    ctk.set_widget_scaling(1.5)
+    window = None
+    try:
+        # Its own toplevel rather than a corner of the app's: the main window
+        # packs its body with expand=True, so anything added afterwards is
+        # given whatever is left, which is nothing — the same pack rule the
+        # licence bar is ordered around.
+        window = ctk.CTkToplevel(app)
+        window.geometry("900x300")
+        holder = ctk.CTkFrame(window, fg_color="transparent")
+        holder.pack(fill="x")
+        label = fit_text(ctk.CTkLabel(
+            holder, text="parola " * 120, anchor="w", justify="left",
+        ))
+        label.pack(fill="x")
+        for _ in range(40):
+            app.update()
+            if int(label._label.cget("wraplength")):
+                break
+            time.sleep(0.02)
+        app.update_idletasks()
+
+        room = holder.winfo_width()
+        assert room > 200, "the holder never got a width; nothing to check"
+        real = int(label._label.cget("wraplength"))
+        assert real > 0, "the paragraph was never given a wraplength"
+        assert real <= room, (
+            f"wraps at {real} real pixels inside {room}: the display scaling "
+            "was applied twice"
+        )
+    finally:
+        if window is not None:
+            window.destroy()
+        ctk.set_widget_scaling(1.0)
+        app.update()
+
+
 def test_the_archive_tab_carries_the_figures_that_had_their_own_tab(app):
     """Statistics folded into Archivio in 0.11.0; the tab is gone."""
     from gui.app import VIEWS

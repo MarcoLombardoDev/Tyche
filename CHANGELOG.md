@@ -12,6 +12,48 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.1.1] — 2026-09-13
+
+Il testo che non andava a capo, e due cose in meno sul Percorso.
+
+### Corretto
+
+- **Su uno schermo con lo zoom di Windows al 125% o al 150%, nessun paragrafo
+  andava a capo dove doveva**: le righe finivano fuori dalla finestra, in
+  tutte le schede, senza barra di scorrimento e senza modo di leggerne la
+  fine. CustomTkinter moltiplica per il fattore di scala dello schermo ogni
+  misura che riceve, mentre le larghezze si leggono in pixel veri: misurare
+  una cosa e impostarne un'altra faceva andare a capo il testo a 1800 pixel
+  dentro una finestra da 1232. Al 100% — cioè su ogni macchina su cui era
+  stato provato e in ogni screenshot — non si vedeva.
+
+- **E la larghezza viene misurata dopo che la finestra si è ridisegnata**, non
+  mentre lo sta facendo. L'evento di ridimensionamento arriva prima che il
+  contenuto sia stato rimpicciolito, quindi restringendo la finestra ogni
+  paragrafo restava largo quanto la finestra di prima — e l'ultimo evento di
+  un trascinamento è anche l'ultima occasione per misurare.
+
+- **Un paragrafo dentro una scheda mai aperta adesso si misura quando la
+  scheda si apre.** Tre delle quattro schede vengono costruite all'avvio e non
+  mostrate: non avevano una larghezza contro cui misurarsi, e ogni
+  ridimensionamento fatto prima della loro prima apertura era sprecato.
+
+- **La riga con i numeri dell'archivio, nella scheda Archivio, non andava a
+  capo affatto**: era l'unica etichetta lunga rimasta fuori da questo
+  meccanismo.
+
+### Modificato
+
+- **Via il pulsante «Diagnosi» dal Percorso.** Serviva quando TimesFM non
+  partiva e non si poteva sapere perché; adesso lo stato del modello è scritto
+  nel passo 2 e il rapporto completo resta disponibile da riga di comando con
+  `--model-check`.
+
+- **Il Percorso dice due cose in meno**: la frase sul generatore casuale — che
+  la scheda Previsione dimostra da sé, mettendogli un riquadro accanto agli
+  altri — e il rimando all'archivio in cifre, che sta nella scheda Archivio e
+  si trova aprendola.
+
 ## [1.1.0] — 2026-09-13 — `f2129bf`
 
 Un quinto metodo che è fatto degli altri, e dei pesi che si sono guadagnati.
