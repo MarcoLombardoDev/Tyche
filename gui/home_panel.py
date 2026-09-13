@@ -34,7 +34,7 @@ What replaced them is not a shorter version of the same argument, it is a
 different one. The steps are now the three things that must be *true* before a
 forecast can run — the archive is current, the model is on disk, then generate
 — which is a checklist rather than a case. The case moved to where it cannot
-be skipped: the Prediction panel runs all four methods at once and puts the
+be skipped: the Prediction panel runs every method at once and puts the
 random control beside TimesFM at the same size, every time, so the reader sees
 them disagree without having to open anything.
 
@@ -77,8 +77,9 @@ STEPS = [
      "a mano: bastano i due file config.json e model.safetensors.",
      "Scarica il modello"),
     ("prediction", "3", "La previsione",
-     "Il punto di arrivo: tutti e quattro i metodi, uno accanto all'altro, con "
-     "quanto costa la giocata e quanto vale.",
+     "Il punto di arrivo: tutti i metodi, uno accanto all'altro, con quanto "
+     "costa la giocata e quanto vale. Il primo è l'ensemble: gli altri tre "
+     "messi insieme, con i pesi che un backtest ha assegnato loro.",
      "Genera le combinazioni"),
 ]
 
@@ -106,8 +107,8 @@ class HomePanel(ctk.CTkFrame):
             head,
             text=(
                 "Scarica lo storico del SuperEnalotto dal 1997 e genera delle "
-                "combinazioni con quattro metodi diversi, mostrandoli affiancati.\n"
-                "Uno dei quattro è un generatore casuale, ed è lì di proposito: "
+                "combinazioni con metodi diversi, mostrandoli affiancati.\n"
+                "Uno di loro è un generatore casuale, ed è lì di proposito: "
                 "hanno tutti lo stesso punteggio atteso, 0,4 numeri indovinati su "
                 "sei, perché l'estrazione da prevedere non dipende da niente di ciò "
                 "che guardano.\n"

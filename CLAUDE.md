@@ -11,11 +11,13 @@ archive and forecasts it with TimesFM 3.0. Same shape as Argus: logic in
 
 ```
 main.py       entry point, plus the headless modes: --check, --validate,
-              --power, --update, --import, --forecast, --export-sqlite
-              (--check, --validate and --power are the measurement, and since
-              0.10.0 the command line is the only place it lives)
+              --power, --ensemble, --update, --import, --forecast,
+              --export-sqlite
+              (--check, --validate, --power and --ensemble are the
+              measurement, and since 0.10.0 the command line is the only place
+              it lives)
 core/         archive, sources, features, statistics, scoring, power,
-              forecasting — no GUI imports below this line
+              ensemble, forecasting — no GUI imports below this line
 core/sources/ the three ways draw history gets in
 gui/          one module per panel; home_panel.py is the path the app opens on
               (four panels since 0.11.0: Percorso, Archivio, Previsione,
@@ -54,8 +56,8 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 387, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 445, GUI included
+python -m pytest tests/ -q                                   # 429, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 491, GUI included
 python -m ruff check .
 ```
 
@@ -283,7 +285,12 @@ Three things about that build worth knowing before touching it:
   not. argparse prints the version and exits before anything else is imported,
   so a bundle whose Tcl/Tk was never collected passes it. `core/selfcheck.py`
   starts Tk, reports the windowing system, builds the feature matrices, runs
-  the independence tests, round-trips an archive and writes a SQLite export.
+  the independence tests, calibrates a small ensemble, round-trips an archive
+  and writes a SQLite export. The ensemble check is there for the same reason
+  `timesfm3` is collected explicitly: `core/ensemble.py` is reached through a
+  deferred import inside `predict`, so PyInstaller's static analysis is the
+  only thing standing between a bundle and a missing module that nothing
+  notices until the first «Genera».
   The workflow greps its report for `self-check: PASSED`, for `win32`, and for
   `timesfm: nel pacchetto` — that last one because a bundle that silently lost
   TimesFM passes everything else.
@@ -470,7 +477,7 @@ translation into the comments.
 Four consequences that are easy to trip over:
 
 - **The method names are Italian identifiers**, not display strings:
-  `METHODS = ("timesfm", "frequenza", "ritardo", "casuale")`. They are what
+  `METHODS = ("ensemble", "timesfm", "frequenza", "ritardo", "casuale")`. They are what
   `--forecast` and `settings.json` take, so 0.1.0's English names are a
   breaking change.
 
@@ -518,7 +525,7 @@ page for whatever the caller runs next.
   the command line. What went is a *screen*, and the complaint was about the
   screen.
 
-  **The panel is two columns since 1.0.7**: the four methods stacked down the
+  **The panel is two columns since 1.0.7**: the methods stacked down the
   left holding *only* their numbers, and one dark report on the right with
   everything that is text — the archive line, the ticket, the cost, and the
   four score tables appended to it. Before that each cell was half output and
@@ -529,7 +536,7 @@ page for whatever the caller runs next.
   ranking the ninety numbers almost identically.
 
   **What carries the argument now is the Prediction panel, and it must keep
-  carrying it.** All four methods run on every press and each gets a cell the
+  carrying it.** Every method runs on every press and each gets a cell the
   size of the others, so the random control sits under TimesFM at the same
   size, in front of a reader who never asked to see it. That is a stronger
   demonstration than the tab it replaced, because it cannot be skipped — and
@@ -539,7 +546,7 @@ page for whatever the caller runs next.
     (`test_the_random_control_keeps_its_quarter_of_the_screen` kept its name
     through the 1.0.7 relayout; it now compares widths in a column rather
     than boxes in a grid, and it is the same guard);
-  - the four cells are built from `METHODS`, so a method cannot be quietly
+  - the cells are built from `METHODS`, so a method cannot be quietly
     dropped from the display without being dropped from the program;
   - `test_the_random_control_keeps_its_quarter_of_the_screen` fails if any of
     that changes.
@@ -804,6 +811,143 @@ combinations. A system of seven stays at the top of the ranking; five sliding
 combinations reach down to rank ten. Neither improves the return per euro —
 nothing does — but only one of them spends the extra money on numbers the
 method actually liked.
+
+## The ensemble, and the weights nobody chose
+
+1.1.0, on the owner's instruction: one combined prediction, shown **before**
+TimesFM's and computed **after** all the others, with weights decided by a
+walk-forward backtest rather than written down. `core/ensemble.py` is the
+whole engine; `predict(method="ensemble", weights=...)` is how the rest of the
+program reaches it.
+
+**It is first on the screen and last in the worker, and those do not conflict.**
+It is made of the other three, so it cannot exist before them; it is the one
+ranking this program would give if asked for a single one, so it is what a
+reader should meet first. `METHODS` puts it at index 0 and
+`gui/prediction_panel.py` skips it in the loop and fills it afterwards.
+
+### The three things that stop it reporting noise as a measurement
+
+Each of these was a defect first, found by running the thing and reading the
+numbers, and each has a test that fails when the rule is removed.
+
+- **The normalisation is the boring one, and that is the whole point.** Each
+  component becomes a distribution by dividing by its sum — a shift first only
+  if some score is negative, which TimesFM's can be and the other two's cannot.
+  Nothing is stretched, centred or exponentiated. A min-max stretch or a
+  softmax with a temperature would turn TimesFM's fourth decimal into a
+  confident ranking, and then *the temperature* would be ordering the numbers.
+  If a component is flat it stays flat, and `informativeness` says how flat:
+  normalised entropy, effective candidates, distance from uniform.
+
+- **A flat component's weight is not a measurement, so it is not reported.**
+  A blend is linear and every distribution has the same mean, 1/90, so what a
+  component contributes to the *order* is its deviation from uniform times its
+  weight — a perfectly flat one contributes nothing at any weight. The
+  objective is then constant along that axis and the grid search returns
+  whatever the noise preferred: **the first working version gave TimesFM 55%**,
+  on a fake model built to be flat, which is exactly what the real one does
+  here. `MIN_INFLUENCE` (2% of the blend's total departure from uniform) is
+  where such a weight is zeroed and redistributed. It is not a performance
+  rule and must not be described as one; it is a refusal to print a number the
+  backtest could not have produced.
+
+- **Among weightings the backtest cannot tell apart, the most even one wins.**
+  With nothing to find, the minimum of the objective over 231 candidates lands
+  on a *corner* of the simplex as readily as anywhere — and "frequenza 100%"
+  is not an ensemble, it is another cell copied into the first one. That
+  happened on the real archive on the first run. The accepted set is every
+  weighting within one standard error of the best, and the standard error is
+  the **paired** one: both were scored on the same draws, so the quantity with
+  an error bar is the per-draw difference. Two blends that order the numbers
+  identically have a paired error of nearly zero and are tied only if their
+  means match; two that order them differently have a wide one and are
+  properly indistinguishable. `Search.ranges` reports the accepted interval
+  per component, and on a fair archive it is `0%–100%` — the fit saying it did
+  not choose, on the page, in a column.
+
+### What is measured, and what is deliberately not
+
+The objective is the **mean mid-rank** of the six drawn numbers, not the hit
+count: over a few dozen draws the hit counts are almost all noise, and
+`core/power.py` already measures how much finer the rank gauge is. Everything
+else — Hit@5/6/10/15/20/30, the hit rate at each, MRR, and the chance value
+beside each — is reported and none of it is fitted on.
+
+**No log loss and no Brier score**, for the reason `core/scoring.py` already
+gives: they need calibrated probabilities, these distributions are not
+probabilities of being drawn (six numbers come out of ninety, so such a thing
+would sum to six), and the number that converted a ranking into one would be a
+free parameter deciding the comparison.
+
+### No leakage, and how it is enforced rather than asserted
+
+- `build_traces` is the only function that touches the archive. Components see
+  `draws[:i]`; the target's numbers go into a field only the scoring reads.
+  `test_a_trace_cannot_see_past_its_own_target` truncates the archive right
+  after the last target and asserts every distribution is identical — if
+  anything read the future, it could not be.
+- The weights are fitted on the older slice and reported on the newer one, and
+  `rolling` then re-measures the whole procedure as it would really run: each
+  validation target scored with weights fitted only on targets before it,
+  refitted every ten draws. That row — "ensemble (ricalibrato)" — is the one
+  to read if only one is read, and it is the only figure that accounts for the
+  weights themselves moving.
+- The weights *offered* are refitted on train and validation together. The
+  procedure having been validated, throwing away the newest evidence when
+  applying it would be superstition, and both weightings are printed.
+
+### It has to work in both directions, and both are tested
+
+A test that only checks the no-signal case passes with the entire search
+deleted. So:
+
+- `test_a_flat_component_gets_no_weight_at_all` — TimesFM's real behaviour,
+  stood in for by a deliberately flat fake, must come out at exactly zero. It
+  also asserts that with `min_influence=0` the search *does* want a weight
+  there, so the guard is provably the thing doing the work.
+- `test_a_component_with_a_real_edge_takes_the_weight` — `core.power._KnownEdge`
+  leaks part of the draw it is predicting, and the fit has to find that: over
+  75% of the weight, a contribution above one rank position, and a rolling
+  z above 3.
+
+**Do not add a floor under any component.** "TimesFM at least 20%" would make
+the whole thing decorative, and the owner asked for the opposite in as many
+words: the model has to earn its weight.
+
+### What it costs, and why that is a cache and not a smaller backtest
+
+One forward pass per backtest draw when the model is installed — a hundred
+draws is an hour on a CPU. `TraceCache` stores the per-draw distributions, so
+a refit after four new draws costs four passes. Only TimesFM is cached
+(`TraceCache.CACHED`): the other two are microseconds and a stale copy of them
+would be a way to be wrong for no saving. The fingerprint covers the window,
+the checkpoint and the context length; the per-entry key covers the draw *and
+the length of the history*, so a repaired archive cannot be served the old
+answer.
+
+The grid search never re-runs a component — it re-scores stored
+distributions — which is also what makes the 231 candidates comparable: they
+are judged on identical inputs. `_rank_series` is the fast path it uses, and
+`test_the_fast_objective_is_the_slow_one` holds it to `evaluate`'s answer,
+because a search optimising something subtly different from what the report
+prints is the worst available bug.
+
+`is_current` decides when the panel refits: more than ten new draws, an
+archive that shrank, a changed window, or TimesFM appearing or disappearing.
+Age alone is not on that list — weights fitted three weeks ago on the same
+archive are the same weights.
+
+### Two smaller things that came with it
+
+- **`TimesFMForecaster` now remembers its last answer per urn.** The panel asks
+  for the same forecast twice, once for TimesFM's cell and once for the
+  ensemble, and a forward pass is thirty seconds. One entry per question, keyed
+  on the history's length and its last draw's identity; during a backtest every
+  lookup misses, which is why there is nothing here to grow.
+- **`walk_forward` refuses `"ensemble"`.** Its `_scores` falls through to the
+  random baseline for anything it does not recognise, so an unguarded ensemble
+  would have been scored as chance and printed under its own name.
 
 ## Systems, the SuperStar, and the one ratio that must not move
 
@@ -1488,7 +1632,7 @@ subject follow from the same constant.
 The payoff says **what the program does, not how**. "Analisi e previsione
 SuperEnalotto", not the older "analisi dell'archivio SuperEnalotto e previsioni
 con TimesFM 3.0": naming the model in the title promises the program is about
-TimesFM, and TimesFM is one of four methods — the one the rest of this README
+TimesFM, and TimesFM is one of five methods — the one the rest of this README
 exists to put in its place.
 
 Three badges: licence, Python floor, CI. **No commercial-licence badge**, since

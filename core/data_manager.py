@@ -42,6 +42,13 @@ ARCHIVE_DIR = DATA_DIR / "archive"
 ARCHIVE_PATH = ARCHIVE_DIR / "superenalotto.csv"
 PREDICTION_LOG_PATH = DATA_DIR / "prediction_log.jsonl"
 VALIDATION_DIR = DATA_DIR / "validation"
+# The ensemble's weights and the backtest they came from, plus the per-draw
+# distributions that backtest cost. Both are derived data and both live under
+# data/, which is git-ignored: they are reproducible from the archive, and the
+# expensive one is expensive in CPU rather than in anything irreplaceable.
+ENSEMBLE_DIR = DATA_DIR / "ensemble"
+ENSEMBLE_FIT_PATH = ENSEMBLE_DIR / "weights.json"
+ENSEMBLE_TRACES_PATH = ENSEMBLE_DIR / "traces.json"
 SETTINGS_PATH = BASE_DIR / "config" / "settings.json"
 SETTINGS_TEMPLATE_PATH = BASE_DIR / "config" / "settings.template.json"
 
@@ -56,6 +63,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # between TimesFM working and TimesFM never working at all.
     "timesfm_local_dir": "",
     "frequency_window": DEFAULT_WINDOW,
+    # How many draws the ensemble's weights are fitted over, and how many of
+    # those are kept back to judge them on. They are settings because the cost
+    # is the user's machine's: with TimesFM in the mix every draw of the
+    # backtest is a forward pass, so 120 is an hour on a CPU the first time —
+    # and only the first time, since core/ensemble.py stores what each draw
+    # cost and a refit after four new draws pays for four.
+    "ensemble_backtest_draws": 120,
+    "ensemble_validation_draws": 40,
     # TimesFM 3.0 accepts up to 16k context. 1024 draws is about six and a
     # half years, long enough to cover any seasonality the game could have and
     # short enough to keep a CPU forecast to a few seconds.
@@ -140,6 +155,38 @@ def log_prediction(entry: dict) -> None:
     payload.setdefault("logged_at", datetime.now(timezone.utc).isoformat())
     with open(PREDICTION_LOG_PATH, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
+
+
+def save_ensemble_fit(record: dict) -> None:
+    """Store the ensemble's weights and the backtest behind them.
+
+    One file, rewritten whole. There is no history to keep here: a fit is
+    superseded by the next one, and the run that produced each is described
+    inside the record it wrote.
+    """
+    ENSEMBLE_FIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ENSEMBLE_FIT_PATH.with_suffix(".json.tmp")
+    tmp.write_text(
+        json.dumps(record, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
+    tmp.replace(ENSEMBLE_FIT_PATH)
+
+
+def load_ensemble_fit() -> dict | None:
+    """The stored fit, or None. A broken file is a missing file.
+
+    Deliberately not an error: the weights are derived data with a known way
+    to rebuild them, so the answer to an unreadable one is to calibrate again
+    rather than to refuse to forecast.
+    """
+    try:
+        record = json.loads(ENSEMBLE_FIT_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[Ensemble] {ENSEMBLE_FIT_PATH} unreadable ({exc}); recalibrating")
+        return None
+    return record if isinstance(record, dict) else None
 
 
 def load_prediction_log(limit: int | None = None) -> list[dict]:

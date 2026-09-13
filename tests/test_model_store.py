@@ -498,9 +498,13 @@ class TestMethodNames:
         """settings.json and --forecast take these; renaming them is breaking.
 
         The display names exist precisely so that the identifiers do not have
-        to move.
+        to move. ``ensemble`` joined them in 1.1.0 and joined them *first*,
+        which is the order the Prediction panel builds its cells in: the
+        combined answer is what a reader should meet before the three it is
+        made of. Adding to this tuple is a feature; changing what is already
+        in it is a broken settings file.
         """
-        assert METHODS == ("timesfm", "frequenza", "ritardo", "casuale")
+        assert METHODS == ("ensemble", "timesfm", "frequenza", "ritardo", "casuale")
 
 
 class TestAFolderFilledByHand:

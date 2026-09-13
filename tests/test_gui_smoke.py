@@ -36,6 +36,7 @@ import error looks identical to not having installed it at all.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import time
@@ -99,6 +100,13 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
     monkeypatch.setattr(dm, "SETTINGS_PATH", tmp_path / "settings.json")
     monkeypatch.setattr(dm, "PREDICTION_LOG_PATH", tmp_path / "log.jsonl")
+    # The ensemble's weights and the backtest it cached to produce them. Both
+    # are read at call time out of core.data_manager, so patching the module
+    # attributes is enough — and without it a smoke run would calibrate into
+    # the developer's own data/ and then reuse it, which is a test that reads
+    # a file it did not write.
+    monkeypatch.setattr(dm, "ENSEMBLE_FIT_PATH", tmp_path / "weights.json")
+    monkeypatch.setattr(dm, "ENSEMBLE_TRACES_PATH", tmp_path / "traces.json")
 
     import gui.app as gui_app
 
@@ -223,6 +231,89 @@ def test_every_method_runs_at_once_and_gets_its_own_quarter(app):
     report = panel.report.get("1.0", "end")
     for method in ("frequenza", "ritardo", "casuale"):
         assert method_name(method) in report
+
+
+def test_the_ensemble_is_the_first_cell_and_is_computed_last(app):
+    """The combined answer opens the column, and it is made of the ones below it.
+
+    Both halves matter. First, because it is the one ranking the program will
+    give if asked for a single one; last, because it is a weighted mixture of
+    the other three and cannot exist before they do. A cell that filled itself
+    from stale weights, or before the components had run, would look exactly
+    the same on screen.
+    """
+    from core.predictor import METHODS
+
+    panel = _generate(app)
+    assert list(panel._cells)[0] == "ensemble"
+    assert METHODS[0] == "ensemble"
+    assert "ensemble" in panel._predictions, "the ensemble produced nothing"
+    assert panel._cells["ensemble"].balls.winfo_children()
+
+    prediction = panel._predictions["ensemble"]
+    assert sum(prediction.scores.values()) == pytest.approx(1.0)
+    # Made of the components that ran, and of nothing that did not.
+    assert set(prediction.detail["components"]) <= {"timesfm", "ritardo", "frequenza"}
+    assert set(prediction.detail["components"]) <= set(panel._predictions)
+
+
+def test_the_report_shows_the_weights_and_the_backtest_behind_them(app):
+    """A combined number whose parts cannot be inspected is the black box."""
+    panel = _generate(app)
+    text = panel.report.get("1.0", "end")
+    assert "Pesi in uso" in text
+    assert "graduatoria combinata" in text
+    # The evidence, not just the answer: the backtest's own table travels with
+    # the stored weights precisely so that it is on the page on every run.
+    assert "estrazioni di verifica" in text
+    assert "compatibili" in text
+    assert "Casuale" in text, "the control has to be on the same page"
+
+
+def test_the_weights_are_not_recalibrated_on_every_generation(app):
+    """The most expensive thing the panel can do, and it must do it rarely.
+
+    With the model installed a calibration is one forward pass per backtest
+    draw — an hour. Pressing «Genera» twice on an archive that has not moved
+    must reuse the stored weights, and «Ricalibra i pesi» is the way to ask
+    for them again on purpose.
+    """
+    import core.data_manager as dm
+
+    _generate(app)
+    first = json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8"))
+
+    panel = app._panels["prediction"]
+    panel._predictions = {}
+    _generate(app)
+    assert json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8")) == first
+
+    panel._predictions = {}
+    panel._recalibrate()
+    for _ in range(600):
+        app.update()
+        if panel._predictions:
+            break
+        time.sleep(0.02)
+    again = json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8"))
+    assert again["generated_at"] != first["generated_at"], (
+        "«Ricalibra i pesi» did not recalibrate anything"
+    )
+
+
+def test_an_uncalibratable_ensemble_costs_its_own_cell_and_nothing_else(app):
+    """Same rule as TimesFM's missing weights: one cell, not the page.
+
+    An archive too short to split into a training and a verification slice is
+    a perfectly ordinary first run, and the four methods that need no
+    calibration still have something to say.
+    """
+    app.settings["ensemble_backtest_draws"] = 5000
+    app.settings["ensemble_validation_draws"] = 4000
+    panel = _generate(app)
+    assert "ensemble" not in panel._predictions
+    assert panel._cells["ensemble"].state.cget("text").strip()
+    assert {"frequenza", "ritardo", "casuale"} <= set(panel._predictions)
 
 
 def test_the_random_control_keeps_its_quarter_of_the_screen(app):
@@ -661,15 +752,17 @@ def test_the_prediction_prints_what_the_ticket_costs(app):
     assert "pagate due volte" in text
 
 
-def test_the_cost_is_for_one_ticket_and_not_for_four(app):
-    """Four methods on screen is four alternatives, not a stake to multiply.
+def test_the_cost_is_for_one_ticket_and_not_for_five(app):
+    """Five methods on screen is five alternatives, not a stake to multiply.
 
     The single most expensive thing this layout could get wrong: a reader who
-    reads one price under four tickets and assumes it is the total.
+    reads one price under five tickets and assumes it is the total. It said
+    "four" until the ensemble took the first cell in 1.1.0, and a price whose
+    caption counts the tickets wrong is worse than one with no caption.
     """
     panel = _generate(app)
     text = panel.report.get("1.0", "end")
-    assert "quattro" in text
+    assert "alternative" in text
     assert "non una giocata da moltiplicare" in text
     # In the same block as the price, not three screens away where the two
     # can be read apart.

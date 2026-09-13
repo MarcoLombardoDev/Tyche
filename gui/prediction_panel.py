@@ -7,7 +7,7 @@
 """
 prediction_panel.py — Tyche
 
-Generates the combinations, with all four methods side by side.
+Generates the combinations, with all five methods side by side.
 
 **There is no method selector, and that is the change 0.10.0 made.** Choosing
 one meant seeing one, which quietly turned the four methods into a preference:
@@ -22,9 +22,20 @@ argument with it. A user who can see 330 million parameters and a random
 number generator disagree about which six numbers to play, and knows both are
 worth the same, has been told something no banner conveys.
 
-The four cells hold what actually differs between methods: the combinations
-and the scores behind them. What does not differ — the archive, the cost, the
-shape of the ticket, the odds — is printed once *below* them, in one block,
+**The first cell is the ensemble, and it is filled last.** It is the other
+three mixed in the proportions :mod:`core.ensemble`'s backtest chose, so it
+cannot be computed until they have been — and it is shown first because it is
+the one answer this program will give if asked for a single one. Everything
+behind it goes into the report on the right: the weights, how wide the range
+of weights the backtest could not distinguish was, what each component scored
+alone, and what the ensemble scored against a random control. A combined
+number whose parts cannot be inspected would be the one thing this panel has
+always refused to be.
+
+The four cells below it hold what actually differs between methods: the
+combinations and the scores behind them. What does not differ — the archive,
+the cost, the shape of the ticket, the odds — is printed once *below* them,
+in one block,
 because four identical copies of the same paragraph is noise and a second
 strip above the grid was one place too many to look.
 """
@@ -51,7 +62,7 @@ from core.predictor import (
 )
 from core.version import DEFAULT_TIMESFM_CHECKPOINT
 from gui.model_status import ModelStatus
-from gui.theme import ACCENT, BG_PANEL, BG_ROOT, MUTED, WARN
+from gui.theme import ACCENT, BG_PANEL, BG_ROOT, BG_ROW, MUTED, TEXT, WARN
 from gui.widgets import (
     ReportBox,
     ball_row,
@@ -63,6 +74,7 @@ from gui.widgets import (
 )
 
 _METHOD_LABELS = {
+    "ensemble": "Ensemble (i tre metodi, con i pesi del backtest)",
     "timesfm": "TimesFM 3.0 (modello fondazionale da 330M)",
     "frequenza": "Frequenza (i più estratti di recente)",
     "ritardo": "Ritardo (assenti da più tempo)",
@@ -81,6 +93,7 @@ BADGE_SIZE = 50
 # What each cell says under the method's name. Short: the cell is a quarter of
 # the window and the numbers are the point.
 _METHOD_BLURBS = {
+    "ensemble": "i tre metodi, coi pesi che si sono guadagnati",
     "timesfm": "prevede la serie di ogni numero",
     "frequenza": "i più estratti di recente",
     "ritardo": "assenti da più tempo",
@@ -274,6 +287,64 @@ def _score_lines(prediction) -> list[str]:
     return lines
 
 
+def _ensemble_lines(predictions: dict, state: dict) -> list[str]:
+    """The combined ranking, its weights, and the backtest that set them.
+
+    Long, and deliberately so: this is the only method in the program whose
+    numbers depend on something other than the archive and the method's own
+    definition. Printing the six numbers without the weights, and the weights
+    without how wide the range of weights the backtest could not distinguish
+    was, would be three lines of output and no way to disagree with it.
+    """
+    prediction = predictions.get("ensemble")
+    if prediction is None:
+        return [
+            "═" * 46,
+            "Ensemble",
+            "",
+            state.get("error") or "Non calibrato.",
+            "",
+            "Gli altri metodi qui sopra non ne risentono: l'ensemble è fatto di "
+            "loro, non il contrario.",
+            "",
+        ]
+
+    from core.ensemble import table_lines
+
+    detail = prediction.detail
+    weights = detail.get("weights", {})
+    lines = [
+        "═" * 46,
+        "Ensemble — la graduatoria combinata",
+        "",
+        "Pesi in uso: " + "  ".join(
+            f"{method_name(c)} {w:.0%}" for c, w in weights.items()
+        ),
+    ]
+    if state.get("recalibrated"):
+        lines.append("Ricalibrati adesso, su questo archivio.")
+    record = state.get("record") or {}
+    if record.get("last_target"):
+        lines.append(
+            f"Calibrati sul backtest fino al {record['last_target']}, "
+            f"{record.get('archive_size', '?')} estrazioni in archivio."
+        )
+    lines += [
+        "",
+        *table_lines(prediction.scores, detail.get("components", {})),
+        "",
+        "Ogni colonna è una distribuzione sui novanta numeri: somma a 1, quindi "
+        "1/90 = 0,011111 è",
+        "il valore di un componente che non distingue niente. Non sono "
+        "probabilità di uscita — sei",
+        "numeri su novanta vengono estratti, non uno.",
+        "",
+        *record.get("report", []),
+        "",
+    ]
+    return lines
+
+
 def _method_lines(predictions: dict, skipped: str) -> list[str]:
     """Every method's own numbers, under the text they all share.
 
@@ -305,14 +376,22 @@ class PredictionPanel(ctk.CTkFrame):
         self.app = app
         self._predictions: dict = {}
         self._cells: dict[str, _MethodCell] = {}
+        # Set by «Ricalibra i pesi» and cleared after every run, successful or
+        # not — like the button state, and for the same reason.
+        self._force_fit = False
         self._build()
 
     def _build(self) -> None:
         controls = section(
             self, "Genera le combinazioni",
-            "Premi «Genera»: i quattro metodi girano insieme, uno per riquadro. "
-            "Sono affiancati di proposito — hanno tutti lo stesso punteggio atteso, "
+            "Premi «Genera»: i metodi girano insieme, uno per riquadro. Sono "
+            "affiancati di proposito — hanno tutti lo stesso punteggio atteso, "
             "compreso quello casuale, che è lì per questo.\n"
+            "Il primo riquadro è l'ensemble: gli altri tre messi insieme con i "
+            "pesi che un backtest ha assegnato loro, ed è calcolato per ultimo "
+            "perché è fatto di loro. I pesi si ricalibrano da soli quando "
+            "l'archivio si muove; il rapporto a destra dice quali sono e da dove "
+            "vengono.\n"
             "Numeri per combinazione e SuperStar si scelgono nelle Impostazioni.",
         )
         controls.pack(fill="x", padx=16, pady=(16, 8))
@@ -329,6 +408,14 @@ class PredictionPanel(ctk.CTkFrame):
             row, text="Genera", width=120, command=self._generate,
         )
         self.button.pack(side="left")
+        # Beside it rather than in the Settings: it is an action, not a
+        # preference, and it is the only button in the program that can cost
+        # an hour — the text says so when it is pressed.
+        self.recalibrate = ctk.CTkButton(
+            row, text="Ricalibra i pesi", width=150, fg_color=BG_ROW,
+            text_color=TEXT, command=self._recalibrate,
+        )
+        self.recalibrate.pack(side="left", padx=(8, 0))
 
         # Beside the button, and *only when something is wrong*. The strip
         # used to say "TimesFM è pronto" there, which is a line the reader has
@@ -373,6 +460,66 @@ class PredictionPanel(ctk.CTkFrame):
         self.report.set_text(value_note())
 
     # ── running ──────────────────────────────────────────────
+    def _recalibrate(self) -> None:
+        """Generate, but throw the stored weights away first.
+
+        The weights are refitted on their own when the archive has moved on,
+        so this is not the normal way to get new ones — it is the way to get
+        them after installing the model, changing a setting the fit does not
+        watch, or simply to watch the backtest run again.
+        """
+        self._force_fit = True
+        self._generate()
+
+    def _ensemble(self, draws, settings, forecaster, report, state) -> None:
+        """Fit or reuse the weights, then run the combined method.
+
+        Last, because it is made of the other three and cannot be computed
+        before them. Its failures are caught here rather than allowed out: a
+        machine whose archive is too short to calibrate anything still has
+        four methods with something to say, and losing them to an exception
+        raised by the fifth would be the defect 0.9.0 fixed for TimesFM,
+        repeated.
+        """
+        from core.data_manager import (
+            ENSEMBLE_TRACES_PATH,
+            load_ensemble_fit,
+            save_ensemble_fit,
+        )
+        from core.ensemble import cache_for, fit, is_current, weights_from_record
+
+        window = int(settings.get("frequency_window", DEFAULT_WINDOW))
+        record = load_ensemble_fit()
+        if self._force_fit or not is_current(
+            record, draws, window, forecaster is not None
+        ):
+            report("Calibro i pesi dell'ensemble sul backtest…", 0.0)
+            calibrated = fit(
+                draws,
+                window=window,
+                forecaster=forecaster,
+                backtest_draws=int(settings.get("ensemble_backtest_draws", 120)),
+                validation_draws=int(settings.get("ensemble_validation_draws", 40)),
+                cache=cache_for(
+                    ENSEMBLE_TRACES_PATH,
+                    window,
+                    settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT,
+                    int(settings.get("context_length", 1024)),
+                ),
+                progress=report,
+            )
+            record = calibrated.as_record()
+            save_ensemble_fit(record)
+            state["recalibrated"] = True
+        state["record"] = record
+        report(f"{method_name('ensemble')}…", 0.0)
+        state["prediction"] = predict(
+            draws, method="ensemble", combinations=state["count"],
+            size=state["size"], superstar=state["star"], window=window,
+            forecaster=forecaster, weights=weights_from_record(record),
+            progress=report,
+        )
+
     def _generate(self) -> None:
         draws = self.app.draws
         if not draws:
@@ -413,6 +560,12 @@ class PredictionPanel(ctk.CTkFrame):
                     forecaster = None
             results = {}
             for method in METHODS:
+                # The ensemble is the other three put together, so it waits
+                # until they exist. It is the first cell on the screen and the
+                # last thing computed, and those two facts are not in tension:
+                # one is about what a reader should see first.
+                if method == "ensemble":
+                    continue
                 if method == "timesfm" and forecaster is None:
                     continue
                 report(f"{method_name(method)}…", 0.0)
@@ -422,7 +575,19 @@ class PredictionPanel(ctk.CTkFrame):
                     forecaster=forecaster if method == "timesfm" else None,
                     progress=report if method == "timesfm" else None,
                 )
-            return results, skipped
+
+            state = {
+                "count": count, "size": size, "star": star,
+                "record": None, "prediction": None, "error": "",
+                "recalibrated": False,
+            }
+            try:
+                self._ensemble(draws, settings, forecaster, report, state)
+            except Exception as exc:  # noqa: BLE001 — one cell, not the page
+                state["error"] = str(exc)
+            else:
+                results["ensemble"] = state["prediction"]
+            return results, skipped, state
 
         # Disabled until this run ends, and re-enabled by on_done rather than
         # by _show: a run that raises never reaches _show, and a button that
@@ -431,15 +596,18 @@ class PredictionPanel(ctk.CTkFrame):
         # refusing it in the status bar after the click is not the same as
         # saying beforehand that the click will do nothing.
         self.button.configure(state="disabled", text="Generazione…")
+        self.recalibrate.configure(state="disabled")
         self.app.run_worker("Previsione", work, self._show, on_done=self._enable)
 
     def _enable(self) -> None:
-        """Give the button back. Runs after every job, successful or not."""
+        """Give the buttons back. Runs after every job, successful or not."""
         self.button.configure(state="normal", text="Genera")
+        self.recalibrate.configure(state="normal")
+        self._force_fit = False
 
     # ── output ───────────────────────────────────────────────
     def _show(self, result) -> None:
-        predictions, skipped = result
+        predictions, skipped, state = result
         self._predictions = predictions
         self.app.last_predictions = predictions
         for prediction in predictions.values():
@@ -448,6 +616,12 @@ class PredictionPanel(ctk.CTkFrame):
         for method, cell in self._cells.items():
             if method in predictions:
                 cell.show(predictions[method])
+            elif method == "ensemble":
+                cell.clear(
+                    state["error"]
+                    or "Non calibrato: servono più estrazioni in archivio.",
+                    WARN,
+                )
             elif method == "timesfm":
                 # Its own sentence, not the strip's: that label is empty until
                 # the tab has been shown once, and the first version of this
@@ -479,18 +653,19 @@ class PredictionPanel(ctk.CTkFrame):
         lines = [
             f"Archivio: {it_number(any_prediction.archive_size)} estrazioni fino al "
             f"{it_date(any_prediction.archive_last_date)}. Punteggio atteso dal "
-            f"caso, per tutte e quattro le proposte qui sopra: "
+            f"caso, per tutte le proposte qui sopra: "
             f"{expected_hits(any_prediction.size):.3f} numeri indovinati per "
             "estrazione.",
             "",
             *_ticket_lines(any_prediction),
             "",
             *_cost_lines(any_prediction, cost),
-            "Il costo è quello di UNA delle quattro proposte: sono alternative, "
-            "non una giocata da moltiplicare per quattro.",
+            "Il costo è quello di UNA delle proposte qui sopra: sono "
+            "alternative, non una giocata da moltiplicare per cinque.",
             "",
             value_note(),
             "",
+            *_ensemble_lines(predictions, state),
             *_method_lines(predictions, skipped),
         ]
         self.report.set_text("\n".join(lines))

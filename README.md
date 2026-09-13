@@ -40,7 +40,7 @@ sistemarlo.
 |---|---|---|
 | 1 | **L'archivio** | C'è, ed è aggiornato? Scarica, importa e ispeziona lo storico, dice che cosa non va e lo mostra in cifre. |
 | 2 | **Il modello TimesFM** | I pesi sono su questo computer? Se no, il pulsante li scarica, con la percentuale nella barra in basso. |
-| 3 | **La previsione** | Il punto di arrivo: tutti e quattro i metodi insieme, con quanto costa la giocata e quanto vale. |
+| 3 | **La previsione** | Il punto di arrivo: tutti e cinque i metodi insieme, con quanto costa la giocata e quanto vale. |
 
 Fuori percorso c'è **Impostazioni**: checkpoint, dispositivo, token Hugging
 Face, numeri per combinazione, SuperStar e prezzi. Le frequenze, i ritardi, le
@@ -48,13 +48,20 @@ decine e le coppie — ogni tabella con accanto il valore che produrrebbe il cas
 — stanno nella colonna destra della scheda **Archivio**, dove dalla 0.11.0 sono
 state portate: erano una scheda a sé, che si apriva una volta e mai più.
 
-**Nella Previsione non si sceglie il metodo: girano tutti e quattro e ognuno
-prende un quarto della pagina.** È l'argomento del programma, messo dove non
-si può saltare. Scegliere un metodo significava vederne uno, e vederne uno
-solo trasforma quattro misure in una preferenza: prendi quello di cui ti fidi,
-ottieni i suoi numeri, e non scopri mai che gli altri tre — generatore casuale
+**Nella Previsione non si sceglie il metodo: girano tutti e ognuno prende la
+stessa fetta di pagina.** È l'argomento del programma, messo dove non si può
+saltare. Scegliere un metodo significava vederne uno, e vederne uno solo
+trasforma delle misure in una preferenza: prendi quello di cui ti fidi,
+ottieni i suoi numeri, e non scopri mai che gli altri — generatore casuale
 compreso — producono una schedina altrettanto convincente e che vale
 esattamente lo stesso.
+
+**Il primo riquadro è l'ensemble, ed è calcolato per ultimo.** È la media
+pesata degli altri tre — TimesFM, ritardo, frequenza — con i pesi che un
+backtest ha assegnato loro; viene per primo perché è la risposta che il
+programma darebbe se gliene si chiedesse una sola, e per ultimo perché è fatto
+degli altri. Come vengono scelti quei pesi, e perché uno di loro è a zero, è
+[più sotto](#lensemble-e-i-pesi-che-nessuno-ha-scelto).
 
 ![Previsione](docs/screenshots/03_previsione.png)
 
@@ -77,10 +84,12 @@ C'è anche una riga di comando, per le parti che vale la pena automatizzare:
 python main.py --check                  # i cinque test di indipendenza
 python main.py --validate 500           # backtest walk-forward
 python main.py --power                  # quanto piccolo un vantaggio deve essere
+python main.py --ensemble               # ricalibra i pesi dell'ensemble e stampa tutto
 python main.py --update                 # aggiorna da estrazioni.it — prova a vuoto
 python main.py --update --yes           # ...e scrive
 python main.py --import FILE --yes      # importa un file scaricato a mano
 python main.py --forecast ritardo       # una giocata, senza scaricare il modello
+python main.py --forecast ensemble      # la giocata combinata, con i pesi calibrati
 python main.py --export-sqlite data/tyche.db
 ```
 
@@ -289,6 +298,121 @@ così, nessun'altra riga della stessa colonna vorrebbe dire niente.
 E anche questa misura ha un limite dichiarato: tre forme non sono tutte le
 forme, quindi le soglie qui sopra sono il caso migliore. Un vantaggio reale di
 forma diversa sarebbe più difficile da vedere, non più facile.
+
+---
+
+## L'ensemble e i pesi che nessuno ha scelto
+
+La prima proposta della scheda Previsione non è un metodo nuovo: è i tre
+metodi di prima — TimesFM, ritardo, frequenza — mescolati.
+
+```
+Punteggio(n) = w_timesfm · TimesFM(n) + w_ritardo · Ritardo(n) + w_freq · Frequenza(n)
+```
+
+La domanda interessante non è la formula, è da dove vengono i tre pesi. **Non
+sono scritti da nessuna parte nel codice**, e non potrebbero esserlo: sceglierli
+a mano significherebbe affermare quale metodo ne sa di più, che è esattamente
+l'affermazione che tutto il resto di questo programma si rifiuta di fare.
+
+### Come vengono scelti
+
+Un backtest walk-forward sulle ultime 120 estrazioni (si imposta):
+
+1. per ogni estrazione del backtest, ogni componente produce una graduatoria
+   dei novanta numeri **usando solo le estrazioni precedenti**;
+2. le ultime 40 vengono messe da parte e non partecipano alla ricerca;
+3. tutte le 231 combinazioni di pesi a passi del 5% vengono provate sulle
+   prime 80 e giudicate sulle 40 tenute da parte;
+4. e poi la procedura intera viene rimisurata come si comporterebbe davvero:
+   ogni estrazione della seconda metà valutata con i pesi calcolati **solo
+   sulle precedenti**, ricalibrati ogni dieci. È la riga «ensemble
+   (ricalibrato)» del rapporto, ed è quella da leggere se se ne legge una sola.
+
+Il criterio da minimizzare è il **rango medio** dei sei numeri usciti dentro la
+graduatoria dei novanta, non il conteggio dei centri: su poche decine di
+estrazioni i centri sono quasi tutti rumore, mentre il rango legge tutta la
+graduatoria — è la stessa differenza che
+[la sezione sulla sensibilità](#non-abbiamo-trovato-niente-oppure-non-avremmo-potuto-trovarlo)
+misura per il backtest normale.
+
+### Tre regole che sembrano dettagli e non lo sono
+
+**I tre punteggi diventano distribuzioni, dividendo per la somma.** Nient'altro.
+Una normalizzazione min-max, o una softmax con una temperatura, trasformerebbe
+la quarta cifra decimale di TimesFM in una graduatoria dall'aria sicura — e a
+quel punto a ordinare i numeri sarebbe la temperatura, non il modello. Se un
+componente è piatto resta piatto, e il rapporto stampa quanto lo è: entropia
+sulla distribuzione uniforme, «candidati efficaci», distanza dall'uniforme.
+
+**Fra i pesi che il backtest non sa distinguere viene preso il più
+equilibrato.** Senza niente da trovare, il minimo del criterio su 231
+combinazioni finisce in un angolo del simplesso più o meno come finisce
+altrove — e un angolo («frequenza 100%») non è un ensemble, è un'altra casella
+copiata nella prima. La colonna «compatibili» dice, per ogni componente,
+l'intervallo di pesi che il backtest non ha saputo distinguere dal migliore:
+dove è larga, il peso non è stato scelto, ed è giusto che si veda.
+
+**Un peso che non cambia la graduatoria non è una misura.** Una miscela è
+lineare e tutte le distribuzioni hanno la stessa media, 1/90: quello che un
+componente aggiunge è il suo scostamento dall'uniforme moltiplicato per il suo
+peso. Un componente piatto non sposta niente a nessun peso, quindi il criterio
+lungo quell'asse è costante e la ricerca sta scegliendo fra candidati identici.
+Sotto il 2% di «influenza» il peso viene azzerato e ridistribuito.
+
+### Nessun minimo garantito, per nessuno
+
+Non esiste nessuna regola del tipo «TimesFM almeno il 20%». Se la previsione
+del modello è piatta sui novanta numeri — ed è quello che fa su questi dati,
+[vedi più sotto](#come-viene-usato-timesfm) — il suo peso finisce **a zero**, e
+il rapporto distingue le due frasi che contano:
+
+- *misurato e non ha guadagnato niente* — il modello c'era, il backtest l'ha
+  provato, il peso è zero;
+- *non misurato* — i pesi non sono su questo computer, quindi l'ensemble è
+  fatto di due componenti e lo dice.
+
+Il contrario vale allo stesso modo: messo alla prova contro un previsore con
+un vantaggio vero — uno di quelli di `--power`, che sbircia l'estrazione da
+prevedere — il backtest gli assegna il 75% del peso e registra che toglierlo
+costa venti posizioni di rango medio. Il meccanismo funziona in tutte e due le
+direzioni, ed è così che è stato verificato.
+
+### Che cosa stampa
+
+`python main.py --ensemble` fa la calibrazione e stampa tutto: i pesi, la
+colonna «compatibili», l'influenza e l'entropia di ogni componente, che cosa
+ha segnato ogni componente **da solo**, che cosa ha segnato l'ensemble, che
+cosa ha segnato il **controllo casuale** sulle stesse estrazioni, quanto
+cambia togliendo ogni componente e ricalibrando senza, e la tabella numero per
+numero della prossima estrazione:
+
+```
+   n     Ritardo   Frequenza    ensemble  pos.
+  69    0.058914    0.007212    0.033063     1
+  27    0.055088    0.008814    0.031951     2
+  24    0.049732    0.006410    0.028071     3
+```
+
+Le colonne sono distribuzioni: sommano a 1, quindi 1/90 = 0,011111 è il valore
+di un componente che non distingue niente. **Non sono probabilità di uscita** —
+di numeri ne escono sei su novanta, non uno — e infatti non vengono valutate
+come tali: log loss e Brier richiederebbero probabilità calibrate, e il numero
+che le calibrasse sarebbe un parametro libero deciso da chi lo sceglie.
+
+### E il risultato
+
+Quello atteso. Sull'archivio l'intervallo compatibile copre l'intera gamma dei
+pesi — il backtest non sceglie, perché non c'è niente da cui scegliere — e
+l'ensemble segna un rango medio indistinguibile dal caso, esattamente come i
+tre metodi che lo compongono e come il generatore casuale che gli sta accanto.
+Quando succede, il rapporto lo scrive con queste parole: *un ensemble che non
+migliora le sue componenti è una componente in più, non un metodo migliore.*
+
+I pesi calibrati restano in `data/ensemble/`, insieme ai risultati per
+estrazione del backtest: con TimesFM installato ogni estrazione costa una
+passata del modello, quindi si paga una volta e dopo un aggiornamento
+dell'archivio si ricalcolano solo le estrazioni nuove.
 
 ---
 

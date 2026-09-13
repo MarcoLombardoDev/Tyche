@@ -28,8 +28,8 @@ the owner's verdict on the built application was that it was incomprehensible.
 prediction — the three conditions that have to hold before a forecast can
 run. The evidence tabs it used to pass through were removed in 0.10.0 on the
 owner's instruction; what carries their argument now is the Prediction panel
-running all four methods at once, with the random control beside TimesFM at
-the same size.
+running every method at once, with the random control beside TimesFM at the
+same size.
 
 Threading follows the one rule Tk imposes: widgets are touched from the main
 thread only. Workers put callables on a queue and :meth:`TycheApp._poll_queue`

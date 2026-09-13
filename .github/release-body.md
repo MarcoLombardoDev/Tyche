@@ -42,6 +42,16 @@ niente» e «non avremmo potuto trovarlo» producono lo stesso tabellone, quindi
 il pulsante *Calibra* rifà la stessa prova contro previsori il cui vantaggio è
 noto, e riporta quale vantaggio si sarebbe accorta di vedere.
 
+**L'ensemble non ha pesi scritti nel codice.** La prima proposta della scheda
+Previsione è la media pesata degli altri tre metodi, e i tre pesi li decide un
+backtest walk-forward: ogni combinazione viene provata su estrazioni che non
+ha mai visto mentre veniva scelta. Nessun componente ha un minimo garantito —
+sull'archivio vero TimesFM finisce a zero, perché la sua previsione sui novanta
+numeri è piatta e un peso che non cambia la graduatoria non è una misura. Il
+rapporto stampa i pesi, l'intervallo di pesi che il backtest *non* ha saputo
+distinguere, che cosa ha segnato ogni componente da solo e che cosa ha segnato
+il controllo casuale sulle stesse estrazioni.
+
 **Sistemi e SuperStar.** Si sceglie quanti numeri per combinazione, da sei a
 dodici, e se giocare anche il SuperStar. La Validazione segue la dimensione
 scelta. Un sistema accorcia le probabilità del 6 e moltiplica il costo dello

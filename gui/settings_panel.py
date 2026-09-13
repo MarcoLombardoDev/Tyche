@@ -53,6 +53,17 @@ FIELDS = [
      "lisciata, se è quella che dài al modello). 208 è un anno esatto alle "
      "quattro estrazioni a settimana di oggi: l'archivio ne conta 208 nel 2024 "
      "e 208 nel 2025. Fino al 2022 erano tre a settimana, cioè 156."),
+    ("ensemble_backtest_draws", "Backtest dell'ensemble (estrazioni)", "text",
+     "Su quante estrazioni vengono calibrati i pesi dell'ensemble. Più sono, "
+     "meno rumorosi sono i pesi; ma se TimesFM è installato ogni estrazione del "
+     "backtest costa una passata del modello, cioè decine di secondi. Si paga "
+     "una volta: i risultati per estrazione vengono conservati, e dopo un "
+     "aggiornamento dell'archivio si ricalcolano solo le estrazioni nuove."),
+    ("ensemble_validation_draws", "Di cui tenute per la verifica", "text",
+     "Quante delle estrazioni qui sopra non vengono usate per cercare i pesi, "
+     "ma solo per giudicarli. È la parte che rende il risultato una verifica e "
+     "non un'autovalutazione: i pesi non le hanno mai viste. Devono restarne "
+     "almeno dieci per la ricerca e cinque per la verifica."),
     ("context_length", "Lunghezza del contesto (estrazioni)", "text",
      "Quanto storico vede TimesFM. La 3.0 accetta fino a 16k; 1024 tiene corta "
      "un'esecuzione su CPU."),

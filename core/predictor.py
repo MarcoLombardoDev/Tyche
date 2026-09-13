@@ -9,8 +9,12 @@ predictor.py — Tyche
 
 Turns a score per number into numbers to play, and says what that is worth.
 
-Four methods, and the point of having four is that they can be compared:
+Five methods, and the point of having five is that they can be compared:
 
+- ``ensemble``   — the other three, mixed in the proportions a walk-forward
+  backtest chose. It is computed last, because it is made of the others, and
+  it is shown first, because it is the one answer the program will give if
+  asked for one. :mod:`core.ensemble` owns it, weights and evidence together.
 - ``timesfm``    — the 330M foundation model of :mod:`core.forecaster`.
 - ``frequenza``  — play the numbers drawn most often lately ("hot").
 - ``ritardo``    — play the numbers absent longest, the method every Italian
@@ -45,7 +49,7 @@ from core.localise import it_number
 # actually use, and translating the prose while leaving `gap` on the command
 # line would be a product that speaks two languages. "timesfm" stays as it is
 # — it is the name of a model, not a word.
-METHODS = ("timesfm", "frequenza", "ritardo", "casuale")
+METHODS = ("ensemble", "timesfm", "frequenza", "ritardo", "casuale")
 
 # How those identifiers are written on screen. The identifier and the display
 # name are deliberately two things: `timesfm` is what settings.json stores and
@@ -54,6 +58,7 @@ METHODS = ("timesfm", "frequenza", "ritardo", "casuale")
 # name. Every screen goes through this map, so the window says "TimesFM" the
 # way the rest of the application does.
 METHOD_NAMES = {
+    "ensemble": "Ensemble",
     "timesfm": "TimesFM",
     "frequenza": "Frequenza",
     "ritardo": "Ritardo",
@@ -87,7 +92,7 @@ class Prediction:
     superstar: int | None = None
 
     def to_log_entry(self) -> dict:
-        return {
+        entry = {
             "method": self.method,
             "generated_at": self.generated_at.isoformat(),
             "archive_last_date": (
@@ -99,6 +104,12 @@ class Prediction:
             "superstar": self.superstar,
             "top_scores": {str(n): round(self.scores[n], 6) for n in self.ranked[:12]},
         }
+        # The ensemble's weights, when there are any. A logged prediction that
+        # cannot be reproduced is a record of nothing, and for this method the
+        # numbers depend on three weights as much as on the archive.
+        if "weights" in self.detail:
+            entry["weights"] = self.detail["weights"]
+        return entry
 
 
 # ─────────────────────────────────────────────────────────────
@@ -196,6 +207,7 @@ def superstar_pick(
     forecaster=None,
     seed: int | None = None,
     progress=None,
+    weights=None,
 ) -> int:
     """The SuperStar each method would play, asked its own way.
 
@@ -215,6 +227,20 @@ def superstar_pick(
     in — the caller already knows the model is missing and has said so, and a
     missing SuperStar would be a second, quieter report of the same fact.
     """
+    if method == "ensemble":
+        if weights is None:
+            raise ValueError(
+                "anche il SuperStar dell'ensemble ha bisogno dei pesi calibrati"
+            )
+        # Deferred: core.ensemble imports this module, so the two can only be
+        # bound together at call time. The same weights as the wheel, asked of
+        # the other drum — see core.ensemble.next_draw_superstar.
+        from core.ensemble import next_draw_superstar
+
+        return next_draw_superstar(
+            draws, weights, window=window, forecaster=forecaster,
+            seed=seed or 0, progress=progress,
+        )
     if method == "casuale":
         return rank_numbers(random_scores(seed))[0]
     if method == "ritardo":
@@ -269,12 +295,20 @@ def predict(
     seed: int | None = None,
     superstar: bool = False,
     progress=None,
+    weights=None,
 ) -> Prediction:
     """Produce a :class:`Prediction` with the named method.
 
     ``forecaster`` is required for ``"timesfm"`` and ignored otherwise, so a
     caller with no model can still exercise every other path — including the
     whole validation harness.
+
+    ``weights`` is a :class:`core.ensemble.Weights` and is required for
+    ``"ensemble"`` — deliberately, rather than being fitted here on demand.
+    Calibrating them is a backtest over a hundred draws, which on a machine
+    with the model is an hour; a function that did that silently because an
+    argument was missing would be the worst kind of surprise. The caller fits
+    once, stores the result, and passes it in.
 
     ``size`` above six makes each combination a *sistema integrale*; ``size``
     is validated here so a bad setting fails at the point it is used rather
@@ -287,7 +321,28 @@ def predict(
             f"metodo sconosciuto {method!r}; sono validi {', '.join(METHODS)}"
         )
 
-    if method == "timesfm":
+    detail: dict = {}
+    if method == "ensemble":
+        if weights is None:
+            raise ValueError(
+                "il metodo ensemble richiede dei pesi calibrati: "
+                "core.ensemble.fit() li produce"
+            )
+        # Deferred import: core.ensemble reads this module's scoring functions,
+        # so binding the two at module level would be a cycle. It also keeps
+        # the ensemble's cost out of every other method's import.
+        from core.ensemble import next_draw_scores
+
+        scores, parts = next_draw_scores(
+            draws, weights, window=window, forecaster=forecaster,
+            seed=seed or 0, progress=progress,
+        )
+        detail = {"weights": weights.as_record(), "components": parts}
+        note = (
+            "Media pesata dei tre metodi, sulle distribuzioni normalizzate. "
+            f"Pesi dal backtest: {weights.describe()}."
+        )
+    elif method == "timesfm":
         if forecaster is None:
             raise ValueError(
             "il metodo timesfm richiede un TimesFMForecaster già caricato"
@@ -319,6 +374,7 @@ def predict(
             forecaster=forecaster,
             seed=seed,
             progress=progress,
+            weights=weights,
         )
 
     return Prediction(
@@ -330,6 +386,7 @@ def predict(
         archive_last_date=draws[-1].date if draws else None,
         archive_size=len(draws),
         note=note,
+        detail=detail,
         size=size,
         superstar=star,
     )

@@ -120,6 +120,52 @@ def _check_analysis() -> tuple[bool, str]:
         return False, f"analisi: FALLITA — {exc}"
 
 
+def _check_ensemble() -> tuple[bool, str]:
+    """Calibrate a small ensemble and blend one prediction out of it.
+
+    Here because ``core.ensemble`` is reached through a deferred import inside
+    :func:`core.predictor.predict` — the same shape that once left ``timesfm3``
+    out of a frozen build — and because the first thing a user presses is
+    «Genera», which now needs it. A bundle missing this module would look
+    perfectly healthy until then.
+
+    Deliberately tiny: forty target draws, a coarse grid and no model, so it
+    costs a fraction of a second and exercises the arithmetic rather than the
+    statistics.
+    """
+    try:
+        import random
+
+        from core.archive import Draw
+        from core.ensemble import fit, next_draw_scores
+
+        rng = random.Random(1)
+        draws = []
+        for i in range(300):
+            picked = rng.sample(range(1, 91), 7)
+            draws.append(Draw(
+                date=date(2020, 1, 1) + timedelta(days=2 * i),
+                contest=i + 1, numbers=tuple(picked[:6]), jolly=picked[6],
+            ))
+        calibrated = fit(
+            draws, backtest_draws=40, validation_draws=15, min_history=60,
+            step=0.25,
+        )
+        total = sum(calibrated.weights.values.values())
+        if abs(total - 1.0) > 1e-6:
+            return False, f"ensemble: i pesi sommano a {total:.6f}, non a 1"
+        scores, parts = next_draw_scores(draws, calibrated.weights)
+        if abs(sum(scores.values()) - 1.0) > 1e-6:
+            return False, "ensemble: la graduatoria combinata non è una distribuzione"
+        return True, (
+            f"ensemble: pesi calibrati su {calibrated.train_draws}+"
+            f"{calibrated.validation_draws} estrazioni, "
+            f"{len(parts)} componenti — {calibrated.weights.describe()}"
+        )
+    except Exception as exc:
+        return False, f"ensemble: FALLITO — {exc}"
+
+
 def _check_persistence() -> tuple[bool, str]:
     """Write an archive and read it back, through the program's own code.
 
@@ -217,6 +263,7 @@ CHECKS = (
     ("tk", _check_tk),
     ("customtkinter", _check_customtkinter),
     ("analysis", _check_analysis),
+    ("ensemble", _check_ensemble),
     ("persistence", _check_persistence),
     ("sqlite", _check_export),
     ("timesfm", _check_timesfm),

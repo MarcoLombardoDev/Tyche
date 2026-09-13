@@ -16,6 +16,8 @@ scripting, and neither needs a window:
     python main.py --check              # the five independence tests
     python main.py --validate 500       # walk-forward backtest, baselines only
     python main.py --power              # how small an edge the backtest can see
+    python main.py --ensemble           # calibrate the ensemble's weights, and
+                                        # print the evidence for every one
     python main.py --update             # refresh the archive (dry run)
     python main.py --update --yes       # ...and write it
     python main.py --import FILE --yes  # import a file you downloaded
@@ -65,6 +67,13 @@ def _parse_args():
         help=(
             "calibra la validazione su vantaggi noti (N estrazioni per prova, "
             "300 se omesso) e esce"
+        ),
+    )
+    parser.add_argument(
+        "--ensemble", type=int, metavar="N", nargs="?", const=0, default=None,
+        help=(
+            "ricalibra i pesi dell'ensemble sulle ultime N estrazioni "
+            "(quelle delle impostazioni se omesso), stampa il backtest e esce"
         ),
     )
     parser.add_argument(
@@ -219,6 +228,129 @@ def _run_power(n_draws: int) -> int:
     return 0
 
 
+def _forecaster_if_ready(settings, announce: bool = True):
+    """A loaded TimesFMForecaster, but only if it can be loaded without a download.
+
+    The ensemble's backtest is one forward pass per draw, so it matters a
+    great deal whether the model is here — and it must not be the thing that
+    *fetches* 1,3 GB. ``availability`` answers from the disk and the package
+    list, exactly as the two screens do, and a machine that is not ready gets
+    a two-component ensemble and a sentence saying which component is missing
+    rather than an hour of downloading it did not ask for.
+    """
+    from core.model_store import availability
+    from core.version import DEFAULT_TIMESFM_CHECKPOINT
+
+    checkpoint = settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT
+    state = availability(checkpoint, settings.get("timesfm_local_dir", ""))
+    if not state.usable:
+        if announce:
+            print(f"TimesFM non partecipa: {state.detail}")
+        return None
+
+    from core.forecaster import TimesFMForecaster
+
+    forecaster = TimesFMForecaster(
+        checkpoint=checkpoint,
+        device=settings.get("timesfm_device", "cpu"),
+        context_length=int(settings.get("context_length", 1024)),
+        hf_token=settings.get("hf_token", ""),
+        local_dir=settings.get("timesfm_local_dir", ""),
+    )
+    if forecaster.load_model(lambda m, f=0.0: None):
+        return forecaster
+    if announce:
+        print(f"TimesFM non partecipa: {forecaster.last_error}")
+    return None
+
+
+def _calibrate_ensemble(draws, settings, forecaster, progress=None):
+    """Run the backtest, store the result, and hand back the fit.
+
+    The store is part of calibrating rather than something the caller
+    remembers to do: this is the expensive operation in the whole program and
+    a run whose result was not written down would be paid for twice.
+    """
+    from core.data_manager import ENSEMBLE_TRACES_PATH, save_ensemble_fit
+    from core.ensemble import cache_for, fit
+    from core.version import DEFAULT_TIMESFM_CHECKPOINT
+
+    window = int(settings.get("frequency_window", 208))
+    backtest = int(settings.get("ensemble_backtest_draws", 120))
+    calibrated = fit(
+        draws,
+        window=window,
+        forecaster=forecaster,
+        backtest_draws=backtest,
+        validation_draws=int(settings.get("ensemble_validation_draws", 40)),
+        cache=cache_for(
+            ENSEMBLE_TRACES_PATH,
+            window,
+            settings.get("timesfm_checkpoint") or DEFAULT_TIMESFM_CHECKPOINT,
+            int(settings.get("context_length", 1024)),
+        ),
+        progress=progress,
+    )
+    save_ensemble_fit(calibrated.as_record())
+    return calibrated
+
+
+def _run_ensemble(n_draws: int) -> int:
+    """Calibrate the ensemble's weights and print everything behind them."""
+    from core.data_manager import load_settings
+    from core.ensemble import report, table_lines
+
+    draws = _load_archive_or_explain()
+    if not draws:
+        return 1
+    settings = load_settings()
+    if n_draws:
+        settings["ensemble_backtest_draws"] = n_draws
+        settings["ensemble_validation_draws"] = max(5, n_draws // 3)
+
+    forecaster = _forecaster_if_ready(settings)
+    backtest = int(settings.get("ensemble_backtest_draws", 120))
+    if forecaster is not None:
+        print(
+            f"TimesFM partecipa: il backtest costa fino a {backtest} passate del "
+            "modello, una per estrazione. Quelle già calcolate vengono riusate."
+        )
+    print(f"Calibrazione su {backtest} estrazioni.\n")
+
+    # One line in ten. The interface wants a message per draw, because with
+    # the model each one is half a minute of nothing happening; a terminal
+    # wants to be able to scroll back to the report afterwards.
+    seen = [0]
+
+    def progress(message: str, _fraction: float = 0.0) -> None:
+        seen[0] += 1
+        if seen[0] % 10 == 1 or _fraction >= 1.0:
+            print(f"  {message}", flush=True)
+
+    try:
+        calibrated = _calibrate_ensemble(draws, settings, forecaster, progress)
+    except ValueError as exc:
+        print(f"\nCalibrazione impossibile: {exc}")
+        return 1
+
+    print("\n" + "\n".join(report(calibrated)))
+
+    from core.ensemble import next_draw_scores
+
+    scores, parts = next_draw_scores(
+        draws, calibrated.weights,
+        window=int(settings.get("frequency_window", 208)),
+        forecaster=forecaster,
+    )
+    print("\nLa graduatoria per la prossima estrazione:\n")
+    print("\n".join(table_lines(scores, parts, calibrated.components)))
+    print(
+        "\nI pesi sono stati salvati: la scheda Previsione li userà così come "
+        "sono, senza ricalibrare."
+    )
+    return 0
+
+
 def _apply(incoming, write: bool) -> int:
     """Report what an import would do, and do it when asked.
 
@@ -355,7 +487,37 @@ def _run_forecast(method: str) -> int:
     settings = load_settings()
 
     forecaster = None
-    if method == "timesfm":
+    weights = None
+    if method == "ensemble":
+        # The stored fit, or a new one. Calibrating costs a backtest, so it is
+        # reported rather than done in silence — and it is stored, so the next
+        # invocation and the interface both get it for nothing.
+        from core.data_manager import load_ensemble_fit
+        from core.ensemble import is_current, weights_from_record
+
+        forecaster = _forecaster_if_ready(settings)
+        record = load_ensemble_fit()
+        if is_current(
+            record, draws, int(settings.get("frequency_window", 208)),
+            forecaster is not None,
+        ):
+            weights = weights_from_record(record)
+            print(f"pesi già calibrati il {record.get('generated_at', '')[:10]}")
+        else:
+            print("nessun peso valido in archivio: calibro adesso.")
+            try:
+                weights = _calibrate_ensemble(
+                    draws, settings, forecaster,
+                    lambda m, f=0.0: print(f"  {m}", flush=True),
+                ).weights
+            except ValueError as exc:
+                print(f"Calibrazione impossibile: {exc}")
+                return 1
+        print(f"pesi: {weights.describe()}\n")
+        # Kept: the ensemble needs it too, whenever TimesFM came out of the
+        # calibration with a weight above zero. When it came out at zero,
+        # next_draw_scores never asks it anything and the pass is not paid for.
+    elif method == "timesfm":
         from core.forecaster import TimesFMForecaster
 
         forecaster = TimesFMForecaster(
@@ -378,6 +540,7 @@ def _run_forecast(method: str) -> int:
         size=int(settings.get("prediction_size", 6)),
         superstar=bool(settings.get("predict_superstar", False)),
         forecaster=forecaster, window=int(settings["frequency_window"]),
+        weights=weights,
     )
     print(f"\n{prediction.method} — {prediction.note}")
     last = prediction.archive_last_date
@@ -445,6 +608,8 @@ def main() -> int:
         return _run_validation(args.validate)
     if args.power is not None:
         return _run_power(args.power)
+    if args.ensemble is not None:
+        return _run_ensemble(args.ensemble)
     if args.update:
         return _run_update(args.yes)
     if args.import_path:

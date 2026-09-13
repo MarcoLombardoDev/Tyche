@@ -63,6 +63,12 @@ from core.stats_tests import (
     two_sided_normal_p,
 )
 
+# The combined method's identifier, spelled here rather than imported: the
+# module that owns it imports this one, so importing it back would be a cycle
+# for the sake of one string. core.predictor.METHODS is what keeps them in
+# step, and a test walks every identifier in it through this guard.
+ENSEMBLE = "ensemble"
+
 # A method must have seen at least this many draws before it is asked for a
 # prediction, so the earliest targets are not scored against a method that had
 # forty draws of history while the later ones had three thousand.
@@ -194,6 +200,17 @@ def walk_forward(
         raise ValueError(f"metodi sconosciuti: {', '.join(unknown)}")
     if "timesfm" in methods and forecaster is None:
         raise ValueError("il metodo timesfm richiede un TimesFMForecaster già caricato")
+    # The ensemble is a weighting of the other three and cannot be scored
+    # without one, so it has a harness of its own — core.ensemble.fit, which
+    # fits the weights on older draws than the ones it reports. Refusing it
+    # here rather than letting _scores fall through to the random baseline:
+    # that fall-through would score it as chance and print the answer under
+    # its name.
+    if ENSEMBLE in methods:
+        raise ValueError(
+            "l'ensemble ha il suo backtest, che calibra anche i pesi: "
+            "core.ensemble.fit()"
+        )
 
     total = len(draws)
     start = max(min_history, total - n_draws)

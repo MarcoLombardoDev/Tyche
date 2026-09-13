@@ -88,6 +88,18 @@ class TimesFMForecaster:
         self.context_length = context_length
         self.hf_token = hf_token
         self._model = None
+        # The last answer, and what was asked. **One entry per question, not a
+        # cache with a policy**: the Prediction panel asks for the same
+        # forecast twice — once for TimesFM's own cell and once for the
+        # ensemble that contains it — and a forward pass is thirty seconds on
+        # a CPU, so the second question must not cost a second minute. During
+        # a backtest every target has a different history and every lookup
+        # misses, which is why there is nothing here to grow.
+        #
+        # The key is the length of the history and the identity of its last
+        # draw, so a repaired or re-imported archive of the same length cannot
+        # be served the old answer.
+        self._last: dict[str, tuple[tuple, dict[int, float]]] = {}
         # Why the last load_model() said no. Without it the caller has a False
         # and nothing else, and the reason — a missing torch, a corrupt cache,
         # an API that moved — reaches the status bar for a fraction of a second
@@ -201,8 +213,11 @@ class TimesFMForecaster:
                 f"{MIN_CONTEXT_DRAWS} perché la finestra mobile abbia senso"
             )
 
+        remembered = self._remembered("ruota", draws)
+        if remembered is not None:
+            return remembered
         context = build_context(draws, context_length=self.context_length)
-        return self._forecast(context, progress)
+        return self._remember("ruota", draws, self._forecast(context, progress))
 
     def score_superstar(self, draws: list[Draw], progress=None) -> dict[int, float]:
         """One score per number for the *SuperStar* of the next draw.
@@ -227,8 +242,30 @@ class TimesFMForecaster:
                 f"{recorded} estrazioni con SuperStar sono troppo poche: ne "
                 f"servono almeno {MIN_CONTEXT_DRAWS}"
             )
+        remembered = self._remembered("superstar", draws)
+        if remembered is not None:
+            return remembered
         context = build_superstar_context(draws, context_length=self.context_length)
-        return self._forecast(context, progress)
+        return self._remember("superstar", draws, self._forecast(context, progress))
+
+    def _key(self, draws: list[Draw]) -> tuple:
+        return (
+            len(draws),
+            draws[-1].draw_id if draws else "",
+            draws[-1].date.isoformat() if draws else "",
+            self.context_length,
+        )
+
+    def _remembered(self, urn: str, draws: list[Draw]):
+        """The answer to this exact question, if it was the last one asked."""
+        found = self._last.get(urn)
+        if found is not None and found[0] == self._key(draws):
+            return dict(found[1])
+        return None
+
+    def _remember(self, urn: str, draws: list[Draw], scores: dict[int, float]):
+        self._last[urn] = (self._key(draws), dict(scores))
+        return scores
 
     def _forecast(self, context, progress=None) -> dict[int, float]:
         """One forward pass over a ninety-series context, as a score per number."""

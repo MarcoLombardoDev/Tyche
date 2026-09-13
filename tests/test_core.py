@@ -833,13 +833,21 @@ def test_expected_hits_is_four_tenths():
 
 
 def test_every_method_produces_six_distinct_playable_numbers():
+    from core.ensemble import Weights
     from core.predictor import METHODS, predict
 
     draws = random_archive(500)
+    # The ensemble needs weights and refuses to invent them — calibrating is a
+    # backtest, and a function that ran one because an argument was missing
+    # would be a surprise nobody wants. Given some, it is a method like the
+    # others and has to behave like one here.
+    weights = Weights({"ritardo": 0.4, "frequenza": 0.6})
     for method in METHODS:
         if method == "timesfm":
             continue
-        prediction = predict(draws, method=method, combinations=3, seed=1)
+        prediction = predict(
+            draws, method=method, combinations=3, seed=1, weights=weights,
+        )
         assert len(prediction.combinations) == 3
         for combination in prediction.combinations:
             assert len(set(combination)) == 6
@@ -1574,6 +1582,8 @@ def cli(tmp_path, monkeypatch):
     save_archive(archive, random_archive(500, seed=3))
     monkeypatch.setattr(dm, "ARCHIVE_PATH", archive)
     monkeypatch.setattr(dm, "SETTINGS_PATH", tmp_path / "settings.json")
+    monkeypatch.setattr(dm, "ENSEMBLE_FIT_PATH", tmp_path / "weights.json")
+    monkeypatch.setattr(dm, "ENSEMBLE_TRACES_PATH", tmp_path / "traces.json")
     return cli_module
 
 
@@ -1658,6 +1668,53 @@ def test_cli_forecast_prints_combinations(cli, capsys, method):
     combinations = [ln for ln in out.splitlines() if ln.strip().startswith("1. ")]
     assert combinations, "no combination printed"
     assert len(combinations[0].split()) == 7          # "1." plus six numbers
+
+
+def test_cli_ensemble_calibrates_prints_and_stores(cli, capsys):
+    """The mode that makes the weights reproducible from a terminal.
+
+    Everything the criterion asks for on one page: the weights, what each
+    component scored alone, what the ensemble scored, the random control
+    beside them, and the per-number table for the next draw.
+    """
+    import core.data_manager as dm
+
+    code, out = _run(cli, ["--ensemble", "60"], capsys)
+    assert code == 0
+    assert "Pesi in uso" in out
+    assert "estrazioni di verifica" in out
+    assert "Casuale" in out
+    assert "La graduatoria per la prossima estrazione" in out
+    assert "ensemble" in out
+    stored = json.loads(dm.ENSEMBLE_FIT_PATH.read_text(encoding="utf-8"))
+    assert abs(sum(stored["weights"].values()) - 1.0) < 1e-6
+    assert stored["report"], "the evidence has to be stored with the weights"
+
+
+def test_cli_ensemble_refuses_an_archive_too_short_to_split(cli, capsys, tmp_path):
+    import core.data_manager as dm
+
+    short = tmp_path / "short.csv"
+    save_archive(short, random_archive(210, seed=4))
+    dm.ARCHIVE_PATH = short
+    code, out = _run(cli, ["--ensemble"], capsys)
+    assert code == 1
+    assert "non bastano" in out
+
+
+def test_cli_forecast_ensemble_calibrates_once_and_then_reuses(cli, capsys):
+    """A forecast must not pay for a backtest twice on an unchanged archive."""
+    code, first = _run(cli, ["--forecast", "ensemble"], capsys)
+    assert code == 0
+    assert "calibro adesso" in first
+    assert "pesi:" in first
+
+    code, second = _run(cli, ["--forecast", "ensemble"], capsys)
+    assert code == 0
+    assert "già calibrati" in second
+    assert "calibro adesso" not in second
+    combinations = [ln for ln in second.splitlines() if ln.strip().startswith("1. ")]
+    assert len(combinations[0].split()) == 7
 
 
 def test_cli_forecast_refuses_an_unknown_method(cli, capsys):

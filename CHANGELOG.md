@@ -12,6 +12,92 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.1.0] — 2026-09-13
+
+Un quinto metodo che è fatto degli altri, e dei pesi che si sono guadagnati.
+
+### Aggiunto
+
+- **L'ensemble: una previsione sola, in cima alla scheda Previsione.** È la
+  media pesata di TimesFM, ritardo e frequenza — e i tre pesi non sono scritti
+  da nessuna parte nel codice. Li decide un backtest walk-forward sulle
+  estrazioni recenti: ogni combinazione di pesi viene provata su estrazioni
+  che non ha mai visto mentre veniva scelta, e vince quella che ordina meglio
+  i novanta numeri.
+
+  È il primo riquadro ed è calcolato per ultimo, e le due cose non sono in
+  contraddizione: è fatto degli altri tre, quindi non può esistere prima di
+  loro; ed è la risposta che il programma darebbe se gli si chiedesse una
+  risposta sola, quindi è quella che si legge per prima.
+
+- **Nessun componente ha un minimo garantito, TimesFM compreso.** Se il
+  backtest dice che non aggiunge niente, il suo peso è zero e la scheda lo
+  scrive. Sull'archivio vero succede esattamente questo, e il motivo è
+  misurabile: la previsione del modello sui novanta numeri è piatta —
+  1,1% ciascuno, entropia 1,0000 su 1, novanta «candidati efficaci» su
+  novanta — e una miscela è lineare, quindi un componente piatto non sposta la
+  graduatoria qualunque peso gli si dia.
+
+  Da qui una decisione che vale la pena scrivere: **un peso che non cambia la
+  graduatoria non è una misura, è il rumore della ricerca.** Sotto il 2% di
+  «influenza» — il peso moltiplicato per quanto quel componente si discosta
+  dall'uniforme — il peso viene azzerato e ridistribuito. La prima versione di
+  questo modulo assegnava a TimesFM il 55% e non avrebbe potuto guadagnarsi
+  nemmeno un punto percentuale.
+
+- **Fra i pesi che il backtest non sa distinguere viene preso il più
+  equilibrato.** Senza niente da trovare, il minimo del criterio su 231
+  combinazioni finisce in un angolo del simplesso più o meno come finisce
+  altrove — e un angolo non è un ensemble, è una delle altre caselle copiata
+  nella prima. La colonna «compatibili» del rapporto dice, per ogni
+  componente, l'intervallo di pesi che il backtest non ha saputo distinguere:
+  sull'archivio vero è `0%–100%`, cioè non ha scelto niente, e quella è
+  l'informazione onesta.
+
+- **Il rapporto dice tutto quello che serve per non credergli.** Quali
+  estrazioni, quante per la ricerca e quante tenute da parte, i pesi, quanto
+  ogni componente distingue i numeri, cosa ha segnato ognuno da solo, cosa ha
+  segnato l'ensemble, cosa segna il controllo casuale sulle stesse estrazioni,
+  e quanto cambia togliendo ogni componente e ricalibrando senza. Hit@5, @6,
+  @10, @15, @20, @30, rango medio, MRR — con il valore del caso di fianco a
+  ciascuno.
+
+- **`--ensemble` da riga di comando**, che ricalibra i pesi, stampa il
+  backtest per intero e la tabella numero per numero della prossima
+  estrazione. `--forecast ensemble` usa i pesi già calibrati e ne calcola di
+  nuovi solo se non ce ne sono di validi.
+
+- **Due impostazioni nuove**: su quante estrazioni calibrare i pesi (120) e
+  quante tenerne da parte per la verifica (40).
+
+### Modificato
+
+- **La scheda Previsione ha cinque riquadri invece di quattro**, e un pulsante
+  «Ricalibra i pesi» accanto a «Genera». La calibrazione si rifà da sola
+  quando l'archivio si è mosso di più di dieci estrazioni; il pulsante serve
+  per chiederla apposta, per esempio dopo aver installato il modello.
+
+- **I risultati per estrazione del backtest vengono conservati**, in
+  `data/ensemble/`. Con TimesFM installato ogni estrazione del backtest costa
+  una passata del modello, cioè decine di secondi: si paga una volta, e dopo
+  un aggiornamento dell'archivio si ricalcolano solo le estrazioni nuove.
+
+- **Una previsione registrata nel log porta con sé i pesi.** Senza, sarebbe il
+  ricordo di sei numeri che non si possono più riprodurre.
+
+- **TimesFM non viene interrogato due volte per la stessa domanda.** La scheda
+  chiede la stessa previsione una volta per la casella del modello e una per
+  l'ensemble: la seconda ora costa zero invece di un'altra passata.
+
+### Note
+
+- **Non c'è niente da festeggiare nei risultati, ed è il risultato atteso.**
+  Sull'archivio vero l'ensemble segna un rango medio indistinguibile dal caso,
+  come i tre metodi che lo compongono e come il generatore casuale che gli sta
+  accanto. Un ensemble che non migliora le sue componenti è una componente in
+  più, non un metodo migliore, e il rapporto lo dice con queste parole quando
+  succede.
+
 ## [1.0.8] — 2026-09-12 — `fa130ce`
 
 Il SuperStar dentro una stella, e i numeri della stessa misura.

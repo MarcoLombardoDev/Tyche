@@ -50,6 +50,7 @@ README_SKELETON = (
     "Da dove vengono i dati",
     "Che cosa hanno trovato i test",
     "«Non abbiamo trovato niente» oppure «non avremmo potuto trovarlo»",
+    "L'ensemble e i pesi che nessuno ha scelto",
     "Sistemi e SuperStar",
     "Le probabilità, che nessun metodo cambia",
     "Interrogare l'archivio",
@@ -94,7 +95,7 @@ def test_the_readme_opens_the_way_every_product_here_does():
 
     The payoff says what the program does rather than how: naming TimesFM
     there would promise the program is about the model, and TimesFM is one of
-    four methods — the one the rest of the README exists to put in its place.
+    five methods — the one the rest of the README exists to put in its place.
     """
     import sys
 

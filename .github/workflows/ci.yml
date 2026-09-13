@@ -416,6 +416,58 @@ jobs:
           print(f"\n{elapsed:.0f}s for {scored} draws — {elapsed / scored:.1f}s per model call")
           PY
 
+      - name: Calibrate the ensemble against the real model
+        # The only place core/ensemble.py meets the real TimesFM, and the
+        # question it answers is the one the module was written around: given
+        # a *measured* forecast rather than a fake flat one, how much weight
+        # does the model earn?
+        #
+        # Twenty target draws, for the same reason the step above uses twelve
+        # and with less room: fit() refuses to split anything shorter, and each
+        # draw is one forward pass at roughly thirty seconds. That is ten
+        # minutes, and it buys the one number nobody here can get any other
+        # way.
+        #
+        # Prints rather than asserts the weight. A model that earned 40% would
+        # be news and not a failure; what is asserted is only that the fit ran,
+        # that TimesFM was really in it, and that the weights are a weighting.
+        run: |
+          python - <<'PY'
+          import time
+
+          from core.archive import load_archive
+          from core.data_manager import ARCHIVE_PATH, load_settings
+          from core.ensemble import fit
+          from core.forecaster import TimesFMForecaster
+
+          settings = load_settings()
+          draws = load_archive(ARCHIVE_PATH)
+          model = TimesFMForecaster(
+              checkpoint=settings["timesfm_checkpoint"], device="cpu",
+              context_length=int(settings["context_length"]),
+          )
+          assert model.load_model()
+
+          started = time.monotonic()
+          calibrated = fit(
+              draws, forecaster=model, backtest_draws=20, validation_draws=6,
+              window=int(settings["frequency_window"]),
+          )
+          elapsed = time.monotonic() - started
+
+          print("\n".join(calibrated.report_lines()))
+          print(f"\n{elapsed:.0f}s for 20 draws — {elapsed / 20:.1f}s per model call")
+
+          assert "timesfm" in calibrated.components, "the model was not measured"
+          total = sum(calibrated.weights.values.values())
+          assert abs(total - 1.0) < 1e-6, f"the weights sum to {total}"
+          info = calibrated.informativeness["timesfm"]
+          print(
+              f"\nTimesFM: peso {calibrated.weights.of('timesfm'):.0%}, "
+              f"entropia {info.entropy:.4f}, candidati efficaci {info.candidates:.1f}"
+          )
+          PY
+
   checkpoint-licence:
     # A diagnostic, not a test, and manual only.
     #
