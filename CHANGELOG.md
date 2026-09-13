@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.1.0] — 2026-09-13
+## [1.1.0] — 2026-09-13 — `f2129bf`
 
 Un quinto metodo che è fatto degli altri, e dei pesi che si sono guadagnati.
 
