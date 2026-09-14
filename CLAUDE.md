@@ -794,6 +794,19 @@ page for whatever the caller runs next.
   `test_the_settings_panel_offers_every_setting_a_user_should_set` is its
   mirror: declared, read, but unreachable from the interface.
 
+  **And a third kind, which no test can catch: a setting that is declared,
+  read, reachable — and can only break things.** `timesfm_device` offered
+  ("cpu", "cuda") and went 1.1.2. Every published archive bundles CPU-only
+  PyTorch, on purpose: the release job installs it from the CPU index because
+  the CUDA build is several times the size, and the README's install line says
+  the same. So `cuda` could not work in any copy anyone has, and choosing it
+  turned a working forecast into a load-time error — while reading, on the
+  screen, like the fast option. `TimesFMForecaster` keeps `device` as a
+  parameter, because it is `ModelConfig`'s own and the `forecast` CI job
+  passes it; what went is the choice offered to somebody who cannot act on it.
+  Before adding a setting, check that both of its values work in the build
+  that ships.
+
 ## Why one combination is the default
 
 The owner asked why anyone would generate more than one combination, since the

@@ -32,9 +32,6 @@ FIELDS = [
     ("timesfm_checkpoint", "Checkpoint TimesFM", "text",
      f"Identificativo del repository Hugging Face. Predefinito {DEFAULT_TIMESFM_CHECKPOINT}; "
      "i pesi della 3.0 sono per uso non commerciale e non di produzione."),
-    ("timesfm_device", "Dispositivo", ("cpu", "cuda"),
-     "cuda richiede una build di PyTorch corrispondente; cpu impiega qualche secondo "
-     "per previsione."),
     ("hf_token", "Token Hugging Face", "secret",
      "Serve solo per un checkpoint ad accesso ristretto: quello predefinito "
      "non lo è, e senza token si scarica lo stesso. Se ti serve: huggingface.co "

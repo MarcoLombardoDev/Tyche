@@ -55,7 +55,14 @@ SETTINGS_TEMPLATE_PATH = BASE_DIR / "config" / "settings.template.json"
 DEFAULT_SETTINGS: dict[str, Any] = {
     # --- Model ---
     "timesfm_checkpoint": DEFAULT_TIMESFM_CHECKPOINT,
-    "timesfm_device": "cpu",
+    # No device setting. It was ("cpu", "cuda") and "cuda" could not work in
+    # any copy anyone has: every published archive bundles CPU-only PyTorch —
+    # the release job installs it from the CPU index on purpose, because the
+    # CUDA build is several times the size — and the README's install line
+    # does the same. Choosing it turned a working forecast into a load-time
+    # error, which is the worst thing a setting can do: it looks like the fast
+    # option. core.forecaster.TimesFMForecaster keeps `device` as a parameter,
+    # because that is the library's own knob and CI passes it.
     "hf_token": "",
     # A folder the user filled by hand, used in preference to the download.
     # Empty is the normal case; it earns its place on the machine where a

@@ -252,7 +252,6 @@ def _forecaster_if_ready(settings, announce: bool = True):
 
     forecaster = TimesFMForecaster(
         checkpoint=checkpoint,
-        device=settings.get("timesfm_device", "cpu"),
         context_length=int(settings.get("context_length", 1024)),
         hf_token=settings.get("hf_token", ""),
         local_dir=settings.get("timesfm_local_dir", ""),
@@ -522,7 +521,6 @@ def _run_forecast(method: str) -> int:
 
         forecaster = TimesFMForecaster(
             checkpoint=settings["timesfm_checkpoint"],
-            device=settings["timesfm_device"],
             context_length=int(settings["context_length"]),
             hf_token=settings.get("hf_token", ""),
             local_dir=settings.get("timesfm_local_dir", ""),

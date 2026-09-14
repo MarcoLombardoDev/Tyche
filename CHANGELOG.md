@@ -12,6 +12,26 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.1.2] — 2026-09-14
+
+Una scelta in meno, che poteva solo rompere qualcosa.
+
+### Modificato
+
+- **Via l'opzione «Dispositivo» dalle Impostazioni: TimesFM gira sulla CPU e
+  basta.** La scelta era fra `cpu` e `cuda`, e `cuda` non poteva funzionare in
+  nessuna copia esistente: ogni archivio pubblicato porta con sé la versione
+  di PyTorch per sola CPU — è quella che il workflow di rilascio installa
+  apposta, perché quella per CUDA pesa diverse volte tanto — e la riga di
+  installazione del README fa lo stesso. Sceglierla trasformava una previsione
+  che funzionava in un errore al caricamento del modello, ed è il peggio che
+  un'impostazione possa fare: sembrava l'opzione veloce.
+
+- Se `config/settings.json` contiene ancora `timesfm_device`, la chiave viene
+  semplicemente ignorata, come ogni altra impostazione rimossa nelle versioni
+  precedenti: cancellare righe dal file di qualcun altro sarebbe una risposta
+  peggiore.
+
 ## [1.1.1] — 2026-09-13 — `e851827`
 
 Il testo che non andava a capo, e due cose in meno sul Percorso.

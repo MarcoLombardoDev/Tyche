@@ -74,6 +74,11 @@ class TimesFMForecaster:
     def __init__(
         self,
         checkpoint: str = DEFAULT_TIMESFM_CHECKPOINT,
+        # The library's own knob, and no longer a setting: every published
+        # archive carries CPU-only PyTorch, so "cuda" was an option that could
+        # only turn a working forecast into a load-time error. It stays a
+        # parameter because it is what ModelConfig wants and because the CI
+        # job that runs the real model passes it explicitly.
         device: str = "cpu",
         context_length: int = 1024,
         hf_token: str = "",
