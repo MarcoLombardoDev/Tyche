@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.1.2] — 2026-09-14
+## [1.1.2] — 2026-09-14 — `7765b0e`
 
 Una scelta in meno, che poteva solo rompere qualcosa.
 
