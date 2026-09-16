@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.1.3] — 2026-09-16
+## [1.1.3] — 2026-09-16 — `8f82224`
 
 I numeri stanno sulla riga che hanno, e si possono copiare.
 
