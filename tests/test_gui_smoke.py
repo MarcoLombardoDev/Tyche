@@ -1327,6 +1327,17 @@ def _balls(widget) -> list:
     return found
 
 
+def _star_of(line):
+    """The SuperStar badge on a line of numbers: the canvas with a polygon."""
+    import tkinter
+
+    return next(
+        child for child in line.winfo_children()
+        if isinstance(child, tkinter.Canvas)
+        and any(child.type(i) == "polygon" for i in child.find_all())
+    )
+
+
 def _badge_number(canvas) -> str:
     """The digits drawn inside a ball or a star."""
     text = [i for i in canvas.find_all() if canvas.type(i) == "text"][0]
@@ -1340,6 +1351,23 @@ def _badge_font_size(canvas) -> int:
     return int([p for p in parts if p.lstrip("-").isdigit()][-1])
 
 
+def _rows(balls) -> list[list]:
+    """The balls grouped by the line they are drawn on, top to bottom.
+
+    Screen coordinates, not ``winfo_y``: since 1.1.3 every ball of a
+    combination is a child of one frame and gridded, and before that each sat
+    inside its own line frame and read 0 whichever row it was on. Both cases
+    are answered by asking where it is on the screen.
+    """
+    lines: dict[int, list] = {}
+    for ball in balls:
+        lines.setdefault(ball.winfo_rooty(), []).append(ball)
+    return [
+        sorted(row, key=lambda b: b.winfo_rootx())
+        for _, row in sorted(lines.items())
+    ]
+
+
 def test_every_number_of_a_system_is_on_the_screen(app):
     """`pack` clips what does not fit and says nothing about it.
 
@@ -1349,27 +1377,134 @@ def test_every_number_of_a_system_is_on_the_screen(app):
     way for this panel to be wrong, so the balls wrap.
     """
     app.settings["prediction_size"] = 12
+    app.settings["predict_superstar"] = True
     panel = _generate(app)
+    app.update()
 
     cell = panel._cells["frequenza"]
     first = cell.balls.winfo_children()[0]
     balls = _balls(first)
     assert len(balls) == 12, f"only {len(balls)} of the twelve are drawn"
 
-    # On more than one line, which is the mechanism: a single row of twelve
-    # would satisfy the count above and still run off the window. Two balls on
-    # the same line share a y; the rows are what the distinct ones count.
-    app.update()
-    # Screen coordinates, not winfo_y: each ball sits inside its own line
-    # frame, so its y is relative to that frame and reads 0 on every row.
-    rows = {ball.winfo_rooty() for ball in balls}
-    assert len(rows) >= 2, f"twelve numbers were laid out on one line: {rows}"
-
     right_edge = max(ball.winfo_rootx() + ball.winfo_width() for ball in balls)
     cell_edge = cell.winfo_rootx() + cell.winfo_width()
     assert right_edge <= cell_edge, (
         f"the numbers reach {right_edge} past the cell's edge at {cell_edge}"
     )
+
+    # And not into the SuperStar, which is the other thing they can run into.
+    # It is packed anchor="n", so the row it shares is the first one.
+    top_row = _rows(balls)[0]
+    star = _star_of(first)
+    assert max(
+        ball.winfo_rootx() + ball.winfo_width() for ball in top_row
+    ) <= star.winfo_rootx(), "a number is drawn underneath the SuperStar"
+
+
+def test_the_seventh_number_stays_on_the_line_with_the_other_six(app):
+    """Six a line was a guess; the line's width is a measurement.
+
+    The seventh number of a system used to drop to a line of its own with two
+    hundred empty pixels beside it and the SuperStar alone at the end of the
+    row above, because ``ball_row`` wrapped at a hard-coded six — the size of
+    a column, which is a fact about the game and not about the window. The
+    rule now is the one a reader would state: they stay on one line until they
+    would reach the SuperStar.
+    """
+    app.settings["prediction_size"] = 7
+    app.settings["predict_superstar"] = True
+    panel = _generate(app)
+    app.update()
+
+    first = panel._cells["frequenza"].balls.winfo_children()[0]
+    rows = _rows(_balls(first))
+    assert len(rows) == 1, (
+        f"seven numbers were laid out on {len(rows)} lines with room for one"
+    )
+
+
+def test_a_line_that_wraps_was_a_full_one(app):
+    """The other half of the rule, and the half a fixed count also satisfies.
+
+    "Seven fit on one line" passes with the wrap count raised from six to
+    seven and nothing measured. What cannot be faked by another constant is
+    that a line which *did* wrap had no room left on it: anything left over
+    after its last ball has to be less than another ball would have needed.
+    """
+    from gui.prediction_panel import BADGE_SIZE
+    from gui.widgets import BADGE_GAP
+
+    app.settings["prediction_size"] = 12
+    app.settings["predict_superstar"] = True
+    panel = _generate(app)
+    app.update()
+
+    cell = panel._cells["frequenza"]
+    first = cell.balls.winfo_children()[0]
+    rows = _rows(_balls(first))
+    assert len(rows) >= 2, "twelve numbers fitted on one line; widen the test"
+
+    star = _star_of(first)
+    step = BADGE_SIZE + 2 * BADGE_GAP
+    for index, row in enumerate(rows[:-1]):
+        # The first row stops at the SuperStar; the others have the cell.
+        limit = (
+            star.winfo_rootx() if index == 0
+            else cell.winfo_rootx() + cell.winfo_width()
+        )
+        last = row[-1]
+        free = limit - (last.winfo_rootx() + last.winfo_width())
+        assert free < step + BADGE_GAP, (
+            f"line {index + 1} wrapped with {free} pixels free, enough for "
+            f"another number at {step}"
+        )
+
+
+def test_the_copy_button_waits_until_there_is_something_to_copy(app):
+    """Dead on arrival, live once the cells hold numbers.
+
+    A button that answers a click by putting nothing on the clipboard is
+    worse than one that visibly cannot be pressed: the user finds out by
+    pasting somewhere else, and an empty paste reads as a broken clipboard
+    rather than as an empty screen.
+    """
+    panel = app._panels["prediction"]
+    app.show("prediction")
+    app.update()
+    assert panel.copy.cget("state") == "disabled"
+
+    app.settings["predict_superstar"] = True
+    panel = _generate(app)
+    app.update()
+    assert panel.copy.cget("state") == "normal"
+
+
+def test_what_is_copied_is_what_is_on_the_screen(app):
+    """Every method's numbers, named, and the caveat with them.
+
+    Five blocks of six numbers with nothing round them would be
+    indistinguishable by the time they reached a notepad, and the point of
+    showing five methods at once is knowing which is which. The line about
+    the expected score travels with them for the same reason: everything
+    that puts those numbers in proportion is on the screen they just left.
+    """
+    from core.predictor import method_name
+
+    app.settings["predict_superstar"] = True
+    panel = _generate(app)
+    app.update()
+    panel._copy()
+    app.update()
+
+    text = app.clipboard_get()
+    for method, prediction in panel._predictions.items():
+        assert method_name(method) in text, f"{method} is not named"
+        numbers = " ".join(f"{n:02d}" for n in prediction.combinations[0])
+        assert numbers in text, f"{method}'s numbers are not in the clipboard"
+        if prediction.superstar is not None:
+            assert f"SuperStar {prediction.superstar:02d}" in text
+
+    assert "casuale" in text, "the copied numbers carry no caveat at all"
 
 
 def test_a_ball_and_the_star_carry_the_same_size_of_number(app):

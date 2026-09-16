@@ -294,9 +294,56 @@ class ReportBox(ctk.CTkTextbox):
         self.configure(state="disabled")
 
 
+# How much air sits either side of a badge. The reflow arithmetic needs it, so
+# it is a constant rather than a literal repeated in two places.
+BADGE_GAP = 3
+
+# How many numbers a row shows before it has ever been measured. Three of the
+# four panels are built unmapped, and a row that is never shown keeps this —
+# so it is the old fixed layout, which was wrong about the width and right
+# about not running off the side.
+OPENING_PER_LINE = 6
+
+
+def _room_for_badges(row) -> int:
+    """How many pixels the row has before it reaches something else.
+
+    **Measured from the left edge of the row to the nearest obstacle on its
+    right**, which is the SuperStar when there is one and the edge of the
+    line otherwise. Both of those are placed by the geometry manager from
+    above — the star is packed ``side="right"``, so its position follows the
+    parent's width — and neither moves when this row changes size. That is the
+    property the whole function is built on: nothing measured here can be
+    changed by what is done with the answer, so the reflow cannot chase its
+    own tail the way two versions of :func:`fit_text` did.
+
+    A sibling is "on the right" if it *starts* right of where this row starts,
+    which is a comparison this row's own width does not enter. Asking whether
+    it starts past the row's right edge would be the obvious spelling and
+    would put the row's width back into the measurement.
+    """
+    parent = row.master
+    top = row.winfo_toplevel()
+    left = row.winfo_rootx()
+    limit = parent.winfo_rootx() + parent.winfo_width()
+    for child in parent.winfo_children():
+        if child is row or not child.winfo_ismapped():
+            continue
+        if child.winfo_rootx() > left:
+            # The badge stops where the sibling begins: rootx is already past
+            # whatever padding was asked for on that side, so there is no
+            # padding to guess at here.
+            limit = min(limit, child.winfo_rootx())
+    # And never past the window, which a container can report when its own
+    # contents ask for more width than the window has. Same clamp, and the
+    # same reason, as fit_text's.
+    limit = min(limit, top.winfo_rootx() + top.winfo_width() - EDGE_GUTTER)
+    return limit - left
+
+
 def ball_row(
-    parent, numbers, size: int = 38, per_line: int = 6,
-    background: str = BG_PANEL,
+    parent, numbers, size: int = 38, background: str = BG_PANEL,
+    per_line: int | None = None,
 ) -> ctk.CTkFrame:
     """Render a combination as circles, the way a receipt prints it.
 
@@ -318,19 +365,78 @@ def ball_row(
     nothing: at fifty pixels a *sistema integrale* of twelve numbers ran off
     the side of its cell and showed seven, which is the worst way for this
     screen to be wrong — five numbers the user would be playing, missing, with
-    nothing to suggest anything was cut. Six a line, because six is a column:
-    a system of nine then reads as a column and three more, which is how the
-    ranking builds it.
+    nothing to suggest anything was cut.
+
+    **But six a line was a guess, and 1.1.3 replaced it with a measurement.**
+    Six is the size of a column, so a system of nine read as a column and
+    three more — which sounds like the right story until the seventh number
+    drops to a line of its own with two hundred empty pixels beside it and the
+    SuperStar sitting alone at the far end of the row above. The owner
+    reported exactly that. The rule now is the one a reader would state: the
+    numbers stay on one line until they would reach the SuperStar, and only
+    then does the next one go underneath.
+
+    **The badges are gridded rather than packed, and that is what makes a
+    reflow possible.** Tk cannot move a widget to another parent, so a row
+    built as a frame per line can only change its shape by destroying and
+    rebuilding every canvas in it. One frame with ``grid`` re-lays the same
+    widgets out at a different row and column, which costs nothing and keeps
+    the canvases — and the rest of this module's rules about Tk objects being
+    collected on the wrong thread — exactly where they were.
+
+    Pass ``per_line`` to pin the count and skip the measuring entirely.
     """
     row = ctk.CTkFrame(parent, fg_color="transparent")
-    numbers = list(numbers)
-    for start in range(0, len(numbers), per_line):
-        line = ctk.CTkFrame(row, fg_color="transparent")
-        line.pack(fill="x", pady=1)
-        for n in numbers[start:start + per_line]:
-            ball_badge(line, n, size=size, background=background).pack(
-                side="left", padx=3,
+    badges = [
+        ball_badge(row, n, size=size, background=background) for n in numbers
+    ]
+    step = size + 2 * BADGE_GAP
+    state: dict = {"per_line": 0, "job": None}
+
+    def arrange(count: int) -> None:
+        if count == state["per_line"] or not badges:
+            return
+        state["per_line"] = count
+        for index, badge in enumerate(badges):
+            badge.grid(
+                row=index // count, column=index % count,
+                padx=BADGE_GAP, pady=1,
             )
+
+    def measure():
+        state["job"] = None
+        try:
+            if not row.winfo_exists():
+                # The binding is on the toplevel and outlives the row: every
+                # «Genera» destroys the cell's children and builds new ones.
+                return
+            if not row.winfo_ismapped():
+                # Nothing to measure against. <Map> brings us back.
+                return
+            room = _room_for_badges(row)
+        except tkinter.TclError:
+            return
+        if room <= 0:
+            return
+        arrange(max(1, min(len(badges), room // step)))
+
+    def schedule(event=None):
+        if state["job"] is not None:
+            return
+        try:
+            state["job"] = row.after_idle(measure)
+        except tkinter.TclError:
+            state["job"] = None
+
+    arrange(per_line or min(len(badges), OPENING_PER_LINE))
+    if per_line is None:
+        # Measured from an idle callback, for fit_text's reason: Tk dispatches
+        # the toplevel's <Configure> before the geometry manager has resized
+        # anything inside it, so reading a width in the handler itself gives
+        # the one the window had a moment ago.
+        row.winfo_toplevel().bind("<Configure>", schedule, add="+")
+        row.bind("<Map>", schedule, add="+")
+        schedule()
     return row
 
 

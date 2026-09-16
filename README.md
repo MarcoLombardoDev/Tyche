@@ -42,8 +42,8 @@ sistemarlo.
 | 2 | **Il modello TimesFM** | I pesi sono su questo computer? Se no, il pulsante li scarica, con la percentuale nella barra in basso. |
 | 3 | **La previsione** | Il punto di arrivo: tutti e cinque i metodi insieme, con quanto costa la giocata e quanto vale. |
 
-Fuori percorso c'è **Impostazioni**: checkpoint, dispositivo, token Hugging
-Face, numeri per combinazione, SuperStar e prezzi. Le frequenze, i ritardi, le
+Fuori percorso c'è **Impostazioni**: checkpoint, token Hugging Face, numeri
+per combinazione, SuperStar e prezzi. Le frequenze, i ritardi, le
 decine e le coppie — ogni tabella con accanto il valore che produrrebbe il caso
 — stanno nella colonna destra della scheda **Archivio**, dove dalla 0.11.0 sono
 state portate: erano una scheda a sé, che si apriva una volta e mai più.
@@ -62,6 +62,13 @@ backtest ha assegnato loro; viene per primo perché è la risposta che il
 programma darebbe se gliene si chiedesse una sola, e per ultimo perché è fatto
 degli altri. Come vengono scelti quei pesi, e perché uno di loro è a zero, è
 [più sotto](#lensemble-e-i-pesi-che-nessuno-ha-scelto).
+
+Accanto a «Genera» c'è **«Copia risultati»**, spento finché non c'è niente da
+copiare: mette negli appunti le combinazioni di tutti i metodi a schermo,
+ognuna col nome di chi l'ha prodotta e col SuperStar quando c'è. In fondo al
+testo copiato c'è la riga che li mette in proporzione — il punteggio atteso è
+lo stesso per tutti, compreso il metodo casuale — perché tutto il resto di
+quella schermata resta indietro.
 
 ![Previsione](docs/screenshots/03_previsione.png)
 

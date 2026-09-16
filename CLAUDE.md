@@ -57,7 +57,7 @@ the instruction that overrides them.
 
 ```
 python -m pytest tests/ -q                                   # 429, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 494, GUI included
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 498, GUI included
 python -m ruff check .
 ```
 
@@ -1247,22 +1247,80 @@ Three things about it are not free choices:
   the star arrives in a grey square. That is why `star_badge` takes it rather
   than assuming `BG_PANEL`.
 
-**And the balls wrap, six a line, because enlarging them broke a system.**
+**And the balls wrap, because enlarging them broke a system.**
 `pack` clips what does not fit and says nothing: at fifty pixels a *sistema
 integrale* of twelve ran off the side of its cell and showed **seven**. Five
 numbers the user would be playing, gone, with nothing on screen to suggest
 anything had been cut — the worst way this panel can be wrong, and it was
 invisible at thirty pixels where twelve still fitted.
-`test_every_number_of_a_system_is_on_the_screen` counts the balls *and*
-checks they occupy more than one row, in screen coordinates: a ball's
-`winfo_y` is relative to its own line frame and reads 0 on every row, so the
-obvious version of that check cannot see the difference.
+`test_every_number_of_a_system_is_on_the_screen` counts the balls and checks
+none of them reaches past the cell or under the SuperStar.
+
+**They wrapped at six until 1.1.3, and six was a guess.** Six is the size of a
+column — a fact about the game, not about the window — so the seventh number
+of a system dropped to a line of its own with two hundred empty pixels beside
+it and the SuperStar alone at the end of the row above. The owner reported
+exactly that, and the rule he stated is the one the code now implements: they
+stay on one line until they would reach the SuperStar.
+
+Three things about the way it is measured:
+
+- **The badges are gridded, not packed into a frame per line.** Tk cannot move
+  a widget to another parent, so a row built as one frame per line can only
+  change shape by destroying and rebuilding every canvas in it. `grid` re-lays
+  the same widgets out at a different row and column — which also keeps them
+  out of the collector's way, for the reason the font cache exists.
+- **`_room_for_badges` measures from the row's left edge to the nearest thing
+  on its right**, which is the SuperStar when there is one and the edge of the
+  line otherwise. Neither moves when this row changes size — the star is
+  packed `side="right"`, so it follows the *parent's* width — and that is the
+  whole design: nothing measured can be changed by what is done with the
+  answer, so this cannot chase its own tail the way two versions of `fit_text`
+  did. A sibling counts as "on the right" if it *starts* right of where the
+  row starts; asking whether it starts past the row's right edge is the
+  obvious spelling and puts the row's own width back into the measurement.
+- **Two tests, because either alone passes with another constant.** Seven on
+  one line passes with the wrap count raised from six to seven and nothing
+  measured; `test_a_line_that_wraps_was_a_full_one` asserts that a line which
+  *did* wrap had less room left on it than another ball needs, which no fixed
+  count satisfies at every window width. Checked by mutation in both
+  directions — pinned at six, and unlimited.
+
+**And `_generate` in the smoke suite returns as soon as `_predictions` is
+non-empty**, so a test that presses «Genera» twice reads the *first* run's
+layout. That cost half an hour here: a two-part test set the size to 7, then
+to 12, and measured the seven-number row while believing it had twelve. One
+generation per test.
 
 `test_the_superstar_is_a_purple_star_with_its_number_in_it` checks the
 polygon's *radii alternate* — five far, five near — and not merely that it has
 ten vertices. A decagon has ten too and reads as a circle; the first version
 of that assertion passed with every vertex pushed out to the same radius,
 checked by mutation.
+
+**«Copia risultati» sits beside «Genera», and it is dead until there is
+something to copy.** 1.1.3. It puts every visible method's combinations on the
+clipboard, named, with the SuperStar where there is one — five unlabelled
+blocks of six numbers are indistinguishable by the time they reach a notepad,
+and the point of showing five methods at once is knowing which is which.
+
+Two decisions in it:
+
+- **The caveat goes on the clipboard with the numbers.** Everything that puts
+  them in proportion — the control cell, the expected score, the note about
+  value — stays on the screen they just left, so six numbers arriving anywhere
+  else would read as a recommendation from a program with a 330M-parameter
+  model in it. One line at the bottom is what stops that.
+- **The button follows the screen, not the run.** It is enabled in `_show`
+  when there are predictions and left alone by `_generate`, so a run that
+  raises leaves the previous numbers copyable — they are still the numbers the
+  user is looking at. Disabling it on click would be a control disagreeing
+  with the cells beside it.
+
+Tk owns a selection rather than storing it: on Linux, close Tyche before
+pasting and the paste is empty, and nothing in the program can change that — a
+clipboard manager is what does. The status line therefore says the numbers
+were copied, not that they are safe.
 
 **Beside «Genera» the strip says nothing when nothing is wrong.** 1.0.7, and
 the rule generalises: a status line next to a button is read on every visit,

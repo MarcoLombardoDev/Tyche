@@ -12,6 +12,32 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.1.3] — 2026-09-16
+
+I numeri stanno sulla riga che hanno, e si possono copiare.
+
+### Corretto
+
+- **I numeri di una giocata andavano a capo dopo il sesto anche con mezza riga
+  libera davanti.** Sei per riga era scritto nel codice: sei è la misura di
+  una colonna, che è un fatto sul gioco e non sulla finestra, quindi il
+  settimo numero di un sistema finiva da solo sulla riga sotto con duecento
+  pixel vuoti accanto e il SuperStar isolato in fondo alla riga di sopra. Ora
+  la riga si misura: i numeri ci stanno tutti finché non arrivano al
+  SuperStar, e solo allora il successivo passa sotto.
+
+### Aggiunto
+
+- **Un pulsante «Copia risultati» accanto a «Genera».** Copia negli appunti le
+  combinazioni di tutti i metodi visibili a schermo, ognuna col nome del
+  metodo che l'ha prodotta e col SuperStar quando c'è. È spento finché non ci
+  sono previsioni da copiare.
+
+- Con i numeri viaggia anche la riga che li mette in proporzione: il punteggio
+  atteso è lo stesso per tutti i metodi, compreso quello casuale. Tutto il
+  resto di quella schermata resta indietro, e sei numeri incollati altrove
+  senza una parola intorno sembrerebbero un consiglio.
+
 ## [1.1.2] — 2026-09-14 — `7765b0e`
 
 Una scelta in meno, che poteva solo rompere qualcosa.

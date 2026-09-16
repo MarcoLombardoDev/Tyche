@@ -178,6 +178,50 @@ def _ticket_lines(prediction) -> list[str]:
     return lines
 
 
+def _clipboard_text(predictions: dict) -> str:
+    """The combinations on screen, as text somebody can take to a receiver.
+
+    **What is copied is what is visible**, in the order the cells are in, with
+    each method named — a column of six numbers with nothing round it would be
+    five identical-looking blocks by the time it reached a notepad, and the
+    whole point of showing five methods at once is knowing which is which.
+
+    **And the caveat travels with them.** Everything else on this screen —
+    the control cell, the expected score, the note about value — stays behind
+    when the numbers are copied out, so the numbers would arrive looking like
+    a recommendation from a program with a 330M-parameter model in it. One
+    line at the bottom is what stops that, and it is the same line the panel
+    has always printed.
+    """
+    first = next(iter(predictions.values()))
+    lines = [
+        "Tyche — combinazioni da giocare",
+        f"Archivio: {it_number(first.archive_size)} estrazioni fino al "
+        f"{it_date(first.archive_last_date)}.",
+        "",
+    ]
+    for method in METHODS:
+        prediction = predictions.get(method)
+        if prediction is None:
+            continue
+        lines.append(method_name(method))
+        for index, combination in enumerate(prediction.combinations, 1):
+            numbers = " ".join(f"{n:02d}" for n in combination)
+            star = (
+                f"   SuperStar {prediction.superstar:02d}"
+                if index == 1 and prediction.superstar is not None
+                else ""
+            )
+            lines.append(f"  {index}. {numbers}{star}")
+        lines.append("")
+    lines.append(
+        "Nessuno di questi metodi batte il caso: il punteggio atteso è lo "
+        f"stesso per tutti, {expected_hits(first.size):.3f} numeri indovinati "
+        "per estrazione, compreso il metodo casuale."
+    )
+    return "\n".join(lines)
+
+
 class _MethodCell(ctk.CTkFrame):
     """One method's answer: the numbers, and nothing else.
 
@@ -413,6 +457,18 @@ class PredictionPanel(ctk.CTkFrame):
         )
         self.button.pack(side="left")
 
+        # Dead until there is something to copy, which is the state it spends
+        # the first visit in: a button that answers a click by putting nothing
+        # on the clipboard is worse than one that visibly cannot be pressed.
+        # It follows what is *on screen* rather than what the last run did —
+        # so a run that fails leaves the previous numbers copyable, because
+        # they are still the numbers the user is looking at.
+        self.copy = ctk.CTkButton(
+            row, text="Copia risultati", width=140, command=self._copy,
+            state="disabled",
+        )
+        self.copy.pack(side="left", padx=(8, 0))
+
         # Beside the button, and *only when something is wrong*. The strip
         # used to say "TimesFM è pronto" there, which is a line the reader has
         # to process on every visit to learn that nothing needs doing. When it
@@ -584,11 +640,35 @@ class PredictionPanel(ctk.CTkFrame):
         """Give the button back. Runs after every job, successful or not."""
         self.button.configure(state="normal", text="Genera")
 
+    def _copy(self) -> None:
+        """Put the visible combinations on the clipboard.
+
+        **Tk owns the selection, so it lasts as long as the program does.**
+        On Linux the clipboard is a live conversation between windows rather
+        than a place bytes are kept, and whoever offered the last selection
+        answers for it — close Tyche before pasting and the paste comes back
+        empty. Nothing here can fix that (a clipboard manager, which most
+        desktops run, is what does), and it is why the status line says the
+        numbers were copied rather than that they are safe.
+        """
+        if not self._predictions:
+            return
+        text = _clipboard_text(self._predictions)
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        self.app.set_status(
+            f"Combinazioni copiate negli appunti: "
+            f"{it_count(len(self._predictions), 'metodo', 'metodi')}."
+        )
+
     # ── output ───────────────────────────────────────────────
     def _show(self, result) -> None:
         predictions, skipped, state = result
         self._predictions = predictions
         self.app.last_predictions = predictions
+        # The copy button follows the screen, not the run: it is live exactly
+        # when there are numbers in the cells to copy.
+        self.copy.configure(state="normal" if predictions else "disabled")
         for prediction in predictions.values():
             log_prediction(prediction.to_log_entry())
 
