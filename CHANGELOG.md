@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.3.0] — 2026-09-23
+## [1.3.0] — 2026-09-23 — `74881ae`
 
 Tyche è un unico eseguibile invece di una cartella. Lo sono tutti i sette
 prodotti di questa famiglia adesso; la regola sta in CLAUDE.md, insieme a
