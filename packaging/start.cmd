@@ -98,9 +98,11 @@ if not "%~1"=="" goto :foreground
 
 rem With none, which is what a double-click sends, this console has one job
 rem left: stay up while the program starts, and say what it is waiting for.
-rem Windows scans every file in a freshly unpacked folder before it will let
-rem any of them load, and this folder holds PyTorch, so the first launch is
-rem slow. A console that vanishes instantly leaves nothing on screen for it.
+rem A onefile build unpacks its whole payload into a temporary folder on
+rem every launch, and this one's payload holds PyTorch -- hundreds of
+rem megabytes, every time, not only the first. Windows then scans what was
+rem unpacked the first time it sees it, which is slower again. A console that
+rem vanishes instantly leaves nothing on screen for any of that.
 rem
 rem Asking Windows when the program is ready needs PowerShell. Without it there
 rem is no way to know, so hand off and let this window close at once.
@@ -109,9 +111,10 @@ if errorlevel 1 goto :handoff
 
 echo Avvio di %APP% in corso...
 echo.
-echo Il primo avvio richiede tempo: Windows controlla ogni file della cartella
-echo prima di poterne eseguire uno. Questa finestra si chiude da sola non
-echo appena %APP% compare sullo schermo.
+echo %APP% e' un unico file che si scompatta prima di partire, e contiene
+echo PyTorch: sono centinaia di megabyte, quindi l'attesa c'e' a ogni avvio e
+echo non solo al primo. Questa finestra si chiude da sola non appena %APP%
+echo compare sullo schermo.
 
 rem The path travels in a variable rather than inside the quoted -Command
 rem string, so a folder name containing a space or a quote cannot break the

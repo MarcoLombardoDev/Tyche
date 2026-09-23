@@ -12,6 +12,18 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.3.1] — 2026-09-23
+
+### Corretto
+
+- **La console dice quanto dura davvero l'attesa.** Diceva che il primo avvio
+  è il lento perché Windows controlla ogni file della cartella prima di
+  poterne eseguire uno: vero per una build a cartella. Questo è un file solo
+  che si scompatta prima di partire, e contiene PyTorch — centinaia di
+  megabyte, a **ogni** avvio, non solo al primo. Una console che promette due
+  volte che il ritardo è una tantum sta dicendo una cosa falsa sul computer di
+  chi la sta guardando.
+
 ## [1.3.0] — 2026-09-23 — `74881ae`
 
 Tyche è un unico eseguibile invece di una cartella. Lo sono tutti i sette
