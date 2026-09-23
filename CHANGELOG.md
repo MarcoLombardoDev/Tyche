@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.3.1] — 2026-09-23
+## [1.3.1] — 2026-09-23 — `c122cf9`
 
 ### Corretto
 
