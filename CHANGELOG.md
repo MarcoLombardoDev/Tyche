@@ -12,7 +12,7 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
-## [1.2.0] — 2026-09-23
+## [1.2.0] — 2026-09-23 — `529c9cb`
 
 Si possono escludere i numeri appena usciti. Non serve a niente, ed è misurato.
 
