@@ -188,10 +188,19 @@ def _run_validation(n_draws: int) -> int:
     from core.data_manager import load_settings
 
     settings = load_settings()
+    # Scored the way the ticket is actually played, for the reason picks is:
+    # validating a ticket nobody plays compares against a different game.
+    exclude_last = bool(settings.get("exclude_last_drawn", True))
     report = walk_forward(
         draws, methods=["casuale", "frequenza", "ritardo"], n_draws=n_draws,
         picks=int(settings.get("prediction_size", 6)),
+        exclude_last=exclude_last,
     )
+    if exclude_last:
+        print(
+            "i numeri dell'ultima estrazione sono esclusi da ogni metodo, "
+            "compreso quello casuale — come nelle previsioni"
+        )
     print(
         f"{report.draws_scored} estrazioni valutate, "
         f"dal {it_date(report.first_target.date)} "
@@ -537,6 +546,7 @@ def _run_forecast(method: str) -> int:
         draws, method=method, combinations=int(settings["combinations"]),
         size=int(settings.get("prediction_size", 6)),
         superstar=bool(settings.get("predict_superstar", False)),
+        exclude_last=bool(settings.get("exclude_last_drawn", True)),
         forecaster=forecaster, window=int(settings["frequency_window"]),
         weights=weights,
     )
@@ -546,6 +556,12 @@ def _run_forecast(method: str) -> int:
         f"archivio: {it_number(prediction.archive_size)} estrazioni fino al "
         f"{it_date(last)}\n"
     )
+    if prediction.excluded:
+        print(
+            "esclusi i numeri dell'ultima estrazione ("
+            + " ".join(f"{n:2d}" for n in prediction.excluded)
+            + ") — una preferenza, non un vantaggio: vedi --check\n"
+        )
     for i, combination in enumerate(prediction.combinations, 1):
         print(f"  {i}. " + "  ".join(f"{n:2d}" for n in combination))
     if prediction.size > 6:

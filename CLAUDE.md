@@ -56,8 +56,8 @@ the instruction that overrides them.
 ## Running the tests
 
 ```
-python -m pytest tests/ -q                                   # 429, 2 skipped
-TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 498, GUI included
+python -m pytest tests/ -q                                   # 434, 2 skipped
+TYCHE_REQUIRE_GUI=1 xvfb-run -a python -m pytest tests/ -q    # 505, GUI included
 python -m ruff check .
 ```
 
@@ -806,6 +806,90 @@ page for whatever the caller runs next.
   passes it; what went is the choice offered to somebody who cannot act on it.
   Before adding a setting, check that both of its values work in the build
   that ships.
+
+## Leaving out the numbers that just came out
+
+1.2.0, from the owner: "credo che dovrebbero sempre essere esclusi da tutti i
+modelli di previsione". `exclude_last_drawn` does it, on by default, for every
+method including the random control — and the honest account of what it is
+worth lives in `core.predictor.demote_last_drawn`'s docstring, where anybody
+changing the code reads it.
+
+**The measurement came first, and it was already in the program.** Two of the
+five tests `--check` runs answer this question directly on the archive:
+
+- `serial_independence_test` — P(a number comes out | it came out last time)
+  is **0.0660**, against 0.0667 for one that did not and 0.0667
+  unconditionally. p = 0.69.
+- `repeat_count_test` — consecutive draws share **0.396** numbers where
+  independent sampling predicts 0.400. p = 0.75.
+
+Then what the filter does to a ticket, over the last 1,000 draws of the
+archive this was measured on — the 3,076-draw mirror, to January 2020 —
+against 400 hits expected from chance with a standard error of 18.8:
+
+| | senza | con | colonne cambiate |
+|---|---|---|---|
+| frequenza | 369 | 375 | 499 |
+| ritardo | 418 | 418 | 0 |
+| casuale | 381 | 387 | 365 |
+
+**Read the third row first.** The filter improves the random number generator
+by exactly as much as it improves the frequency method — six hits each, a
+third of a standard error — which is the cleanest demonstration available
+that the six hits are arithmetic and not skill. `ritardo` does not move at
+all: a number drawn last time has a gap of zero and that method already had
+it last, so for one of the four this setting is a no-op by construction.
+
+Reproduce it with `walk_forward(..., exclude_last=True)` against the same run
+without; that is why the parameter exists on the harness and not only on
+`predict`. On 500 and 2,000 draws the picture is the same — the largest
+difference anywhere is six tenths of a standard error — and `ritardo` is
+exactly zero on all three, which is the structural result rather than a
+lucky slice.
+
+**So why ship it at all?** Because every column of six has the same chance
+whichever six it holds, so declining to play numbers that have just come out
+costs nothing — it is a preference about a ticket, like `prediction_size`,
+not a claim about odds. The owner asked for it and the default he asked for
+is the default it has. What the program owes in return is to never present it
+as an edge: the settings help carries the four numbers above, the Prediction
+report names the six numbers it removed and says the same thing in a
+sentence, `--forecast` prints it, and the line rides along in «Copia
+risultati» so the numbers do not arrive somewhere else looking filtered for a
+reason.
+
+Four decisions inside it:
+
+- **It reaches the random control.** Filtering the four methods that are
+  supposed to be skilful and not the one that is supposed to be chance would
+  make the control a control of something else, and the comparison the
+  Prediction panel exists for would be between two different games. Same
+  rule as the control randomising its own SuperStar.
+  `test_the_last_draws_numbers_are_left_out_of_every_method` walks `METHODS`
+  and fails when one is skipped — checked by mutation on `casuale`.
+- **It does not reach the SuperStar.** That is a separate drum which may
+  repeat one of the six, and does so 247 times against 223 expected on the
+  real archive. Striking the wheel's last six off it would not be a harmless
+  preference, it would be a claim about one urn made from another.
+  `test_the_superstar_is_not_filtered_with_the_six` holds it, and asserts its
+  own fixture is adversarial — checked by mutation.
+- **Demoted, not deleted.** `demote_last_drawn` moves them to the bottom of
+  the ranking and returns all ninety, so `scores` still describes the whole
+  field, a *sistema* of twelve still has numbers, and nothing has to
+  special-case the size. `build_combinations` takes from the top and never
+  reaches them.
+- **The backtest follows the setting**, the way `picks` does, and
+  `_without_the_last_draw` ties the struck numbers at a common floor rather
+  than keeping their old order among themselves: the ranking genuinely does
+  not distinguish between six numbers it has been told to leave out, so
+  `mid_ranks` should give them the mean of the last six places.
+
+**What deliberately does not follow it: the ensemble's weight fit.** Those
+weights measure which component ranks the ninety better, and demoting the
+same six numbers inside every candidate weighting tells that comparison
+nothing. Leaving it out also keeps a stored fit valid across a change to the
+setting, which is what `is_current` would otherwise have to learn about.
 
 ## Why one combination is the default
 

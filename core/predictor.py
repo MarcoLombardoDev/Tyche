@@ -90,6 +90,9 @@ class Prediction:
     # The SuperStar pick, when one was asked for. None means the ticket does
     # not play it, which is not the same as playing it and getting zero.
     superstar: int | None = None
+    # The numbers of the previous draw, when the ticket was asked to leave
+    # them out. Empty means it was not — see demote_last_drawn.
+    excluded: tuple[int, ...] = ()
 
     def to_log_entry(self) -> dict:
         entry = {
@@ -102,6 +105,11 @@ class Prediction:
             "combinations": [list(c) for c in self.combinations],
             "size": self.size,
             "superstar": self.superstar,
+            # Always written, empty list included: which numbers the ticket
+            # was told to leave out is part of how it was produced, and a key
+            # that appears only sometimes cannot tell "the filter was off"
+            # from "this entry predates the filter".
+            "excluded": list(self.excluded),
             "top_scores": {str(n): round(self.scores[n], 6) for n in self.ranked[:12]},
         }
         # The ensemble's weights, when there are any. A logged prediction that
@@ -262,6 +270,66 @@ def rank_numbers(scores: dict[int, float], descending: bool = True) -> list[int]
 
 
 # ─────────────────────────────────────────────────────────────
+# Leaving out what just came out
+# ─────────────────────────────────────────────────────────────
+
+def demote_last_drawn(
+    ranked: list[int], draws: list[Draw]
+) -> tuple[list[int], tuple[int, ...]]:
+    """Move the previous draw's six numbers to the bottom of the ranking.
+
+    **This does not improve anything, and the program must not pretend it
+    does.** Tyche already measures the belief behind it, in two of the five
+    tests `--check` runs on the archive:
+
+    - `serial_independence_test` — P(a number comes out | it came out last
+      time) is 0.0660 against 0.0667 for one that did not, and 0.0667
+      unconditionally. p = 0.69.
+    - `repeat_count_test` — consecutive draws share 0.396 numbers on average
+      where independent sampling predicts 0.400. p = 0.75.
+
+    So a number that has just been drawn is as likely as any other, and every
+    column of six has the same chance whichever six it holds. What this
+    changes is *which* ticket the methods hand over, not how often it wins.
+    Measured over the last 1,000 draws of the archive on this machine — the
+    3,076-draw mirror, to January 2020 — against 400 hits expected from
+    chance with a standard error of 18.8. Re-run it with
+    ``walk_forward(..., exclude_last=True)`` against the same call without,
+    rather than trusting these:
+
+    ==========  ========  ========  ===========================
+    metodo      senza     con       colonne cambiate su 1.000
+    ==========  ========  ========  ===========================
+    frequenza   369       375       499
+    ritardo     418       418       0
+    casuale     381       387       365
+    ==========  ========  ========  ===========================
+
+    Read the third row before the first. **The filter "improves" the random
+    number generator by exactly as much as it improves the frequency
+    method** — six hits each, a third of a standard error — which is the
+    cleanest demonstration available that the six hits are arithmetic noise
+    and not skill. And `ritardo` does not move at all, because a number drawn
+    last time has a gap of zero and that method already had it last.
+
+    It is offered because a player may simply not want to play numbers that
+    have just come out, which is a preference about a ticket and costs
+    nothing. It is not offered as an edge.
+
+    **Demoted rather than deleted.** The ranking keeps all ninety numbers, so
+    `scores` still describes the whole field and a *sistema* wide enough to
+    need them still works; :func:`build_combinations` takes from the top and
+    simply never reaches them. Returns the new order and what was moved.
+    """
+    if not draws:
+        return ranked, ()
+    last = set(draws[-1].numbers)
+    kept = [n for n in ranked if n not in last]
+    moved = [n for n in ranked if n in last]
+    return kept + moved, tuple(sorted(moved))
+
+
+# ─────────────────────────────────────────────────────────────
 # Combinations
 # ─────────────────────────────────────────────────────────────
 
@@ -296,6 +364,7 @@ def predict(
     superstar: bool = False,
     progress=None,
     weights=None,
+    exclude_last: bool = False,
 ) -> Prediction:
     """Produce a :class:`Prediction` with the named method.
 
@@ -314,6 +383,14 @@ def predict(
     is validated here so a bad setting fails at the point it is used rather
     than inside the combinatorics. ``superstar`` adds a SuperStar pick, scored
     from its own drum's history.
+
+    ``exclude_last`` leaves the previous draw's six numbers out of the
+    combinations — see :func:`demote_last_drawn`, which says what it is worth
+    (nothing) and what it changes (which ticket, not how often it wins). It is
+    applied here, to the ranking, so it reaches **every method including the
+    random control**: filtering the four that are supposed to be skilful and
+    not the one that is supposed to be chance would make the control a
+    control of something else.
     """
     _check_system_size(size)
     if method not in METHODS:
@@ -360,11 +437,20 @@ def predict(
         note = "Punteggi pseudo-casuali con seme fisso — la condizione di controllo."
 
     ranked = rank_numbers(scores)
+    excluded: tuple[int, ...] = ()
+    if exclude_last:
+        ranked, excluded = demote_last_drawn(ranked, draws)
 
     # The SuperStar is ranked by its own history, never by the main scores —
     # separate drum, separate question — and by *this method's* way of asking
     # it. The random baseline stays random here too, so the control condition
     # is a control on the whole ticket.
+    #
+    # ``exclude_last`` deliberately does not reach it. The SuperStar comes out
+    # of a drum of its own that may repeat one of the six, and on the real
+    # archive it does so 247 times against 223 expected — so striking the
+    # wheel's last six off the SuperStar would not be a harmless preference
+    # like the one above, it would be a claim about one urn made from another.
     star = None
     if superstar:
         star = superstar_pick(
@@ -389,6 +475,7 @@ def predict(
         detail=detail,
         size=size,
         superstar=star,
+        excluded=excluded,
     )
 
 

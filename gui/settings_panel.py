@@ -80,6 +80,18 @@ FIELDS = [
      "sempre, e viene scelto sulla storia della sua urna e non su quella dei "
      "sei — ogni metodo lo sceglie a modo suo. Con questa attiva la previsione "
      "di TimesFM costa il doppio: sono due passate del modello, una per urna."),
+    ("exclude_last_drawn", "Escludi i numeri dell'ultima estrazione", "bool",
+     "Toglie dalle combinazioni i sei numeri usciti l'ultima volta, per tutti "
+     "i metodi compreso quello casuale. Non migliora niente, e l'archivio lo "
+     "dice da sé: due dei cinque test di «--check» misurano proprio questo, e "
+     "la scheda Previsione ne stampa il risultato aggiornato sotto le "
+     "combinazioni — un numero appena uscito vale quanto ogni altro. Provata "
+     "sulle ultime 1.000 estrazioni, l'esclusione fa guadagnare 6 numeri "
+     "indovinati al metodo frequenza e 6 anche al generatore casuale, su un "
+     "errore tipo di 18,8: cioè niente, per entrambi. Cambia quale schedina "
+     "esce, non quanto vince. Il ritardo non cambia affatto, perché un numero "
+     "appena uscito ha ritardo zero ed era già ultimo. Il SuperStar non è "
+     "toccato: è un'altra urna, e può ripetere uno dei sei."),
     ("column_price", "Costo di una colonna (euro)", "text",
      "Quanto costa una singola colonna da sei numeri. Serve solo a calcolare "
      "il costo della giocata mostrata nella scheda Previsione: è un prezzo "

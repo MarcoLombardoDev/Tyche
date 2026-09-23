@@ -2364,6 +2364,157 @@ def test_the_self_check_fails_a_bundle_whose_loader_cannot_read_weights(monkeypa
     )
 
 
+class _FlatForecaster:
+    """A stand-in model: ninety numbers, ninety slightly different scores.
+
+    Enough for a test about the ranking, and it needs neither torch nor the
+    1.3 GB of weights. Not flat in the literal sense — a genuinely flat score
+    would make the ranking the tie-break's, which is a different test.
+    """
+
+    def score_numbers(self, history, progress=None):
+        return {n: 1.0 / (n + 10) for n in range(1, 91)}
+
+    def score_superstar(self, history, progress=None):
+        return {n: 1.0 / (n + 10) for n in range(1, 91)}
+
+
+def _forced_last_draw(draws, numbers):
+    """The same archive with its final draw replaced by ``numbers``.
+
+    A filter on "the last draw's numbers" is only exercised when those numbers
+    are ones the method would otherwise have played, and on a random archive
+    the overlap is 0.4 numbers — so most runs of a test like this would assert
+    nothing. Forcing the last draw makes the case the filter exists for.
+    """
+    import dataclasses
+
+    return draws[:-1] + [dataclasses.replace(draws[-1], numbers=tuple(numbers))]
+
+
+def test_the_last_draws_numbers_are_left_out_of_every_method():
+    """Including the random control, which is the half that is easy to skip.
+
+    Filtering the four methods that are supposed to be skilful and not the
+    one that is supposed to be chance would make the control a control of
+    something else — and the comparison the whole Prediction panel exists for
+    would be between two different games.
+    """
+    from core.ensemble import Weights
+    from core.predictor import METHODS, predict
+
+    draws = archive_with_superstars(400)
+    forecaster = _FlatForecaster()
+    # An ensemble of the two baselines, so this test needs no model. The point
+    # here is the filter reaching every method, not what the weights are.
+    weights = Weights({"ritardo": 0.5, "frequenza": 0.5})
+    for method in METHODS:
+        extra = {"weights": weights} if method == "ensemble" else {}
+        if method in ("timesfm", "ensemble"):
+            extra["forecaster"] = forecaster
+        top = predict(
+            draws, method=method, combinations=1, seed=3, **extra,
+        ).combinations[0]
+        # Force the previous draw to be exactly what this method wanted, so
+        # the filter has something to do.
+        forced = _forced_last_draw(draws, top)
+        after = predict(
+            forced, method=method, combinations=1, seed=3,
+            exclude_last=True, **extra,
+        )
+        assert set(after.excluded) == set(top), method
+        played = set(after.combinations[0])
+        assert not played & set(top), (
+            f"{method} played {sorted(played & set(top))}, which just came out"
+        )
+
+
+def test_leaving_them_out_demotes_them_rather_than_deleting_them():
+    """The ranking keeps all ninety, so a wide system still has numbers.
+
+    ``build_combinations`` takes from the top and simply never reaches them,
+    which means nothing has to special-case the size: a *sistema* of twelve
+    works, and the scores the report prints still describe the whole field.
+    """
+    from core.predictor import predict
+
+    draws = archive_with_superstars(400)
+    top = predict(draws, method="frequenza", combinations=1, size=12).combinations[0]
+    forced = _forced_last_draw(draws, top[:6])
+    after = predict(
+        forced, method="frequenza", combinations=1, size=12, exclude_last=True,
+    )
+    assert len(after.ranked) == 90
+    assert sorted(after.ranked) == list(range(1, 91))
+    assert len(after.scores) == 90
+    assert len(after.combinations[0]) == 12
+    assert set(after.ranked[-6:]) == set(top[:6]), "they are not at the bottom"
+
+
+def test_the_superstar_is_not_filtered_with_the_six():
+    """Separate drum, separate question — and it may repeat one of the six.
+
+    On the real archive the SuperStar matches one of the wheel's numbers 247
+    times against 223 expected, which is the check that the two urns really
+    are independent. Striking the wheel's last six off the SuperStar would
+    not be the harmless preference the filter is; it would be a claim about
+    one urn made from another.
+    """
+    from core.predictor import predict
+
+    draws = archive_with_superstars(400)
+    plain = predict(draws, method="frequenza", combinations=1, superstar=True, seed=5)
+    forced = _forced_last_draw(draws, [plain.superstar, *range(1, 6)])
+    filtered = predict(
+        forced, method="frequenza", combinations=1, superstar=True, seed=5,
+        exclude_last=True,
+    )
+    assert filtered.superstar == plain.superstar
+    assert filtered.superstar in filtered.excluded, "the fixture proves nothing"
+
+
+def test_the_delay_method_was_already_doing_it():
+    """A number drawn last time has a gap of zero, so ritardo had it last.
+
+    Worth pinning because it is the honest answer to "which methods does this
+    change?" — and because a future version of the filter that reordered
+    something it should not would show up here first.
+    """
+    from core.predictor import predict
+
+    draws = archive_with_superstars(400)
+    plain = predict(draws, method="ritardo", combinations=5, size=9)
+    after = predict(draws, method="ritardo", combinations=5, size=9, exclude_last=True)
+    assert after.combinations == plain.combinations
+
+
+def test_the_backtest_can_score_the_ticket_the_setting_produces():
+    """Because "it changes nothing" has to be re-runnable, not asserted.
+
+    The harness scores the same reordering the prediction plays, so the claim
+    in the settings help — that the filter moves the frequency method and the
+    random control by the same noise — is something the program can be asked
+    to reproduce rather than something the documentation states.
+    """
+    from core.validation import _without_the_last_draw, walk_forward
+
+    draws = random_archive(400)
+    struck = set(draws[-1].numbers)
+    scores = {n: float(n) for n in range(1, 91)}
+    demoted = _without_the_last_draw(scores, draws[-1])
+    assert len(demoted) == 90
+    assert max(demoted[n] for n in struck) < min(
+        v for n, v in demoted.items() if n not in struck
+    )
+    assert scores[90] == 90.0, "the harness mutated the scores it was given"
+
+    plain = walk_forward(draws, methods=["ritardo"], n_draws=40)
+    filtered = walk_forward(draws, methods=["ritardo"], n_draws=40, exclude_last=True)
+    # Same reason as the test above: ritardo already ranks them last, so the
+    # harness must agree with the predictor about that being a no-op.
+    assert filtered.results[0].total_hits == plain.results[0].total_hits
+
+
 def test_each_method_picks_its_own_superstar():
     """Three of the four printed the same one, and the owner saw it on screen.
 

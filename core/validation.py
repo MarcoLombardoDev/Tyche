@@ -173,6 +173,23 @@ class ValidationReport:
         )
 
 
+def _without_the_last_draw(scores: dict[int, float], last: Draw) -> dict[int, float]:
+    """The same scores with the previous draw's numbers put below all others.
+
+    Below, and tied with each other: the ranking really does not distinguish
+    among six numbers it has been told to leave out, so `mid_ranks` should
+    give them the mean of the last six places rather than an order invented
+    by whatever they scored before being struck out.
+
+    A copy, because ``_scores`` may hand back something a component is
+    holding on to, and a harness that mutates its inputs is a leak waiting to
+    be written.
+    """
+    floor = min(scores.values()) - 1.0
+    struck = set(last.numbers)
+    return {n: (floor if n in struck else v) for n, v in scores.items()}
+
+
 def walk_forward(
     draws: list[Draw],
     methods: list[str] | None = None,
@@ -183,11 +200,22 @@ def walk_forward(
     seed: int = 0,
     min_history: int = MIN_HISTORY,
     progress=None,
+    exclude_last: bool = False,
 ) -> ValidationReport:
     """Score each method over the last ``n_draws`` draws of the archive.
 
     ``forecaster`` is only consulted for the ``"timesfm"`` method; leave it
     None and pass the baselines to run the whole harness with no model.
+
+    ``exclude_last`` scores the ticket the setting of the same name produces:
+    the previous draw's six numbers pushed to the bottom of every method's
+    ranking, the random control included. It follows the setting for the
+    reason ``picks`` does — validating a ticket the user is not playing
+    compares against a different game — and it is also what makes "leaving
+    them out does nothing" a claim somebody can re-run here rather than take
+    on trust. On the archive, over 1,000 draws, it moves the frequency method
+    and the random control by the same six hits against a standard error of
+    18.8, and `ritardo` not at all.
 
     The random baseline is re-seeded per target draw, from ``seed`` and the
     target's index, so it is reproducible without being the *same* six numbers
@@ -234,6 +262,8 @@ def walk_forward(
         actual = set(draws[i].numbers)
         for method in methods:
             scores = _scores(method, history, window, seed + i, forecaster)
+            if exclude_last and history:
+                scores = _without_the_last_draw(scores, history[-1])
             judged = score_draw(scores, actual, tops)
             hits[method].append(judged.top_hits[picks])
             rank_sum[method] += judged.mean_rank

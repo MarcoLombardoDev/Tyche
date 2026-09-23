@@ -112,6 +112,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Whether the ticket plays the SuperStar too. Off by default: it is a
     # separate drum and a separate stake, so it should be asked for.
     "predict_superstar": True,
+    # Whether to leave the previous draw's six numbers out of every method's
+    # combinations. On by default, on the owner's instruction, and the
+    # honest description of it is in core.predictor.demote_last_drawn: the
+    # archive's own tests say a number that has just come out is as likely as
+    # any other, so this changes which ticket is handed over and not how
+    # often it wins. A preference about a ticket, not an edge.
+    "exclude_last_drawn": True,
     # What a play costs at the receiver. Set by the operator rather than by
     # arithmetic, so they are settings: if either changes, edit the number.
     "column_price": 1.00,

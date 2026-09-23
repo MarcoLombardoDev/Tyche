@@ -10,6 +10,7 @@
   "combinations": 1,
   "prediction_size": 6,
   "predict_superstar": true,
+  "exclude_last_drawn": true,
   "column_price": 1.0,
   "superstar_price": 0.5
 }

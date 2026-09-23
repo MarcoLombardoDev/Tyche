@@ -1460,6 +1460,46 @@ def test_a_line_that_wraps_was_a_full_one(app):
         )
 
 
+def test_the_report_says_which_numbers_it_left_out(app):
+    """A ticket that silently omits six numbers cannot be checked.
+
+    The cells show a ranking and the report shows the scores behind it, so a
+    reader who cannot see why the top of one is missing from the other is
+    being asked to trust the panel — which is the one thing this panel is
+    built not to require. The same line carries the measurement, because
+    naming the filter without it reads as the program endorsing the belief.
+    """
+    app.settings["exclude_last_drawn"] = True
+    panel = _generate(app)
+    app.update()
+
+    excluded = panel._predictions["frequenza"].excluded
+    assert len(excluded) == 6
+    assert set(excluded) == set(app.draws[-1].numbers)
+
+    report = panel.report.get("1.0", "end")
+    assert "Esclusi i sei numeri dell'ultima estrazione" in report
+    for n in excluded:
+        assert f"{n:02d}" in report
+    assert "0.400" in report, "the line states no measurement"
+    assert "compreso quello casuale" in report
+
+
+def test_nothing_is_left_out_when_the_setting_is_off(app):
+    """The other direction, which the test above passes without.
+
+    Checked by mutation: a `predict` that always filtered would satisfy every
+    assertion up there and quietly override the setting.
+    """
+    app.settings["exclude_last_drawn"] = False
+    panel = _generate(app)
+    app.update()
+
+    for method, prediction in panel._predictions.items():
+        assert prediction.excluded == (), method
+    assert "Esclusi i sei numeri" not in panel.report.get("1.0", "end")
+
+
 def test_the_copy_button_waits_until_there_is_something_to_copy(app):
     """Dead on arrival, live once the cells hold numbers.
 

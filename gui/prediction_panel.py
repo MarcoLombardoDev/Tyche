@@ -178,6 +178,44 @@ def _ticket_lines(prediction) -> list[str]:
     return lines
 
 
+def _excluded_lines(prediction, draws) -> list[str]:
+    """What the "leave out the last draw" setting did, and what it is worth.
+
+    Printed whenever the filter is on, because a ticket that silently omits
+    six numbers is a ticket the reader cannot check against the ranking
+    beside it. The measurement is not a disclaimer bolted on: without it the
+    line reads as the program endorsing the belief that produced the setting.
+
+    **And it is measured here, on this archive, rather than quoted.** Two of
+    the five tests `--check` runs answer exactly this question, so the line
+    asks them instead of carrying numbers written down on the day the feature
+    was built — which would be right until somebody updated the archive and
+    then quietly wrong, with nothing to say it had changed. They are two
+    passes over the draws, a few milliseconds on four thousand of them.
+    """
+    if not prediction.excluded:
+        return []
+    from core.randomness import repeat_count_test, serial_independence_test
+
+    numbers = " ".join(f"{n:02d}" for n in prediction.excluded)
+    lines = [
+        f"Esclusi i sei numeri dell'ultima estrazione: {numbers}.",
+        "  Vale per tutti i metodi, compreso quello casuale — filtrarne quattro "
+        "su cinque farebbe del controllo il controllo di un'altra cosa. Il "
+        "SuperStar no: è un'altra urna, e può ripetere uno dei sei.",
+        "  Non cambia le probabilità di niente, e questo archivio lo misura da "
+        "sé — sono due dei cinque test di «--check»:",
+    ]
+    for test in (repeat_count_test(draws), serial_independence_test(draws)):
+        lines.append(f"    {test.name}: {test.detail}")
+    lines += [
+        "  Cambia quale schedina esce, non quanto vince. Si disattiva nelle "
+        "Impostazioni.",
+        "",
+    ]
+    return lines
+
+
 def _clipboard_text(predictions: dict) -> str:
     """The combinations on screen, as text somebody can take to a receiver.
 
@@ -214,6 +252,12 @@ def _clipboard_text(predictions: dict) -> str:
             )
             lines.append(f"  {index}. {numbers}{star}")
         lines.append("")
+    if first.excluded:
+        lines.append(
+            "Esclusi i numeri dell'ultima estrazione ("
+            + " ".join(f"{n:02d}" for n in first.excluded)
+            + "), che è una preferenza e non un vantaggio."
+        )
     lines.append(
         "Nessuno di questi metodi batte il caso: il punteggio atteso è lo "
         f"stesso per tutti, {expected_hits(first.size):.3f} numeri indovinati "
@@ -556,7 +600,7 @@ class PredictionPanel(ctk.CTkFrame):
             draws, method="ensemble", combinations=state["count"],
             size=state["size"], superstar=state["star"], window=window,
             forecaster=forecaster, weights=weights_from_record(record),
-            progress=report,
+            exclude_last=state["exclude_last"], progress=report,
         )
 
     def _generate(self) -> None:
@@ -571,6 +615,7 @@ class PredictionPanel(ctk.CTkFrame):
 
         size = int(settings.get("prediction_size", 6))
         star = bool(settings.get("predict_superstar", False))
+        skip_last = bool(settings.get("exclude_last_drawn", True))
         window = int(settings.get("frequency_window", DEFAULT_WINDOW))
         with_model = self.model_status.available
 
@@ -609,13 +654,14 @@ class PredictionPanel(ctk.CTkFrame):
                 report(f"{method_name(method)}…", 0.0)
                 results[method] = predict(
                     draws, method=method, combinations=count, size=size,
-                    superstar=star, window=window,
+                    superstar=star, window=window, exclude_last=skip_last,
                     forecaster=forecaster if method == "timesfm" else None,
                     progress=report if method == "timesfm" else None,
                 )
 
             state = {
                 "count": count, "size": size, "star": star,
+                "exclude_last": skip_last,
                 "record": None, "prediction": None, "error": "",
                 "recalibrated": False,
             }
@@ -716,6 +762,7 @@ class PredictionPanel(ctk.CTkFrame):
             f"{expected_hits(any_prediction.size):.3f} numeri indovinati per "
             "estrazione.",
             "",
+            *_excluded_lines(any_prediction, self.app.draws),
             *_ticket_lines(any_prediction),
             "",
             *_cost_lines(any_prediction, cost),

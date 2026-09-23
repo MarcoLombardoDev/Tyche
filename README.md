@@ -43,7 +43,7 @@ sistemarlo.
 | 3 | **La previsione** | Il punto di arrivo: tutti e cinque i metodi insieme, con quanto costa la giocata e quanto vale. |
 
 Fuori percorso c'è **Impostazioni**: checkpoint, token Hugging Face, numeri
-per combinazione, SuperStar e prezzi. Le frequenze, i ritardi, le
+per combinazione, SuperStar, esclusione dei numeri appena usciti e prezzi. Le frequenze, i ritardi, le
 decine e le coppie — ogni tabella con accanto il valore che produrrebbe il caso
 — stanno nella colonna destra della scheda **Archivio**, dove dalla 0.11.0 sono
 state portate: erano una scheda a sé, che si apriva una volta e mai più.
@@ -264,6 +264,46 @@ estrazioni, sei numeri per volta:
 
 Il caso vale 0,4000. Nessuno lo batte, modello da 330 milioni di parametri
 compreso.
+
+### Escludere i numeri appena usciti
+
+Sembra la cosa più ovvia da fare, ed è l'impostazione **«Escludi i numeri
+dell'ultima estrazione»**, attiva di default. Due righe della tabella qui
+sopra dicono già che non serve: l'estrazione precedente non dice nulla su
+quella dopo (p = 0,33), e due estrazioni consecutive hanno in comune 0,391
+numeri dove il caso ne prevede 0,400. Un numero appena uscito vale quanto
+ogni altro.
+
+Provata comunque, perché una misura vale più di un argomento. Ultime 1.000
+estrazioni, 400 centri attesi dal caso, errore tipo 18,8:
+
+| Metodo | Senza esclusione | Con | Colonne cambiate su 1.000 |
+|---|---|---|---|
+| frequenza | 369 | 375 | 499 |
+| ritardo | 418 | 418 | 0 |
+| casuale | 381 | 387 | 365 |
+
+**Si legga la terza riga per prima.** L'esclusione fa guadagnare al
+generatore casuale esattamente quanto fa guadagnare al metodo frequenza: sei
+centri per ciascuno, un terzo di un errore tipo. È la dimostrazione più
+pulita che quei sei centri sono aritmetica e non bravura. Su 500 e su 2.000
+estrazioni il quadro non cambia — la differenza più grande che si vede è di
+sei decimi di errore tipo. E il *ritardo* non si muove di un centro su
+nessuna delle tre: un numero appena uscito ha ritardo zero, quindi quel
+metodo lo teneva già per ultimo.
+
+L'impostazione resta perché rinunciare a giocare sei numeri non costa niente
+— ogni colonna di sei vale quanto ogni altra, quali che siano i sei — e c'è
+chi preferisce non rigiocarli. È una preferenza sulla schedina, come quanti
+numeri giocare; non è un vantaggio, e il programma non la presenta come
+tale. Vale per tutti i metodi, **compreso quello casuale**: filtrarne quattro
+su cinque farebbe del controllo il controllo di un'altra cosa. Il SuperStar
+non è toccato, perché esce da un'altra urna e può ripetere uno dei sei — lo
+fa 247 volte contro le 223 attese.
+
+Si rifà con `python main.py --validate 1000` da entrambe le posizioni
+dell'impostazione: il backtest valuta la schedina che l'impostazione produce
+davvero.
 
 ---
 

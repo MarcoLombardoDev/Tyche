@@ -12,6 +12,44 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.2.0] — 2026-09-23
+
+Si possono escludere i numeri appena usciti. Non serve a niente, ed è misurato.
+
+### Aggiunto
+
+- **«Escludi i numeri dell'ultima estrazione» nelle Impostazioni, attiva di
+  default.** Toglie dalle combinazioni i sei numeri usciti l'ultima volta,
+  per tutti i metodi, **compreso quello casuale**: filtrarne quattro su
+  cinque farebbe del controllo il controllo di un'altra cosa. Il SuperStar
+  non è toccato — è un'altra urna e può ripetere uno dei sei.
+
+- **Quanto vale, in numeri.** L'archivio lo misurava già in due dei cinque
+  test di `--check`: due estrazioni consecutive hanno 0,396 numeri in comune
+  dove il caso ne prevede 0,400, e un numero già uscito riesce con
+  probabilità 0,0660 contro 0,0667 di uno che non era uscito. Provando
+  l'esclusione sulle ultime 1.000 estrazioni, con 400 centri attesi dal caso
+  e un errore tipo di 18,8:
+
+  | metodo | senza | con | colonne cambiate |
+  |---|---|---|---|
+  | frequenza | 369 | 375 | 499 |
+  | ritardo | 418 | 418 | 0 |
+  | casuale | 381 | 387 | 365 |
+
+  L'esclusione fa guadagnare al generatore casuale esattamente quanto fa
+  guadagnare al metodo frequenza. Cambia quale schedina esce, non quanto
+  vince — ed è offerta come preferenza, non come vantaggio. Il ritardo non
+  si muove affatto: un numero appena uscito ha ritardo zero ed era già
+  ultimo in quella graduatoria.
+
+### Modificato
+
+- La scheda Previsione dice quali sei numeri ha escluso e perché non cambia
+  le probabilità; la riga finisce anche nel testo copiato da «Copia
+  risultati». `--forecast` la stampa, e `--validate` valuta la schedina che
+  l'impostazione produce davvero, come già fa con i numeri per combinazione.
+
 ## [1.1.3] — 2026-09-16 — `8f82224`
 
 I numeri stanno sulla riga che hanno, e si possono copiare.
