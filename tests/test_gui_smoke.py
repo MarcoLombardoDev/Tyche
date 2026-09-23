@@ -1410,7 +1410,18 @@ def test_the_seventh_number_stays_on_the_line_with_the_other_six(app):
     a column, which is a fact about the game and not about the window. The
     rule now is the one a reader would state: they stay on one line until they
     would reach the SuperStar.
+
+    **What is asserted is that rule, not a number of lines.** This used to say
+    "seven fit on one line" flatly, which is only true of a window wide enough
+    for seven — and one day a windows-latest runner handed out a narrower one,
+    so the widget wrapped, which is it obeying the rule, and the test called
+    that a failure. A count of lines is a fact about somebody else's screen.
+    The line's width is what the rule is made of, so that is what is measured
+    here, against the same obstacle ``_room_for_badges`` measures against.
     """
+    from gui.prediction_panel import BADGE_SIZE
+    from gui.widgets import BADGE_GAP
+
     app.settings["prediction_size"] = 7
     app.settings["predict_superstar"] = True
     panel = _generate(app)
@@ -1418,6 +1429,26 @@ def test_the_seventh_number_stays_on_the_line_with_the_other_six(app):
 
     first = panel._cells["frequenza"].balls.winfo_children()[0]
     rows = _rows(_balls(first))
+    star = _star_of(first)
+
+    # The frame the balls are gridded in, which is what the widget measures
+    # from; a ball's own left edge is inset by its padding and would give an
+    # answer a pixel or two short of the one the code worked with.
+    frame = rows[0][0].master
+    step = BADGE_SIZE + 2 * BADGE_GAP
+    room = star.winfo_rootx() - frame.winfo_rootx()
+    fits = max(1, min(7, room // step))
+
+    assert len(rows[0]) == fits, (
+        f"the first line holds {len(rows[0])} numbers where {room} pixels "
+        f"before the SuperStar have room for {fits}"
+    )
+
+    if fits < 7:
+        pytest.skip(
+            f"this screen leaves {room} pixels before the SuperStar, room for "
+            f"{fits} numbers and not seven — the rule above was still checked"
+        )
     assert len(rows) == 1, (
         f"seven numbers were laid out on {len(rows)} lines with room for one"
     )

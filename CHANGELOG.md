@@ -16,6 +16,19 @@ Niente, per ora.
 
 ### Corretto
 
+- **Un test asseriva una cosa sullo schermo del runner, non sul programma.**
+  `test_the_seventh_number_stays_on_the_line_with_the_other_six` diceva «sette
+  su una riga» in assoluto, che è vero solo su una finestra abbastanza larga:
+  un runner `windows-latest` ne ha concessa una più stretta, il widget è
+  andato a capo — cioè ha fatto esattamente quello che la regola della 1.1.3
+  gli chiede — e il test ha chiamato fallimento l'obbedienza. Ora misura lo
+  spazio fino alla SuperStar con lo stesso metro di `_room_for_badges`, che
+  restituisce lo stesso identico valore che usa il widget, e verifica che la
+  prima riga contenga quel numero di palline: la regola, non il suo esito su
+  un monitor particolare. Dove lo spazio per sette c'è, la pretesa «una riga
+  sola» resta e viene verificata; dove non c'è, il test salta dicendo quanti
+  pixel ha trovato.
+
 - **La console dice quanto dura davvero l'attesa.** Diceva che il primo avvio
   è il lento perché Windows controlla ogni file della cartella prima di
   poterne eseguire uno: vero per una build a cartella. Questo è un file solo
