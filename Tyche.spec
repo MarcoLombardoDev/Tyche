@@ -10,20 +10,25 @@
 # dist/Tyche/, which the release workflow packages — one per platform, each
 # built on its own runner, because PyInstaller does not cross-compile.
 #
-# **A folder, not a single file, and that is the one real divergence from
-# Argus's spec.** Argus freezes to --onefile, which is tidier: one executable,
-# nothing to unpack. A onefile build works by packing everything into the
-# executable and extracting it to a temporary folder on *every* launch. Argus
-# gets away with it. Tyche bundles PyTorch: the built folder is around 400 MB
-# and zips to 160 MB, and extracting that on every start would mean waiting to
-# see a window every single time. A folder build starts immediately and the
-# archive is no bigger for it.
+# **One file, and Tyche is the product this costs the most.** Every product in
+# this family freezes to a single executable; CLAUDE.md carries the rule. A
+# onefile build works by packing everything into the executable and extracting
+# it to a temporary folder on *every* launch, and Tyche bundles PyTorch — the
+# collected payload is around 400 MB. So the window takes noticeably longer to
+# appear here than in any sibling, every single time, and that is not a bug to
+# be reported. It is said in the README where a user will meet it, and a test
+# holds that sentence in place.
+#
+# This was a folder build until 1.3.0 and the divergence was deliberate then.
+# It was given up for consistency across the seven products, not for any
+# technical reason.
 #
 # User data — config/settings.json, data/ — is written next to the executable,
 # not inside the bundle. core/paths.py::writable_base_dir is the single place
-# that decides that, and it reads sys.executable when frozen, which for a
-# folder build is dist/Tyche/Tyche.exe. Copy the folder anywhere and the
-# archive travels with it.
+# that decides that, and it reads sys.executable when frozen. That still points
+# at the executable itself in a onefile build, not at the temporary folder, so
+# the behaviour is unchanged: put the file where you like and its data sits
+# beside it.
 #
 # Torch decides how big this gets. Build from a virtualenv with the CPU-only
 # wheel installed (pip install torch --index-url
@@ -131,8 +136,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.datas,
     [],
-    exclude_binaries=True,
     name="Tyche",
     debug=False,
     bootloader_ignore_signals=False,
@@ -160,14 +166,5 @@ exe = EXE(
     # line of the spec. Linux gets None: PyInstaller ignores the icon there
     # and says so in a warning on every build.
     icon=_ICON_FOR_EXE,
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name="Tyche",
+    runtime_tmpdir=None,
 )

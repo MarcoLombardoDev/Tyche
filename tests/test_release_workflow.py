@@ -601,11 +601,44 @@ def test_the_committed_icns_is_a_real_icns():
     assert b"ic11" in seen and b"ic12" in seen
 
 
-def test_the_spec_builds_a_folder_and_not_one_file():
-    """Bundling PyTorch into onefile means unpacking it on every launch."""
+def test_the_spec_builds_one_file_and_says_what_that_costs():
+    """This used to assert the opposite, and the reversal is the point.
+
+    Bundling PyTorch into onefile means unpacking it on every launch, and
+    Tyche was a folder build for exactly that reason. The rule in CLAUDE.md
+    won on consistency across the seven products rather than on any technical
+    argument, so the cost did not go away — it moved into the README, where a
+    user meets it before wondering whether the program has hung.
+    """
     spec = (REPO / "Tyche.spec").read_text(encoding="utf-8")
-    assert "COLLECT(" in spec
-    assert "exclude_binaries=True" in spec
+    assert "COLLECT(" not in spec, "back to a folder build; CLAUDE.md says one file"
+    assert "exclude_binaries" not in spec
+
+    readme = (REPO / "README.md").read_text(encoding="utf-8")
+    assert "scompattato in una cartella temporanea a" in readme, (
+        "the README no longer tells a user why the first window takes a while"
+    )
+
+
+def test_the_windows_launcher_waits_the_way_a_onefile_build_needs():
+    """A onefile bootloader unpacks and re-runs itself.
+
+    The process ``Start-Process`` returns is the bootloader; the child draws
+    the window and the bootloader never gets a message loop. Waiting on the
+    returned handle waits out the whole timeout while the program is on
+    screen, and the console then reports that nothing happened. Argus hit this
+    first, and this repository's own notes predicted it for the day Tyche
+    became a onefile build.
+    """
+    text = (REPO / "packaging" / "start.cmd").read_text(encoding="utf-8")
+    command = next(line for line in text.splitlines()
+                   if line.startswith("powershell "))
+    assert "Get-Process -Name $name" in command, (
+        "the launcher waits on the process it started, not on the one that "
+        "draws the window"
+    )
+    assert "MainWindowHandle" in command
+    assert "$p.Refresh()" not in command
 
 
 def test_the_spec_collects_what_pyinstaller_cannot_see():
@@ -836,3 +869,18 @@ def test_ci_and_release_run_the_same_test_command():
     rel = suite_step(load(WORKFLOW)["jobs"]["release"]["steps"])
     assert ci["run"].strip() == rel["run"].strip()
     assert ci["env"]["TYCHE_REQUIRE_GUI"] == rel["env"]["TYCHE_REQUIRE_GUI"]
+
+
+def test_an_inventory_that_writes_no_report_fails_the_build():
+    """An exit code cannot tell a mistyped path from rows needing review.
+
+    ``argparse`` exits 2 on a bad argument and so does an inventory that wrote
+    its report and wants a human to read some rows, and the case statement maps
+    2 to a warning nobody reads. P7M Manager shipped three releases with no
+    inventory in them exactly that way: the path it was handed did not exist on
+    Linux, and every run said "warning" and carried on. The presence of the
+    file can tell the two apart where the exit code cannot.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    assert '[ ! -s "$report" ]' in text
+    assert "the inventory exited $status and wrote no report" in text

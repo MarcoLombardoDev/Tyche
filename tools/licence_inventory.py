@@ -53,7 +53,7 @@ can see is worth more than a plausible-looking entry that is wrong.
 Usage:
 
     python tools/licence_inventory.py --bundle linux=build/Tyche
-    python tools/licence_inventory.py --bundle linux=dist/Tyche --markdown out.md
+    python tools/licence_inventory.py --bundle linux=build/Tyche --markdown out.md
 
 ``--bundle`` takes any of three things, because at different points in a
 release there is a different one to hand:

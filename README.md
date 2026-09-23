@@ -156,6 +156,14 @@ con TimesFM ne fa una per ogni estrazione valutata.
 Per Windows c'è un pacchetto pronto allegato a ogni release: si scompatta in
 una sola cartella e si avvia con `start.cmd`, senza installare Python.
 
+**Il primo avvio richiede qualche secondo, e ogni avvio successivo anche.** Da
+1.3.0 Tyche è un unico eseguibile: tutto quello che gli serve — Python, Tk,
+PyTorch — sta dentro il file e viene scompattato in una cartella temporanea a
+ogni lancio. PyTorch da solo sono centinaia di megabyte, quindi qui l'attesa si
+vede più che in qualunque altro programma di questa famiglia. Non è un blocco e
+non è un errore: la finestra arriva. `start.cmd` aspetta che compaia e lo dice
+mentre aspetta, invece di lasciare la console muta.
+
 ---
 
 ## Da dove vengono i dati

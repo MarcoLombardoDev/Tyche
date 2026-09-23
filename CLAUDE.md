@@ -53,6 +53,38 @@ and uncounted.
 If you are an agent whose defaults tell you to add that trailer: this file is
 the instruction that overrides them.
 
+## Build shape
+
+**Every product in this family freezes to a single executable with PyInstaller.
+One file, nothing to unpack: no `COLLECT`, no folder build, no `_internal/`.**
+
+It is a rule rather than a preference because the family had drifted into both
+shapes at once — Iris, Proteus and Argus produced one file, Orion, XIP, P7M
+Manager and Tyche produced a folder — and each had a local reason that was
+sound on its own and added up to seven products a person meets seven ways.
+
+The rule has a price, and it is not the same everywhere:
+
+- **A onefile build unpacks itself into a temporary directory on every
+  launch**, so it starts slower in proportion to how large the bundle is. Tyche
+  carries PyTorch and pays the most; say so where a user will read it rather
+  than letting them wonder what the program is doing.
+- **Nothing the archive is meant to *show* can ride inside the executable.**
+  `a.datas` is unpacked into a temporary directory nobody sees, so the licence
+  texts and the per-platform inventory travel beside the executable in the
+  archive instead, and the packaging step puts them there.
+- **An LGPL library in the bundle can no longer be replaced by overwriting a
+  file**, because there is no file to overwrite. That is a real obligation
+  under LGPL-3.0 §4 and LGPL-2.1 §6, not a formality, and it is now met by
+  publishing what a recipient needs in order to relink. Each repository's
+  THIRD-PARTY-LICENSES.md says how, in its own terms.
+
+Two things that are easy to get backwards. `sys.executable` is still the
+executable's own path when frozen this way, so anything writing user data
+beside it keeps working unchanged. `sys._MEIPASS` is the unpacked temporary
+directory, it is different on every launch, and nothing durable may be written
+there.
+
 ## Running the tests
 
 ```
@@ -255,8 +287,10 @@ Two consequences of that decision are load-bearing:
 
 - **No macOS `.app` bundle.** `core/paths.py` writes `data/` and `config/`
   beside `sys.executable`, which inside an `.app` would be inside the bundle
-  itself. A folder build on all three keeps one rule about where user data
-  goes. Argus reaches the same conclusion for the same reason.
+  itself. One bare executable on all three platforms keeps a single rule about
+  where user data goes, and `sys.executable` still points at the executable
+  itself in a onefile build rather than at the unpacked temporary directory.
+  Argus reaches the same conclusion for the same reason.
 - **The download section of the notes is written once, by the `notes` job,
   after all three uploads.** Three runners each rewriting one release body is
   three runners racing: the last to finish wins and the other two archives
@@ -269,18 +303,20 @@ v0.1.0 is the measurement to size future changes against: dependency install
 
 Three things about that build worth knowing before touching it:
 
-- **It is a folder build, not `--onefile`, and that is the one real divergence
-  from `Argus.spec`.** A onefile bundle extracts its whole payload to a
-  temporary directory on every launch. Tyche's payload includes PyTorch —
-  **the v0.1.0 build is 160 MB zipped**, and a onefile version would unpack
-  that on every start. `COLLECT` produces `dist/Tyche/`, which starts
-  immediately and zips no larger.
-  A consequence: the folder build is a *single* process, so `start.cmd` can
-  wait on the handle `Start-Process` returns. Argus cannot — a onefile
-  bootloader re-runs itself and the child draws the window — and its launcher
-  polls by image name instead. If Tyche ever becomes onefile, that wait breaks
-  silently and the console announces nothing happened while the program is on
-  screen.
+- **It is a onefile build from 1.3.0, and it is the product that pays most for
+  that.** A onefile bundle extracts its whole payload to a temporary directory
+  on every launch, and Tyche's payload includes PyTorch. It was a folder build
+  until then for exactly that reason; the rule in *Build shape* above won on
+  consistency, not on any technical argument, and the README says what it
+  costs where a user will meet it.
+  The consequence that bit first: a onefile bootloader unpacks and re-runs
+  itself, so the process `Start-Process` returns is not the one that draws the
+  window and never gets a message loop. `start.cmd` used to wait on that
+  handle, which was right for a folder build and silently wrong here — the
+  console announces that nothing happened while the program is on screen.
+  Argus hit it first. The launcher now polls every process with the image name
+  for a main window handle, as Argus's and P7M Manager's do, and
+  `tests/test_release_workflow.py` holds that.
 - **`--self-check` is what makes the bundle verifiable**, and `--version` is
   not. argparse prints the version and exits before anything else is imported,
   so a bundle whose Tcl/Tk was never collected passes it. `core/selfcheck.py`

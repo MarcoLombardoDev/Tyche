@@ -120,16 +120,20 @@ set "_LAUNCH_TARGET=%EXE%"
 set "_LAUNCH_TIMEOUT=%TYCHE_LAUNCH_TIMEOUT%"
 if not defined _LAUNCH_TIMEOUT set "_LAUNCH_TIMEOUT=180"
 
-rem Waits for a window by polling the started process for a main window handle.
+rem Waits for a window by polling every process with the program's image name
+rem for a main window handle.
 rem
-rem A folder build is a single process, so the handle Start-Process returns is
-rem the one that draws the window. A onefile build would not be -- it is a
-rem bootloader plus a child, and waiting on the bootloader waits forever while
-rem the program sits on screen. Argus hit exactly that. Tyche is a folder build
-rem precisely because bundling PyTorch makes onefile unpack hundreds of
-rem megabytes on every launch, so the simple wait is the correct one here; if
-rem this ever becomes a onefile build, poll by image name instead.
-powershell -NoProfile -Command "$p = Start-Process -FilePath ${env:_LAUNCH_TARGET} -PassThru; $deadline = (Get-Date).AddSeconds([int]${env:_LAUNCH_TIMEOUT}); while ((Get-Date) -lt $deadline) { $p.Refresh(); if ($p.HasExited) { exit 4 }; if ($p.MainWindowHandle -ne [IntPtr]::Zero) { exit 0 }; Start-Sleep -Milliseconds 200 }; exit 3"
+rem Not WaitForInputIdle, and not the handle Start-Process returns. This is a
+rem onefile build: the executable that starts is a bootloader that unpacks the
+rem payload and re-runs itself, the child draws the window, and the bootloader
+rem never gets a message loop. Waiting on it waits out the whole timeout while
+rem the program is on screen, and the console then announces that nothing
+rem happened. Argus hit exactly that, and this file warned about it in as many
+rem words for as long as Tyche was a folder build.
+rem
+rem Tyche also unpacks more than any sibling -- the payload includes PyTorch --
+rem so the default timeout matters here more than anywhere else.
+powershell -NoProfile -Command "$target = ${env:_LAUNCH_TARGET}; $name = [IO.Path]::GetFileNameWithoutExtension($target); $p = Start-Process -FilePath $target -PassThru; $deadline = (Get-Date).AddSeconds([int]${env:_LAUNCH_TIMEOUT}); while ((Get-Date) -lt $deadline) { foreach ($proc in @(Get-Process -Name $name -ErrorAction SilentlyContinue)) { if ($proc.MainWindowHandle -ne [IntPtr]::Zero) { exit 0 } }; if ($p.HasExited) { exit 4 }; Start-Sleep -Milliseconds 200 }; exit 3"
 set "STATUS=%ERRORLEVEL%"
 
 rem Past this point the program has been started, whatever PowerShell reported.

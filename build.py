@@ -12,8 +12,9 @@ Builds the standalone application:
     pip install -r requirements-build.txt
     python build.py
 
-Produces ``dist/Tyche/`` — a folder holding the executable and everything it
-needs. PyInstaller does not cross-compile, so this makes a Windows build on
+Produces ``dist/Tyche`` — one executable with everything inside it, which
+unpacks itself to a temporary folder on each launch. PyInstaller does not
+cross-compile, so this makes a Windows build on
 Windows and nothing else: the release workflow runs it on a windows-latest
 runner, which is the only way to get a genuine .exe without owning a Windows
 machine.

@@ -12,6 +12,50 @@ numerazione il [versionamento semantico](https://semver.org/spec/v2.0.0.html).
 
 Niente, per ora.
 
+## [1.3.0] — 2026-09-23
+
+Tyche è un unico eseguibile invece di una cartella. Lo sono tutti i sette
+prodotti di questa famiglia adesso; la regola sta in CLAUDE.md, insieme a
+quello che costa.
+
+### Modificato
+
+- **Un file solo.** L'archivio contiene il programma, il suo avviatore, il suo
+  checksum e i testi delle licenze, e si scompatta nella stessa forma su tutti
+  e tre i sistemi.
+
+- **Si scompatta da solo a ogni avvio, e qui è il prezzo più alto della
+  famiglia.** Tyche porta PyTorch: centinaia di megabyte estratti in una
+  cartella temporanea prima che la finestra compaia, ogni volta. Era una build
+  a cartella esattamente per questo motivo, e il motivo non è sparito — ha
+  perso contro la coerenza fra i sette prodotti, che è una ragione di prodotto
+  e non tecnica. Il README lo dice dove un utente lo incontra, invece di
+  lasciarlo chiedersi se il programma si è piantato, e un test tiene ferma
+  quella frase.
+
+- **`start.cmd` aspettava il processo sbagliato, e questo repository lo aveva
+  previsto.** Un bootloader onefile scompatta e ri-esegue sé stesso: il
+  processo che `Start-Process` restituisce non è quello che disegna la
+  finestra e non riceve mai un message loop. Aspettarlo significa consumare
+  tutto il timeout mentre il programma è sullo schermo, e poi annunciare che
+  non è successo niente. Argus ci era già passato, e le note di Tyche
+  dicevano in quante parole cosa sarebbe successo il giorno in cui fosse
+  diventata onefile. L'avviatore ora interroga tutti i processi con
+  quell'immagine cercando una finestra principale, come fanno quelli di Argus
+  e di P7M Manager.
+
+- **Niente `.app` su macOS, come prima.** `core/paths.py` scrive `data/` e
+  `config/` accanto a `sys.executable`, che in una build onefile continua a
+  essere l'eseguibile stesso e non la cartella temporanea: il file lo si mette
+  dove si vuole e i suoi dati stanno lì accanto.
+
+### Corretto
+
+- **Uno step di release che non scrive il report ora fallisce**, invece di
+  avvisare. `argparse` esce con 2 quando un argomento è sbagliato, e con 2
+  esce anche un inventario che ha scritto il suo report e vuole che qualcuno
+  guardi certe righe: il `case` non sa distinguerli, l'esistenza del file sì.
+
 ## [1.2.0] — 2026-09-23 — `529c9cb`
 
 Si possono escludere i numeri appena usciti. Non serve a niente, ed è misurato.
