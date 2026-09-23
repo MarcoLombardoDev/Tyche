@@ -564,6 +564,15 @@ jobs:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           base="$APP_NAME-$VERSION-${{ matrix.asset }}"
+          # Where the archive goes, as an absolute path. The Windows branch
+          # below runs from inside the staging directory's parent, and a
+          # destination written relative to that, one level up, only lands in
+          # the workspace while the staging directory sits exactly one level
+          # down. Orion and XIP nested theirs one level deeper and the zip went
+          # somewhere the upload step does not look -- the release failed on
+          # "no such file" with the archive sitting right there. An absolute
+          # target cannot do that.
+          out="$PWD"
           case "$RUNNER_OS" in
             Windows)
               name="$base.zip"
@@ -572,7 +581,7 @@ jobs:
               # *whole path* it is given, though, so run it from inside the
               # staging directory: all three archives then unpack the same way.
               ( cd "$(dirname "$STAGED")" \
-                  && 7z a -tzip "../$name" "$(basename "$STAGED")" > /dev/null )
+                  && 7z a -tzip "$out/$name" "$(basename "$STAGED")" > /dev/null )
               ;;
             macOS)
               name="$base.zip"

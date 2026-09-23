@@ -32,11 +32,12 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
 SPEC = REPO_ROOT / "Tyche.spec"
-DIST = REPO_ROOT / "dist" / "Tyche"
-
-
-def _folder_size(path: Path) -> int:
-    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+#: What the build produces: one file, named for the platform that runs it.
+#: This was ``dist/Tyche`` as a *directory* until 1.3.0, and the check below
+#: still said ``is_dir()`` on the first release of the onefile build — so
+#: PyInstaller finished on all three runners, wrote the executable, and this
+#: script reported that there was nothing there.
+EXECUTABLE = REPO_ROOT / "dist" / ("Tyche.exe" if sys.platform == "win32" else "Tyche")
 
 
 def main() -> int:
@@ -60,26 +61,24 @@ def main() -> int:
         print("[build] PyInstaller failed — see the output above.")
         return result.returncode
 
-    if not DIST.is_dir():
-        print(f"[build] PyInstaller reported success but there is nothing at {DIST}.")
+    if not EXECUTABLE.is_file():
+        print(f"[build] PyInstaller reported success but there is nothing at {EXECUTABLE}.")
         return 1
 
-    executable = DIST / ("Tyche.exe" if sys.platform == "win32" else "Tyche")
-    if not executable.exists():
-        print(f"[build] no executable at {executable}")
-        return 1
-
-    # The launcher belongs beside the executable, in the folder that gets
-    # zipped. Copied here rather than declared in the spec: anything the spec
-    # adds goes *inside* the bundle's data, where nobody double-clicking the
-    # folder would find it.
+    # The launcher belongs beside the executable, not inside the bundle:
+    # anything the spec declares as data is packed into the executable and
+    # unpacked to a temporary directory while the program runs, where nobody
+    # would ever find it.
     launcher = REPO_ROOT / "packaging" / "start.cmd"
     if sys.platform == "win32" and launcher.exists():
-        shutil.copy2(launcher, DIST / "start.cmd")
-        print(f"[build] launcher: {DIST / 'start.cmd'}")
+        beside = EXECUTABLE.parent / "start.cmd"
+        shutil.copy2(launcher, beside)
+        print(f"[build] launcher: {beside}")
 
-    print(f"[build] Done: {DIST}  ({_folder_size(DIST) / (1024 * 1024):.0f} MB)")
-    print("[build] Copy the whole folder — it creates its own data/ and config/ inside it.")
+    size = EXECUTABLE.stat().st_size / (1024 * 1024)
+    print(f"[build] Done: {EXECUTABLE}  ({size:.0f} MB)")
+    print("[build] One file. It creates its own data/ and config/ beside itself,")
+    print("[build] so put it where you want those to live.")
     print("[build] Check it with:  Tyche --self-check")
     return 0
 

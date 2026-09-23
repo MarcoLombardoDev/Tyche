@@ -56,6 +56,14 @@ quello che costa.
   esce anche un inventario che ha scritto il suo report e vuole che qualcuno
   guardi certe righe: il `case` non sa distinguerli, l'esistenza del file sì.
 
+- **`build.py` cercava una cartella.** Controllava `dist/Tyche.is_dir()`, e lo
+  spec aveva smesso di produrne una: PyInstaller finiva senza errori su tutte
+  e tre le piattaforme, scriveva l'eseguibile, e lo script rispondeva che lì
+  non c'era niente. È quello che ha fatto fallire il primo tentativo di
+  release 1.3.0 — la build funzionava, era il controllo dopo a guardare la
+  cosa sbagliata. Ora cerca il file, con il suffisso giusto su Windows, e un
+  test lo tiene.
+
 ## [1.2.0] — 2026-09-23 — `529c9cb`
 
 Si possono escludere i numeri appena usciti. Non serve a niente, ed è misurato.

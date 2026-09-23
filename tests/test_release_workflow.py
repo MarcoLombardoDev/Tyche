@@ -884,3 +884,43 @@ def test_an_inventory_that_writes_no_report_fails_the_build():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert '[ ! -s "$report" ]' in text
     assert "the inventory exited $status and wrote no report" in text
+
+
+def test_the_archive_is_written_where_the_upload_step_looks_for_it():
+    """An absolute target, because the relative one was a trap that sprang.
+
+    The Windows branch compresses from inside the payload's parent, since 7z
+    stores whatever path it is handed and a relative one would put the payload
+    directory inside the archive. Writing the *output* relative to that
+    directory as well -- "../$name" -- only lands in the workspace while the
+    payload sits exactly one level down.
+
+    Orion and XIP moved theirs one level deeper and the zip went into dist/,
+    where nothing looks for it. Both releases failed on "no such file" with the
+    archive sitting a directory away. The path is absolute now, which cannot
+    depend on how deep anything is nested.
+    """
+    text = WORKFLOW.read_text(encoding="utf-8")
+    package = text[text.index("- name: Package"):]
+    package = package[: package.index("\n      - name:")]
+    assert 'out="$PWD"' in package, "the archive has no absolute destination"
+    assert '"../$name"' not in package and '"../$archive"' not in package, (
+        "the archive is written relative to the payload again"
+    )
+
+
+def test_the_build_script_looks_for_the_file_the_spec_produces():
+    """It looked for a directory, and the first onefile release failed on it.
+
+    ``build.py`` checked ``dist/Tyche.is_dir()``. The spec had stopped
+    producing a directory, so PyInstaller ran to completion on all three
+    runners, wrote the executable, and the script then reported that there was
+    nothing there — a build that succeeded and a release that did not.
+    """
+    text = (REPO / "build.py").read_text(encoding="utf-8")
+    assert "EXECUTABLE" in text
+    assert ".is_file()" in text, "the build script still expects a directory"
+    assert ".is_dir()" not in text
+    assert 'Tyche.exe" if sys.platform == "win32"' in text, (
+        "the Windows executable has a suffix and nothing here accounts for it"
+    )
